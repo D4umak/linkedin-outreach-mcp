@@ -671,22 +671,6 @@ async def _fetch_and_analyze(
     except Exception as e:
         logger.warning("Sales Nav detection gave no verdict — not persisted: %s", e)
 
-    # ── Auto-register webhook for real-time events ──
-    try:
-        if is_backend_mode():
-            webhook_url = f"{DEFAULT_BACKEND_URL}/webhooks/unipile-webhook"
-            result = await client.register_webhook(
-                account_id,
-                webhook_url,
-                events=["new_message", "new_relation", "account_disconnected", "message_seen"],
-            )
-            if result.get("success"):
-                logger.info("Auto-registered webhook for real-time events")
-            else:
-                logger.debug("Webhook registration skipped: %s", result.get("error", ""))
-    except Exception as e:
-        logger.debug("Webhook auto-registration failed (non-critical): %s", e)
-
     # ── Sync email_account_id from Unipile / backend ──
     email_status = ""
     try:

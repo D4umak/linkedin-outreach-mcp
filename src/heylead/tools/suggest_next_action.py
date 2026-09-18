@@ -752,7 +752,9 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
         _camps = await run_db(list_campaigns)
         _rows = [await run_db(get_campaign_stats, c["id"]) for c in _camps]
         acc_rate, _ = _pooled_acceptance(_rows)
-        daily_limit = coerce_daily_limit(rate_data.get("daily_limit"))
+        from ..linkedin.rate_limiter import invite_limits_for_display
+
+        _sna_weekly_cap, daily_limit = await invite_limits_for_display(rate_data)
         weekly_sent = await run_db(get_weekly_invitation_sum)
         sending_days = await run_db(get_sending_days_7d)
 
@@ -769,10 +771,6 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
         except Exception:
             pass
 
-        from ..linkedin.rate_limiter import _get_effective_caps as _gec_sna
-        _sna_weekly_cap, _sna_daily_cap = await _gec_sna()
-        if daily_limit <= 0:
-            daily_limit = _sna_daily_cap
         hs = compute_health_score(
             acceptance_rate=acc_rate,
             total_sent=total_lifetime,

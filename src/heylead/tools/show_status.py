@@ -172,29 +172,6 @@ def _usage_drift_lines(
     ]
 
 
-def _health_daily_limit(rate_limits: dict[str, Any], daily_max: int) -> int:
-    """Today's invitation cap for the health score — never None, never zero.
-
-    ``rate_limits.get("daily_limit", 15)`` served the default only when the key
-    was *absent*. ``GET /api/v1/stats`` sends the key with a null value, so the
-    default never fired and the None reached ``compute_health_score``'s
-    ``if daily_limit > 0`` — TypeError. That raise did not surface: the
-    renderer runs inside ``run_show_status``'s broad ``except Exception``, which
-    sets ``backend_offline = True``, so a healthy backend was reported as
-    unreachable and the local mirror was rendered under a "(cached — Ns old)"
-    header instead. Every show_status on 6 Sep 2026 took that path.
-
-    Zero is treated the same way. ``/api/v1/scheduler/changes`` sends 0 where
-    ``/api/v1/stats`` sends null; neither is a limit worth dividing by, and
-    "28/0 today" is not a line to put in front of an operator.
-    """
-    try:
-        limit = int(rate_limits.get("daily_limit"))  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return daily_max
-    return limit if limit > 0 else daily_max
-
-
 def _pooled_acceptance(stats_rows: list[dict[str, Any]]) -> tuple[float, int]:
     """(acceptance rate, invitations ever sent) pooled across campaign rows.
 
@@ -610,18 +587,15 @@ async def _show_overview(offline: bool = False) -> str:
         pass
 
     from ..linkedin.rate_limiter import (
-        _get_effective_caps,
         estimate_weekly_limit_reset,
-        hosted_weekly_invite_cap,
+        invite_limits_for_display,
     )
-    _eff_weekly_cap, _eff_daily_cap = await _get_effective_caps()
-    if config.is_backend_mode():
-        # Cached view of a hosted account: show the cap the host enforces.
-        _eff_weekly_cap = hosted_weekly_invite_cap(rate_data)
+    # Hosted: the ceilings the host enforces, remembered from the last pull
+    # (the local row carries neither). Self-hosted: the local pace.
+    _eff_weekly_cap, daily_limit = await invite_limits_for_display(rate_data)
     # Cumulative, from the campaign rows — not today's acceptances over today's
     # sends, which measures nothing. See _pooled_acceptance.
     acceptance_rate, _ = _pooled_acceptance(list(campaign_stats.values()))
-    daily_limit = _health_daily_limit(rate_data, _eff_daily_cap)
     hs = compute_health_score(
         ssi_score=ssi_score,
         acceptance_rate=acceptance_rate,
@@ -1252,16 +1226,13 @@ async def _show_overview_from_backend(data: dict) -> str:
 
     # Compute health score (SSI not available from backend, use 0).
     # The rate and the lifetime count come from the campaign rows, not from
-    # today's counters — see _pooled_acceptance and _health_daily_limit.
+    # today's counters — see _pooled_acceptance and invite_limits_for_display.
     from ..linkedin.rate_limiter import (
-        _get_effective_caps as _gec2,
         estimate_weekly_limit_reset as _ewlr2,
-        hosted_weekly_invite_cap,
+        invite_limits_for_display,
     )
-    _, _eff_dc2 = await _gec2()
-    # The cap the hosted sender enforces, not the self-hosted denominator.
-    _eff_wc2 = hosted_weekly_invite_cap(rl)
-    daily_limit = _health_daily_limit(rl, _eff_dc2)
+    # Both ceilings the hosted sender enforces, from this payload.
+    _eff_wc2, daily_limit = await invite_limits_for_display(rl)
     acceptance_rate, total_sent_lifetime = _pooled_acceptance(campaigns)
     sending_days = min(7, weekly_sent) if weekly_sent > 0 else 0  # Approximate
     hs = compute_health_score(

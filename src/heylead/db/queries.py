@@ -2886,9 +2886,10 @@ def get_rate_limit_budget() -> dict[str, dict]:
     # Invitation budget from rate_limits table
     rl = get_rate_limit_today()
     inv_sent = rl.get("sent", 0)
-    from ..services.health_score import coerce_daily_limit
+    # A hosted account's ceiling is the backend's, not this row's default 15.
+    from ..linkedin.rate_limiter import invite_limits_for_display_sync
 
-    inv_limit = coerce_daily_limit(rl.get("daily_limit"))
+    _, inv_limit = invite_limits_for_display_sync(rl)
 
     # Warm-up budgets from scheduler_jobs completed today
     db = get_db()

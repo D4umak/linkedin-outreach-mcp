@@ -900,10 +900,15 @@ def _build_snapshot(campaign_id: str = "") -> tuple[str, list[dict]]:
     rate = get_rate_limit_today()
     weekly = get_weekly_invitation_sum()
     usage = get_monthly_usage()
+    # The ceilings the sender enforces, not this row's column default: the
+    # model reasons about headroom from these two numbers.
+    from ..linkedin.rate_limiter import invite_limits_for_display_sync
+
+    weekly_cap, daily_cap = invite_limits_for_display_sync(rate)
     lines.append("### Account Health")
     lines.append(
-        f"Today: {rate.get('sent', 0)}/{rate.get('daily_limit', 15)} invitations "
-        f"| Weekly: {weekly} "
+        f"Today: {rate.get('sent', 0)}/{daily_cap} invitations "
+        f"| Weekly: {weekly}/{weekly_cap} "
         f"| Monthly: {usage.get('invitations_sent', 0)} sent, "
         f"{usage.get('messages_sent', 0)} msgs"
     )

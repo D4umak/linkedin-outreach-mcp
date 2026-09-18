@@ -3589,52 +3589,6 @@ class BackendClient:
 
     # ── Webhooks ──
 
-    async def register_webhook(
-        self,
-        account_id: str,
-        request_url: str,
-        events: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Register a Unipile webhook via the backend proxy."""
-        url = f"{self.base_url}/api/v1/webhooks"
-        payload: dict[str, Any] = {"request_url": request_url}
-        if events:
-            payload["events"] = events
-        try:
-            resp = await self._post(url, json=payload, headers=self._headers())
-            if resp.status_code in (200, 201):
-                body = resp.json()
-                webhook_id = body.get("body", {}).get("webhook_id") or body.get("body", {}).get("id") or ""
-                return {"success": True, "webhook_id": webhook_id}
-            return {"success": False, "error": resp.text}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def list_webhooks(self, account_id: str) -> list[dict[str, Any]]:
-        """List registered webhooks via the backend proxy."""
-        url = f"{self.base_url}/api/v1/webhooks"
-        try:
-            resp = await self._client.get(url, headers=self._headers())
-            if resp.status_code != 200:
-                return []
-            data = resp.json()
-            if isinstance(data, list):
-                return data
-            return data.get("items") or data.get("webhooks") or data.get("data") or []
-        except Exception:
-            return []
-
-    async def delete_webhook(self, webhook_id: str) -> dict[str, Any]:
-        """Delete a webhook via the backend proxy."""
-        url = f"{self.base_url}/api/v1/webhooks/{webhook_id}"
-        try:
-            resp = await self._client.delete(url, headers=self._headers())
-            if resp.status_code in (200, 204):
-                return {"success": True}
-            return {"success": False, "error": resp.text}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
     # ── Email ──
 
     async def send_email(
@@ -3744,38 +3698,6 @@ class BackendClient:
         except Exception as e:
             result["error"] = f"Mark email failed: {e}"
         return result
-
-    # ── Webhook Event Polling ──
-
-    async def get_unprocessed_events(
-        self,
-        account_id: str,
-        limit: int = 50,
-        event_type: str = "",
-    ) -> list[dict[str, Any]]:
-        """Fetch unprocessed webhook events from the backend."""
-        url = f"{self.base_url}/webhooks/events/unprocessed"
-        params: dict[str, str] = {"limit": str(limit)}
-        if event_type:
-            params["event_type"] = event_type
-        try:
-            resp = await self._client.get(url, params=params, headers=self._headers())
-            if resp.status_code != 200:
-                return []
-            data = _ensure_dict(resp.json())
-            return data.get("events", [])
-        except Exception as e:
-            logger.debug(f"get_unprocessed_events failed: {e}")
-            return []
-
-    async def acknowledge_event(self, event_id: int) -> bool:
-        """Mark a webhook event as processed."""
-        url = f"{self.base_url}/webhooks/events/{event_id}/ack"
-        try:
-            resp = await self._post(url, headers=self._headers())
-            return resp.status_code == 200
-        except Exception:
-            return False
 
     # ── Search Parameters ──
 

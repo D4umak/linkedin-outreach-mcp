@@ -31,6 +31,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.377 (2026-09-18)
+- Fix: on hosted accounts, show_status, suggest_next_action and the daily digest now show the daily and weekly invitation limits your HeyLead backend actually enforces for your LinkedIn seat, instead of a number built into this client (it could read "0/80 today" on a seat stopped at 20)
+
 ## v0.10.376 (2026-09-18)
 - Change: new campaigns start with voice memos off (voice_mode='text_only'). Pass voice_mode='mixed' to turn them on for a campaign. Existing campaigns keep their setting
 

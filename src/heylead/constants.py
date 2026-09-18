@@ -95,26 +95,37 @@ PRO_FOLLOWUP_SCHEDULE_DAYS = [1, 3, 7, 14]
 # Values are set ~10% below known LinkedIn safe thresholds.
 # Total daily budget: ~180 visible actions (was uncapped → ~350/day → ban).
 
-# The invitation ceiling belongs to the LinkedIn ACCOUNT, not to its tier.
-# This used to read "an SN operator routinely sends 200–300 connection
-# requests in a day from the SN UI" and gave Sales Navigator 250 a day.
-# Production refuted it twice: 12 Sep 2026 at 123 invitations over the rolling
-# week, and 15 Sep 2026 at 336 (177 of them in one day) — both on a seat
-# holding a genuine SN contract, both answered with
+# The invitation ceiling belongs to the LinkedIn ACCOUNT, and for a hosted
+# account the BACKEND owns the number. It measures it (heylead-api #682, 16 Sep
+# 2026: a Sales Navigator seat refused by LinkedIn at 177 a day and 337 a week,
+# a Premium seat never refused at 160/321), it enforces it, and it publishes it
+# per seat as `weekly_cap` and `daily_invite_cap` on every payload. A hosted
+# view reads those (linkedin.rate_limiter.invite_limits_for_display) and never
+# one of the constants below.
 #
-#     422 errors/cannot_resend_yet
-#     "You have reached a temporary provider limit. Please try again later."
+# Two different things used to share the DAILY_CAP_INVITATIONS name, which is
+# how this file came to claim "heylead-api sets the same figures" for two days
+# after the backend had moved to 168/320 (incident 2026-09-18):
 #
-# Sales Navigator buys search depth and InMail, not a bigger invitation
-# allowance, so every tier shares one ceiling: 20 a day against LinkedIn's
-# published ~100 a week (heylead-api #446 sets the same figures server-side —
-# these two must not drift). The hosted weekly cap still arrives per-seat in
-# the stats payload; HOSTED_WEEKLY_INVITE_CAP is only the fallback when it
-# omits `weekly_cap`.
-DAILY_CAP_INVITATIONS = 20           # Premium daily
-DAILY_CAP_INVITATIONS_SALES_NAV = 20  # Sales Navigator daily — the same ceiling
-DAILY_CAP_INVITATIONS_FREE = 20      # Confirmed free — 20 keeps a 5-day week under 100
-HOSTED_WEEKLY_INVITE_CAP = 100       # Free-seat fallback only
+# 1. The LOCAL sender's pace. Nothing in this client enforces a weekly ceiling
+#    (estimate_weekly_limit_reset reports none), so 20 a day is the only thing
+#    keeping a laptop that sends under LinkedIn's weekly refusal point. It is
+#    not the hosted ceiling and does not track it. Sending is cloud-only, so
+#    this gate is a backstop, and it stays conservative on purpose.
+DAILY_CAP_INVITATIONS = 20           # Premium, local sender
+DAILY_CAP_INVITATIONS_SALES_NAV = 20  # Sales Navigator, local sender — SN buys no invitations
+DAILY_CAP_INVITATIONS_FREE = 20      # Confirmed free, local sender
+# 2. The HOSTED fallbacks: what to show a hosted account only until the
+#    backend has answered once. They must equal the backend's defaults, and
+#    tests/test_invite_caps_agree_with_the_backend.py reads heylead-api's
+#    INVITE_CAP_DEFAULTS to hold them there. Change them in the backend first.
+HOSTED_WEEKLY_INVITE_CAP = 100       # free seat
+HOSTED_WEEKLY_INVITE_CAP_PAID = 320  # Premium and Sales Navigator
+HOSTED_DAILY_INVITE_CAP_FREE = 20
+HOSTED_DAILY_INVITE_CAP_PAID = 168
+# Settings key: the last ceilings a pull carried, for the views that render
+# from the local mirror and have no payload in hand.
+HOSTED_INVITE_CAPS_SETTING = "hosted_invite_caps"
 DAILY_CAP_FOLLOWS = 15               # Halved — reduce visible footprint
 DAILY_CAP_PROFILE_VIEWS = 35         # Halved — high volume = detectable pattern
 DAILY_CAP_PROFILE_VIEWS_SALES_NAV = 50  # SN accounts absorb more views; tier.caps_for picks

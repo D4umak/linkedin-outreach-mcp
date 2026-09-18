@@ -3351,6 +3351,13 @@ def _apply_rate_limits(rate_limits: dict[str, Any]) -> None:
     db.commit()
     db.close()
 
+    # The ceilings ride in the same block. The views that render from the
+    # local mirror have no payload to read them from, and used to print this
+    # column's default 15 and a fallback 100 instead.
+    from ..linkedin.rate_limiter import remember_hosted_invite_caps
+
+    remember_hosted_invite_caps(rate_limits)
+
 
 # ── Ensure Synced: Auto-pull before dashboard reads ──
 

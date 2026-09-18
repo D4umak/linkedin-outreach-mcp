@@ -3,7 +3,7 @@
   "name": "io.github.D4umak/heylead",
   "title": "HeyLead \u2014 Autonomous LinkedIn SDR",
   "description": "Autonomous LinkedIn SDR \u2014 voice-matched outreach, ICP generation, and campaign management.",
-  "version": "0.10.376",
+  "version": "0.10.377",
   "websiteUrl": "https://heylead.dev",
   "repository": {
     "url": "https://github.com/D4umak/linkedin-outreach-mcp",
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "heylead",
-      "version": "0.10.376",
+      "version": "0.10.377",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

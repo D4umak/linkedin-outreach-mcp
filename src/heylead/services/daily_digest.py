@@ -64,11 +64,11 @@ async def compile_daily_digest() -> str:
 
     # ── Rate Limits / Sends ──
     rl = await run_db(get_rate_limit_today)
-    # 0 is how the sync route says "no limit"; printing "3/0" is worse
-    # than printing the default. See health_score.coerce_daily_limit.
-    from .health_score import coerce_daily_limit
+    # One resolver for both ceilings: a hosted account's come from the backend,
+    # not from this row's column default. See invite_limits_for_display.
+    from ..linkedin.rate_limiter import invite_limits_for_display
 
-    daily_limit = coerce_daily_limit(rl.get("daily_limit"))
+    weekly_cap, daily_limit = await invite_limits_for_display(rl)
     # Use verified invitation count instead of optimistic rate_limits.sent
     outreach_changes = await run_db(get_outreach_changes, hours=24)
     sent_verified = outreach_changes.get("invited", 0)
@@ -92,9 +92,9 @@ async def compile_daily_digest() -> str:
     lines.append("")
 
     # ── Weekly Limits ──
-    from ..linkedin.rate_limiter import _get_effective_caps, estimate_weekly_limit_reset
+    from ..linkedin.rate_limiter import estimate_weekly_limit_reset
     weekly_sent = await run_db(get_weekly_invitation_sum)
-    weekly_cap, daily_max = await _get_effective_caps()
+    daily_max = daily_limit
     weekly_pct = round(weekly_sent / weekly_cap * 100, 1) if weekly_cap > 0 else 0
     sending_days = await run_db(get_sending_days_7d)
 

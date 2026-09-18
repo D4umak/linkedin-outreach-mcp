@@ -1449,9 +1449,9 @@ async def _format_diagnostics_local(campaign_id: str) -> str:
     # ── Rate Limit Budget ──
     rl = await db.get_rate_limit_today()
     blocked = rl.get("blocked", False)
-    from ..services.health_score import coerce_daily_limit
+    from ..linkedin.rate_limiter import invite_limits_for_display
 
-    daily_limit = coerce_daily_limit(rl.get("daily_limit"))
+    _, daily_limit = await invite_limits_for_display(rl)
     sent = rl.get("sent", 0)
     remaining = max(0, daily_limit - sent)
 

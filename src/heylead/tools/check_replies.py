@@ -747,21 +747,6 @@ async def run_check_replies() -> str:
     except Exception as e:
         logger.debug(f"Inbound invitations fetch failed (non-critical): {e}")
 
-    # ── Fetch real-time webhook events (if backend mode) ──
-    webhook_events: list[dict[str, Any]] = []
-    try:
-        if hasattr(client, "get_unprocessed_events"):
-            webhook_events = await client.get_unprocessed_events(account_id, limit=20)
-            # Auto-acknowledge processed events
-            for evt in webhook_events:
-                evt_id = evt.get("id")
-                if evt_id and hasattr(client, "acknowledge_event"):
-                    await client.acknowledge_event(evt_id)
-            if webhook_events:
-                logger.info("Fetched %d real-time webhook events", len(webhook_events))
-    except Exception as e:
-        logger.debug(f"Webhook event fetch failed (non-critical): {e}")
-
     await client.close()
 
     # NOTE: Inbound invitations are now detected and saved by the unified
@@ -1795,19 +1780,6 @@ async def run_check_replies() -> str:
         if pipeline_parts:
             output.append("")
             output.append(f"📊 Inbound Pipeline: {', '.join(pipeline_parts)}")
-
-    # ── Real-time webhook events ──
-    if webhook_events:
-        output.append("")
-        new_msg_events = [e for e in webhook_events if e.get("event_type") == "new_message"]
-        new_rel_events = [e for e in webhook_events if e.get("event_type") in ("new_relation", "invitation_accepted")]
-        disconnect_events = [e for e in webhook_events if e.get("event_type") == "account_disconnected"]
-        if new_msg_events:
-            output.append(f"⚡ {len(new_msg_events)} real-time message event(s) received via webhook")
-        if new_rel_events:
-            output.append(f"⚡ {len(new_rel_events)} new connection event(s) via webhook")
-        if disconnect_events:
-            output.append("⚠️ Account disconnection event detected — check account health!")
 
     return "\n".join(output)
 

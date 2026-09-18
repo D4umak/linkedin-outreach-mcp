@@ -1699,16 +1699,20 @@ async def _compute_current_health(ssi_data: dict[str, Any], campaign_stats: dict
     daily_record = await run_db(get_rate_limit_today)
     weekly = await run_db(get_weekly_invitation_sum)
     sending_days = await run_db(get_sending_days_7d)
+    from ..linkedin.rate_limiter import invite_limits_for_display
+
+    weekly_limit, daily_limit = await invite_limits_for_display(
+        daily_record if isinstance(daily_record, dict) else None,
+    )
 
     return compute_health_score(
         ssi_score=ssi_data.get("score", 0),
         acceptance_rate=campaign_stats.get("acceptance_rate", 0),
         total_sent=campaign_stats.get("total_invited", 0),
         daily_sent=daily_record.get("sent", 0) if isinstance(daily_record, dict) else daily_record,
-        daily_limit=coerce_daily_limit(
-            daily_record.get("daily_limit") if isinstance(daily_record, dict) else None
-        ),
+        daily_limit=daily_limit,
         weekly_sent=weekly,
+        weekly_limit=weekly_limit,
         sending_days_7d=sending_days,
     )
 

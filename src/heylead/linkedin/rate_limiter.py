@@ -806,49 +806,140 @@ async def estimate_weekly_limit_reset() -> tuple[bool, int, str]:
     return False, 0, ""
 
 
-def hosted_weekly_invite_cap(rate_limits: dict[str, Any] | None) -> int:
-    """The weekly invitation cap the hosted sender actually enforces.
-
-    Read from the stats/sync payload's ``weekly_cap`` when it carries a usable
-    positive number, else HOSTED_WEEKLY_INVITE_CAP. Hosted accounts used to be
-    shown the self-hosted scoring denominator (200) — "Weekly: 93/200" on a
-    seat the backend stops at 100 (10 Sep 2026).
-    """
-    raw = (rate_limits or {}).get("weekly_cap")
+def _usable_cap(raw: Any) -> int | None:
+    """A positive whole number, or None. ``True`` is not a cap of one."""
+    if isinstance(raw, bool):
+        return None
     try:
         cap = int(raw)
-    except (TypeError, ValueError):
-        return constants.HOSTED_WEEKLY_INVITE_CAP
-    return cap if cap > 0 else constants.HOSTED_WEEKLY_INVITE_CAP
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return cap if cap > 0 else None
+
+
+def hosted_caps_from_payload(rate_limits: dict[str, Any] | None) -> dict[str, int]:
+    """The usable ceilings in a backend payload, under the backend's own keys."""
+    found: dict[str, int] = {}
+    for key in ("weekly_cap", "daily_invite_cap"):
+        cap = _usable_cap((rate_limits or {}).get(key))
+        if cap is not None:
+            found[key] = cap
+    return found
+
+
+def remember_hosted_invite_caps(rate_limits: dict[str, Any] | None) -> None:
+    """Keep the ceilings a pull carried. Sync; call from a DB worker.
+
+    A payload that omits a ceiling leaves the remembered one alone: an older
+    backend, or a partial payload, is not the backend saying "no cap".
+    """
+    from ..db.queries import get_setting, save_setting
+
+    found = hosted_caps_from_payload(rate_limits)
+    if not found:
+        return
+    stored = get_setting(constants.HOSTED_INVITE_CAPS_SETTING, None)
+    merged = {**(stored if isinstance(stored, dict) else {}), **found}
+    if merged != stored:
+        save_setting(constants.HOSTED_INVITE_CAPS_SETTING, merged)
+
+
+def hosted_weekly_invite_cap(rate_limits: dict[str, Any] | None) -> int:
+    """The payload's ``weekly_cap``, else the free-seat fallback.
+
+    Kept for callers holding a payload and no event loop. Anything rendering
+    for the operator wants ``invite_limits_for_display``, which also knows the
+    remembered ceilings and the seat's tier.
+    """
+    return hosted_caps_from_payload(rate_limits).get(
+        "weekly_cap", constants.HOSTED_WEEKLY_INVITE_CAP,
+    )
+
+
+def invite_limits_for_display_sync(
+    rate_limits: dict[str, Any] | None = None,
+) -> tuple[int, int]:
+    """(weekly_cap, daily_cap) to show the operator and score health against.
+
+    The one resolver. Sync, because it reads settings; from a coroutine use
+    ``invite_limits_for_display``.
+
+    18 Sep 2026: show_status printed "0/80 today" and "301/100" on a seat the
+    backend was stopping at 20, because each view answered from whatever
+    number was nearest: the ``daily_limit`` column default (15),
+    ``tier.caps_for``'s local pace (20, 80 or 250 by release),
+    HOSTED_WEEKLY_INVITE_CAP (100) or the scoring denominator (200).
+
+    Hosted: the backend enforces the ceiling, so the backend's number is the
+    only true one. In order: the payload in hand, the ceilings the last pull
+    remembered, then the backend's default for the seat's tier. ``daily_limit``
+    is ignored; the service sends null or 0 there, and the local column's 15 is
+    this client's own default.
+
+    Self-hosted: unchanged. 200 stays a scoring denominator (nothing here
+    enforces a weekly ceiling, so a smaller number would claim a block that
+    does not exist), and the daily figure is the row's adaptive ``daily_limit``
+    when it is usable, else the pace ``check_daily_cap("invite")`` refuses at.
+
+    Never raises: every caller renders a dashboard inside a broad except that
+    turns a raise into "backend unreachable".
+    """
+    from .. import config
+    from ..db.queries import get_setting
+    from ..tier import as_bool, caps_for
+
+    try:
+        sn = as_bool(get_setting("has_sales_navigator", False))
+        premium_raw = get_setting("has_linkedin_premium", None)
+        premium = None if premium_raw is None else as_bool(premium_raw)
+    except Exception as e:
+        logger.debug("Could not read the seat's tier for the invite caps: %s", e)
+        sn, premium = False, None
+
+    if not config.is_backend_mode():
+        local_daily = caps_for(sn, premium).invite_daily_cap
+        return 200, _usable_cap((rate_limits or {}).get("daily_limit")) or local_daily
+
+    found = hosted_caps_from_payload(rate_limits)
+    if len(found) < 2:
+        try:
+            stored = get_setting(constants.HOSTED_INVITE_CAPS_SETTING, None)
+        except Exception as e:
+            logger.debug("Could not read the remembered hosted caps: %s", e)
+            stored = None
+        found = {**hosted_caps_from_payload(stored if isinstance(stored, dict) else {}), **found}
+    if len(found) < 2:
+        # Paid needs a confirmed flag. caps_for treats an unanswered Premium as
+        # paid because it is deciding whether an InMail is worth attempting;
+        # this is a display, and promising 320 to a seat the backend may stop
+        # at 100 is the worse of the two errors.
+        free = not (sn or premium is True)
+        found = {
+            "weekly_cap": (
+                constants.HOSTED_WEEKLY_INVITE_CAP if free
+                else constants.HOSTED_WEEKLY_INVITE_CAP_PAID
+            ),
+            "daily_invite_cap": (
+                constants.HOSTED_DAILY_INVITE_CAP_FREE if free
+                else constants.HOSTED_DAILY_INVITE_CAP_PAID
+            ),
+            **found,
+        }
+    return found["weekly_cap"], found["daily_invite_cap"]
+
+
+async def invite_limits_for_display(
+    rate_limits: dict[str, Any] | None = None,
+) -> tuple[int, int]:
+    """``invite_limits_for_display_sync`` on the DB worker."""
+    from ..db.async_bridge import run_db
+
+    return await run_db(invite_limits_for_display_sync, rate_limits)
 
 
 async def _get_effective_caps() -> tuple[int, int]:
-    """(weekly_cap, daily_max) for the health score and the operator's display.
-
-    ``daily_max`` is the cap ``check_daily_cap("invite")`` will actually refuse
-    a send at, read per call from ``tier.get_caps()`` (60s TTL). It used to be
-    a hardcoded 30, which was neither tier's figure; once #236 made it the
-    fallback for the service's null ``daily_limit`` it became the number
-    printed to the operator, so a premium seat whose scheduler runs to its
-    daily invite cap was shown "28/30 today".
-
-    ``weekly_cap`` stays 200 and stays a scoring denominator. Nothing enforces
-    a weekly ceiling here — ``estimate_weekly_limit_reset`` reports none and
-    ``can_send_now`` never returns ``BLOCK_WEEKLY`` — so lowering it toward
-    LinkedIn's real ~100 would light "weekly limit reached" branches that
-    print an empty ETA and claim a block that does not exist. That needs a
-    real weekly signal first, not a smaller invented number.
-    """
-    from ..tier import get_caps
-
-    try:
-        caps = await get_caps()
-    except Exception as e:
-        # Every caller renders a dashboard inside a broad except that turns a
-        # raise into "backend unreachable" — never let a settings read do that.
-        logger.debug("Falling back to the default daily cap: %s", e)
-        return 200, constants.DAILY_CAP_INVITATIONS_FREE
-    return 200, caps.invite_daily_cap
+    """``invite_limits_for_display`` for a caller with no payload in hand."""
+    return await invite_limits_for_display(None)
 
 
 # ──────────────────────────────────────────────
