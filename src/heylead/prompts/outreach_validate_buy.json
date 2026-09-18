@@ -1,0 +1,13 @@
+{
+  "name": "outreach_validate_buy",
+  "description": "LLM validation for buyer-intent invitation notes",
+  "version": "1.0",
+  "content": "GOAL:\nValidate a LinkedIn connection request written by a BUYER approaching a vendor.\n\nINPUTS:\nMESSAGE TO VALIDATE:\n{message}\n\nAUX INPUTS:\nCompany (sender): {company}\nProspect company: {prospect_company}\nMax characters: {max_chars}\n\nCHECKS (fail any -> invalid):\n1) Length: message exceeds {max_chars} characters -> INVALID.\n2) Buying intent: the message never states or clearly implies that the sender wants to evaluate, use, or pay for the prospect's product or service -> INVALID.\n3) Placeholders: contains any bracketed template token such as an unfilled company or name slot -> INVALID.\n4) Fabrication: states volumes, dates, or requirements that read as invented specifics rather than provided facts -> INVALID (when in doubt about a specific number, pass).\n5) Selling: pitches the sender's own product to the prospect -> INVALID.\n6) Multiple questions: more than one question mark -> INVALID.\n7) Tone: exclamation marks, generic flattery, or marketing buzzwords -> INVALID.\n\nNOTE: naming the prospect's company, product, role, or industry is ALLOWED and expected \u2014 the sender is a buyer identifying themselves.\n\nOUTPUT (JSON only):\n{{\"valid\": true/false, \"reason\": \"one short sentence\"}}",
+  "variables": [
+    "message",
+    "company",
+    "prospect_company",
+    "max_chars"
+  ],
+  "temperature": 0.3
+}

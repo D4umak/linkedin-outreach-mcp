@@ -1,0 +1,59 @@
+{
+  "code": "vietnam",
+  "label": "Vietnam",
+  "aliases": [
+    "vietnam",
+    "vietnamese",
+    "việt nam"
+  ],
+  "languages": [
+    "Vietnamese",
+    "tiếng Việt"
+  ],
+  "schools": [
+    {
+      "stem": "Hanoi University of Science and Technology",
+      "aliases": [
+        "HUST"
+      ]
+    },
+    {
+      "stem": "VNU",
+      "aliases": [
+        "Vietnam National University"
+      ]
+    },
+    {
+      "stem": "Bach Khoa",
+      "aliases": [
+        "Ho Chi Minh City University of Technology"
+      ]
+    }
+  ],
+  "experience_places": [
+    "Vietnam",
+    "Hanoi",
+    "Ho Chi Minh",
+    "Saigon",
+    "Da Nang"
+  ],
+  "recall_tokens": [
+    {
+      "keywords": "HUST",
+      "why": "school"
+    },
+    {
+      "keywords": "Vietnamese",
+      "why": "language"
+    },
+    {
+      "keywords": "VNU",
+      "why": "school"
+    }
+  ],
+  "experience_companies": [],
+  "weak_about": [
+    "Vietnam",
+    "vietnam"
+  ]
+}

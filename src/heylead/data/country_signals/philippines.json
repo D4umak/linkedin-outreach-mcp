@@ -1,0 +1,60 @@
+{
+  "code": "philippines",
+  "label": "Philippines",
+  "aliases": [
+    "philippines",
+    "filipino",
+    "filipina",
+    "pinoy"
+  ],
+  "languages": [
+    "Filipino",
+    "Tagalog"
+  ],
+  "schools": [
+    {
+      "stem": "UP Diliman",
+      "aliases": [
+        "University of the Philippines"
+      ]
+    },
+    {
+      "stem": "Ateneo",
+      "aliases": [
+        "Ateneo de Manila"
+      ]
+    },
+    {
+      "stem": "De La Salle",
+      "aliases": [
+        "DLSU"
+      ]
+    }
+  ],
+  "experience_places": [
+    "Philippines",
+    "Manila",
+    "Quezon City",
+    "Cebu",
+    "Davao"
+  ],
+  "recall_tokens": [
+    {
+      "keywords": "Ateneo",
+      "why": "school"
+    },
+    {
+      "keywords": "Tagalog",
+      "why": "language"
+    },
+    {
+      "keywords": "UP Diliman",
+      "why": "school"
+    }
+  ],
+  "experience_companies": [],
+  "weak_about": [
+    "Philippines",
+    "philippines"
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "code": "nigeria",
+  "label": "Nigeria",
+  "aliases": [
+    "nigeria",
+    "nigerian",
+    "nigerians"
+  ],
+  "languages": [
+    "Yoruba",
+    "Igbo",
+    "Hausa"
+  ],
+  "schools": [
+    {
+      "stem": "University of Lagos",
+      "aliases": [
+        "UNILAG"
+      ]
+    },
+    {
+      "stem": "University of Ibadan",
+      "aliases": [
+        "UI Ibadan"
+      ]
+    },
+    {
+      "stem": "UNN",
+      "aliases": [
+        "University of Nigeria"
+      ]
+    },
+    {
+      "stem": "Covenant University",
+      "aliases": []
+    }
+  ],
+  "experience_places": [
+    "Nigeria",
+    "Lagos",
+    "Abuja",
+    "Ibadan",
+    "Port Harcourt"
+  ],
+  "recall_tokens": [
+    {
+      "keywords": "UNILAG",
+      "why": "school"
+    },
+    {
+      "keywords": "Yoruba",
+      "why": "language"
+    },
+    {
+      "keywords": "University of Ibadan",
+      "why": "school"
+    }
+  ],
+  "experience_companies": [],
+  "weak_about": [
+    "Nigeria",
+    "nigeria"
+  ]
+}

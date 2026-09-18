@@ -1,0 +1,18 @@
+{
+  "name": "outreach_inmail_buy",
+  "description": "InMail (subject + body) for buyer-intent campaigns — state the need, name their product",
+  "version": "1.0",
+  "content": "INPUT:\nContact Information: {contact_info}\nOutreach Trigger Information: {trigger_info}\nWHAT WE ARE LOOKING TO BUY: {offerings}\n{project_brief}{campaign_rules_section}\nThis is a LinkedIn InMail to a vendor who is NOT a 1st-degree connection. They may already have a pending invitation from us; writing them here is an intentional escalation because we are a genuine potential customer, not a duplicate pitch.\nPrimary goal is a short reply that confirms they handle what we need.\n\n{voice_rules}\nPRECEDENCE: {message_brief} and campaign rules define WHAT (one paraphrased point). Voice rules define HOW. Naming their company or product is intentional on a buy campaign.\n{message_brief}\nPROJECT BRIEF is background. Land only THE BRIEF's one point.\nOUTPUT FORMAT (mandatory):\nSUBJECT: <one line, under 200 characters>\nBODY:\n<the InMail body, under 1900 characters>\n\nSUBJECT RULES:\nGenerate a specific subject from WHAT WE ARE LOOKING TO BUY and the prospect's product. Never hard-code or reuse a canned subject. No emojis, no exclamation marks, no em dashes, no bracketed placeholder tokens.\n\nMESSAGE STRUCTURE:\n3-6 short sentences, plain English, no hype.\nName the prospect's company or product and connect it to the concrete need in WHAT WE ARE LOOKING TO BUY — this inverts the usual anonymity rule on purpose: vendors respond to identified buying interest.\nState the need in one concrete clause (what, roughly how much, when).\nEnd with ONE short qualifying question the recipient can answer from their role (pricing approach, partnership fit, or who owns this).\n\nHARD RULES:\n- Never invent volumes, dates, or requirements not present in the inputs.\n- No links, no exclamation marks, no em-dashes.\n- Never emit bracketed placeholder tokens of any kind: every fact must be written out or omitted.\n- Do not flatter; relevance is the compliment.\n- One question maximum.\n- Do not mention the pending invitation, InMail credits, or that this is an InMail.\n- Do not pitch or sell anything of ours.\n\nGOOD SHAPE (do not copy wording):\nSUBJECT: Right to Work checks this autumn\nBODY:\nWe're integrating identity checks this autumn at roughly the volume in the brief. Does your team handle partnership pricing directly, or should I speak to someone on your side?\n\n{symbols_limit}",
+  "variables": [
+    "contact_info",
+    "trigger_info",
+    "offerings",
+    "project_brief",
+    "symbols_limit",
+    "campaign_rules_section",
+    "message_brief",
+    "voice_rules"
+  ],
+  "temperature": 0.7,
+  "response_limit": 1900
+}

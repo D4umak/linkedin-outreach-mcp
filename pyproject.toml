@@ -1,0 +1,105 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "heylead"
+version = "0.10.376"
+description = "MCP-native autonomous LinkedIn SDR. Your AI sales rep, one command to fill your pipeline."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "HeyLead", email = "hello@heylead.dev" },
+]
+keywords = [
+    "mcp", "model-context-protocol", "linkedin", "outreach", "sdr",
+    "leads", "sales", "ai", "automation", "prospecting", "campaign",
+    "lead-generation", "cold-outreach", "b2b", "icp", "buyer-persona",
+    "social-selling", "drip-sequence", "linkedin-automation",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business",
+    "Topic :: Communications",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+dependencies = [
+    "mcp>=1.10.0,<2.0.0",
+    "httpx>=0.24.0",
+    "cryptography>=41.0.0",
+    "click>=8.0.0",
+]
+
+[project.optional-dependencies]
+icp = ["sentence-transformers>=2.2.0", "numpy>=1.24.0"]
+crawl = ["firecrawl-py>=0.0.1"]
+browser = ["browser-use>=0.12.0", "playwright>=1.40.0"]
+all = ["heylead[icp]", "heylead[crawl]", "heylead[browser]"]
+
+[project.scripts]
+heylead = "heylead.__main__:main"
+heylead-logs = "heylead.cli.log_analyzer:main"
+
+[project.urls]
+Homepage = "https://heylead.dev"
+Repository = "https://github.com/D4umak/linkedin-outreach-mcp"
+Issues = "https://github.com/D4umak/linkedin-outreach-mcp/issues"
+"LLMs.txt" = "https://heylead.dev/llms.txt"
+
+[tool.hatch.build]
+exclude = [
+    ".mcpregistry_*",
+    "tests/",
+    ".claude/",
+    "audit/",
+    "PROMPT-*.md",
+    "*.csv",
+]
+
+# The sdist is public on PyPI. Allowlist, not excludes: until 18 Sep 2026 it
+# shipped docs/incidents, docs/plans, CLAUDE.md, .semgrep, .github and scripts.
+# tests/test_sdist_allowlist.py builds one and fails on anything else.
+[tool.hatch.build.targets.sdist]
+# Leading slash anchors to the repo root; a bare "README.md" also matches
+# docs/incidents/README.md.
+include = [
+    "/src/heylead",
+    "/README.md",
+    "/LICENSE",
+    "/AGENTS.md",
+    "/llms.txt",
+    "/llms-full.txt",
+    "/server.json",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/heylead"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+# .semgrep/*.py are rule fixtures: deliberately wrong code, not part of the package.
+extend-exclude = [".semgrep"]
+
+[tool.ruff.lint]
+# The CI gate. Only rules that are clean today and catch real defects; widen
+# as the backlog clears (14 Sep 2026: F401 231, F841 41, B 76, DTZ 70, B023 6).
+select = ["E9", "F821", "F811", "F823", "F632", "F702", "F706", "B006", "T10", "S102", "PLE"]
+
+[tool.ruff.lint.per-file-ignores]
+# A test stub may shadow an import on purpose (`def _post(url, json=None)`), and
+# pytest fixtures are imported and then named as parameters. The gate is for src/.
+"tests/**" = ["F811"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

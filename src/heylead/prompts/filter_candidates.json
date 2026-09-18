@@ -1,0 +1,9 @@
+{
+  "name": "filter_candidates",
+  "description": "Validate LinkedIn search parameter candidates for a single ICP field value",
+  "version": "v63",
+  "content": "TASK:\nYou are a LinkedIn parameter validator. Given an original ICP field value and a list of LinkedIn search parameter candidates returned by the API, select ONLY the candidates that are an exact or near-exact match for the original value.\n\nRULES:\n- For locations: only keep the candidate that matches the EXACT geographic entity. Country-level original = keep country only, not states/cities within it. City-level original = keep that exact city.\n- Do NOT keep parent entities if the original is more specific (e.g., if original is \"London\", do not keep \"United Kingdom\").\n- Do NOT keep child entities if the original is broader (e.g., if original is \"United States\", do not keep \"California\" or \"New York\").\n- For job titles: keep only candidates that represent the SAME role. \"Director of Sales\" matches \"Sales Director\" but NOT \"VP of Sales\" or \"Sales Manager\".\n- For industries: keep only candidates that match the SAME industry. \"Information Technology\" matches \"IT\" but NOT \"Software Development\" unless it's clearly a synonym.\n- For departments: keep only candidates matching the same organizational function.\n- When in doubt, do NOT include the candidate. Precision over recall.\n\nICP CONTEXT:\nICP Name: {icp_name}\nField: {field}\nOriginal value: {original}\n\nCANDIDATES:\n{candidates}\n\nOUTPUT:\nReturn ONLY a JSON object with the codes of the candidates to keep:\n{{\"param_codes\": [\"code1\", \"code2\"]}}",
+  "variables": ["icp_name", "field", "original", "candidates"],
+  "temperature": 0.0,
+  "response_limit": 100
+}

@@ -1,0 +1,72 @@
+{
+  "code": "india",
+  "label": "India",
+  "aliases": [
+    "india",
+    "indian",
+    "indians",
+    "bharat"
+  ],
+  "languages": [
+    "Hindi",
+    "Tamil",
+    "Telugu",
+    "Bengali",
+    "Marathi"
+  ],
+  "schools": [
+    {
+      "stem": "IIT",
+      "aliases": [
+        "Indian Institute of Technology"
+      ]
+    },
+    {
+      "stem": "IIM",
+      "aliases": [
+        "Indian Institute of Management"
+      ]
+    },
+    {
+      "stem": "NIT",
+      "aliases": [
+        "National Institute of Technology"
+      ]
+    },
+    {
+      "stem": "BITS",
+      "aliases": [
+        "BITS Pilani"
+      ]
+    }
+  ],
+  "experience_places": [
+    "India",
+    "Bengaluru",
+    "Bangalore",
+    "Hyderabad",
+    "Mumbai",
+    "Pune",
+    "Delhi",
+    "Chennai"
+  ],
+  "recall_tokens": [
+    {
+      "keywords": "IIT",
+      "why": "school"
+    },
+    {
+      "keywords": "Hindi",
+      "why": "language"
+    },
+    {
+      "keywords": "BITS Pilani",
+      "why": "school"
+    }
+  ],
+  "experience_companies": [],
+  "weak_about": [
+    "India",
+    "india"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.D4umak/heylead",
+  "title": "HeyLead \u2014 Autonomous LinkedIn SDR",
+  "description": "Autonomous LinkedIn SDR \u2014 voice-matched outreach, ICP generation, and campaign management.",
+  "version": "0.10.376",
+  "websiteUrl": "https://heylead.dev",
+  "repository": {
+    "url": "https://github.com/D4umak/linkedin-outreach-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "heylead",
+      "version": "0.10.376",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://heylead.dev/mcp"
+    }
+  ]
+}

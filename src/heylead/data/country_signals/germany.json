@@ -1,0 +1,69 @@
+{
+  "code": "germany",
+  "label": "Germany",
+  "aliases": [
+    "germany",
+    "german",
+    "germans",
+    "deutschland"
+  ],
+  "languages": [
+    "German",
+    "Deutsch"
+  ],
+  "schools": [
+    {
+      "stem": "TUM",
+      "aliases": [
+        "Technical University of Munich"
+      ]
+    },
+    {
+      "stem": "RWTH",
+      "aliases": [
+        "RWTH Aachen"
+      ]
+    },
+    {
+      "stem": "LMU",
+      "aliases": [
+        "Ludwig Maximilian"
+      ]
+    },
+    {
+      "stem": "TU Berlin",
+      "aliases": [
+        "Technical University of Berlin"
+      ]
+    }
+  ],
+  "experience_places": [
+    "Germany",
+    "Berlin",
+    "Munich",
+    "München",
+    "Hamburg",
+    "Frankfurt",
+    "Cologne",
+    "Köln"
+  ],
+  "recall_tokens": [
+    {
+      "keywords": "TUM",
+      "why": "school"
+    },
+    {
+      "keywords": "German",
+      "why": "language"
+    },
+    {
+      "keywords": "RWTH",
+      "why": "school"
+    }
+  ],
+  "experience_companies": [],
+  "weak_about": [
+    "Germany",
+    "germany"
+  ]
+}

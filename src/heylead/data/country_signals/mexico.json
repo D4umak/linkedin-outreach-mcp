@@ -1,0 +1,60 @@
+{
+  "code": "mexico",
+  "label": "Mexico",
+  "aliases": [
+    "mexico",
+    "mexican",
+    "méxico"
+  ],
+  "languages": [
+    "Spanish",
+    "español"
+  ],
+  "schools": [
+    {
+      "stem": "UNAM",
+      "aliases": [
+        "Universidad Nacional Autónoma"
+      ]
+    },
+    {
+      "stem": "Tec de Monterrey",
+      "aliases": [
+        "ITESM"
+      ]
+    },
+    {
+      "stem": "IPN",
+      "aliases": [
+        "Instituto Politécnico Nacional"
+      ]
+    }
+  ],
+  "experience_places": [
+    "Mexico",
+    "México",
+    "Mexico City",
+    "CDMX",
+    "Guadalajara",
+    "Monterrey"
+  ],
+  "recall_tokens": [
+    {
+      "keywords": "UNAM",
+      "why": "school"
+    },
+    {
+      "keywords": "Spanish",
+      "why": "language"
+    },
+    {
+      "keywords": "Tec de Monterrey",
+      "why": "school"
+    }
+  ],
+  "experience_companies": [],
+  "weak_about": [
+    "Mexico",
+    "mexico"
+  ]
+}

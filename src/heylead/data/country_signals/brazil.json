@@ -1,0 +1,56 @@
+{
+  "code": "brazil",
+  "label": "Brazil",
+  "aliases": [
+    "brazil",
+    "brazilian",
+    "brasil"
+  ],
+  "languages": [
+    "Portuguese",
+    "português"
+  ],
+  "schools": [
+    {
+      "stem": "USP",
+      "aliases": [
+        "Universidade de São Paulo"
+      ]
+    },
+    {
+      "stem": "UNICAMP",
+      "aliases": []
+    },
+    {
+      "stem": "UFRJ",
+      "aliases": []
+    }
+  ],
+  "experience_places": [
+    "Brazil",
+    "Brasil",
+    "São Paulo",
+    "Sao Paulo",
+    "Rio de Janeiro",
+    "Belo Horizonte"
+  ],
+  "recall_tokens": [
+    {
+      "keywords": "USP",
+      "why": "school"
+    },
+    {
+      "keywords": "Portuguese",
+      "why": "language"
+    },
+    {
+      "keywords": "UNICAMP",
+      "why": "school"
+    }
+  ],
+  "experience_companies": [],
+  "weak_about": [
+    "Brazil",
+    "brazil"
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "code": "ukraine",
+  "label": "Ukraine",
+  "aliases": [
+    "ukraine",
+    "ukrainian",
+    "ukrainians",
+    "україна",
+    "українська",
+    "українці"
+  ],
+  "languages": ["Ukrainian", "українська"],
+  "schools": [
+    {"stem": "KPI", "aliases": ["Igor Sikorsky", "Kyiv Polytechnic", "Kiev Polytechnic"]},
+    {"stem": "Shevchenko", "aliases": ["Taras Shevchenko", "KNU"]},
+    {"stem": "Lviv Polytechnic", "aliases": ["Lvivska Polytechnika", "LPNU"]},
+    {"stem": "NaUKMA", "aliases": ["Kyiv-Mohyla", "Mohyla Academy", "KMA"]},
+    {"stem": "KNEU", "aliases": ["Vadym Hetman", "Kyiv National Economic"]},
+    {"stem": "Mechnikov", "aliases": ["ONU Mechnikov", "Odessa National"]},
+    {"stem": "Kharkiv Poly", "aliases": ["Kharkiv Polytechnic", "NTU KhPI"]},
+    {"stem": "UKMA", "aliases": ["Ukrainian Catholic"]},
+    {"stem": "KPI", "aliases": []},
+    {"stem": "Donetsk National", "aliases": ["DonNU"]},
+    {"stem": "Sumy State", "aliases": ["SSU"]},
+    {"stem": "Chernivtsi National", "aliases": ["Fedkovych"]},
+    {"stem": "Lviv National", "aliases": ["Franko"]},
+    {"stem": "Dnipro National", "aliases": ["Oles Honchar"]},
+    {"stem": "NTUU", "aliases": ["National Technical University of Ukraine"]}
+  ],
+  "experience_places": [
+    "Ukraine",
+    "Kyiv",
+    "Kiev",
+    "Lviv",
+    "Odesa",
+    "Odessa",
+    "Kharkiv",
+    "Dnipro",
+    "Vinnytsia",
+    "Zaporizhzhia",
+    "Ivano-Frankivsk",
+    "Ternopil",
+    "Poltava",
+    "Chernihiv"
+  ],
+  "experience_companies": [],
+  "weak_about": ["Ukrainian", "Ukrainian-born", "from Ukraine"],
+  "recall_tokens": [
+    {"keywords": "KPI", "why": "school"},
+    {"keywords": "Ukrainian", "why": "language"},
+    {"keywords": "Shevchenko", "why": "school"},
+    {"keywords": "Lviv Polytechnic", "why": "school"}
+  ]
+}

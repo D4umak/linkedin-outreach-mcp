@@ -1,0 +1,19 @@
+{
+  "name": "outreach_invitation_buy",
+  "description": "First-touch connection note for buyer-intent campaigns — state the need, name their product",
+  "version": "1.0",
+  "content": "INPUT:\nContact Information: {contact_info}\nOutreach Trigger Information: {trigger_info}\nWHAT WE ARE LOOKING TO BUY: {offerings}\n{project_brief}{campaign_rules_section}\nPrimary goal is to get the connection request accepted by a vendor who understands we are a genuine potential customer.\n\n{voice_rules}\nPRECEDENCE: {message_brief} and campaign rules define WHAT (one paraphrased point). Voice rules define HOW. Naming their company or product is intentional on a buy campaign.\n{message_brief}\nPROJECT BRIEF is background. Land only THE BRIEF's one point.\nMESSAGE STRUCTURE:\n1-2 short sentences, plain English, no hype.\nName the prospect's company or product and connect it to the concrete need in WHAT WE ARE LOOKING TO BUY — this inverts the usual anonymity rule on purpose: vendors respond to identified buying interest.\nState the need in one concrete clause (what, roughly how much, when).\nEnd with ONE short qualifying question the recipient can answer from their role (pricing approach, partnership fit, or who owns this).\n\nHARD RULES:\n- Never invent volumes, dates, or requirements not present in the inputs.\n- No links, no exclamation marks, no em-dashes.\n- Never emit bracketed placeholder tokens of any kind: every fact must be written out or omitted.\n- Do not flatter; relevance is the compliment.\n- One question maximum.\n\nGOOD SHAPE (do not copy wording):\n\"We're integrating <their product area> this autumn at roughly <volume from inputs>. Does <their company> handle partnership pricing directly, or should I speak to someone on your team?\"\n\n{symbols_limit}",
+  "variables": [
+    "contact_info",
+    "trigger_info",
+    "offerings",
+    "project_brief",
+    "symbols_limit",
+    "campaign_rules_section",
+    "message_brief",
+    "voice_rules",
+    "voice_tone",
+    "voice_nogo"
+  ],
+  "temperature": 0.7
+}

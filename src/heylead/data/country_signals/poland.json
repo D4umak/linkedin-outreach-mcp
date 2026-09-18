@@ -1,0 +1,74 @@
+{
+  "code": "poland",
+  "label": "Poland",
+  "aliases": [
+    "poland",
+    "polish",
+    "poles",
+    "polska"
+  ],
+  "languages": [
+    "Polish",
+    "polski"
+  ],
+  "schools": [
+    {
+      "stem": "UW",
+      "aliases": [
+        "University of Warsaw",
+        "Uniwersytet Warszawski"
+      ]
+    },
+    {
+      "stem": "Jagiellonian",
+      "aliases": [
+        "UJ",
+        "Krakow"
+      ]
+    },
+    {
+      "stem": "WUT",
+      "aliases": [
+        "Warsaw University of Technology",
+        "Politechnika Warszawska"
+      ]
+    },
+    {
+      "stem": "AGH",
+      "aliases": [
+        "AGH University"
+      ]
+    }
+  ],
+  "experience_places": [
+    "Poland",
+    "Warsaw",
+    "Krakow",
+    "Kraków",
+    "Wroclaw",
+    "Wrocław",
+    "Gdansk",
+    "Gdańsk",
+    "Poznan",
+    "Poznań"
+  ],
+  "recall_tokens": [
+    {
+      "keywords": "Jagiellonian",
+      "why": "school"
+    },
+    {
+      "keywords": "Polish",
+      "why": "language"
+    },
+    {
+      "keywords": "WUT",
+      "why": "school"
+    }
+  ],
+  "experience_companies": [],
+  "weak_about": [
+    "Poland",
+    "poland"
+  ]
+}

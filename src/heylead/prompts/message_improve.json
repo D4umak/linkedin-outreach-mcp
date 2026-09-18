@@ -1,0 +1,17 @@
+{
+  "name": "message_improve",
+  "description": "Polish draft outreach message to sound more natural and human — remove AI-tells and salesy language",
+  "version": "v67",
+  "content": "Polish this {message_type} message to sound more natural and human.\n\n## DRAFT MESSAGE\n{draft}\n\n## SENDER'S VOICE\nTone: {voice_tone}\nSentence style: {voice_sentence}\nNo-go words: {voice_nogo}\n\n{voice_rules}\n## ANTI-PATTERN CHECKLIST (also fix these if present):\n1. COMPANY/PLACE NAMES: If this is a sell invite/InMail and the message mentions company, place, or product names from the prospect's content that the brief does not require, remove them. Use vague references. Keep named products on buy campaigns.\n2. PITCHING IN INVITES: If this is a connection request, remove any product/solution mentions unless the brief or campaign rules require them.\n3. LINKEDIN-SDR FILLER: Replace \"hands-on\", \"in the weeds\", \"hits differently\", and identity labels (\"as a builder\", \"as an operator\") with plain words about the actual work.\n\n## EXAMPLE:\nBEFORE: \"Natasha, the jump from design to running everything is a serious move. Where do you see brand-building heading?\"\nAFTER: \"Going from design to running everything changes the week. Do you still get time for the creative side?\"\n\nBAD: \"That 21x gap suggests call cadence and market context may matter more than rapport. How much hands-on work does it take to make those habits repeatable?\"\nWHY BAD: Cites a specific stat and uses sales-methodology jargon. Paraphrase the situation in plain English; ask about their daily work.\nAFTER: \"Keeping a big gap between the best and the rest on the phones is one thing. Do you still run that rhythm yourself, or does the team carry it?\"\n\n## CONSTRAINTS\n- MAXIMUM {max_chars} characters (hard limit)\n- MUST sound like the sender wrote it naturally\n- MUST preserve the core intent and CTA direction\n- Apply ALL anti-pattern fixes from the checklist above\n- Keep it crisp, understated, and genuine\n\n## OUTPUT\nWrite ONLY the refined message text. Nothing else.",
+  "variables": [
+    "message_type",
+    "draft",
+    "voice_tone",
+    "voice_sentence",
+    "voice_nogo",
+    "max_chars",
+    "voice_rules"
+  ],
+  "temperature": 0.7,
+  "response_limit": 500
+}

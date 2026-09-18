@@ -1,0 +1,70 @@
+{
+  "code": "united_kingdom",
+  "label": "United Kingdom",
+  "aliases": [
+    "united kingdom",
+    "britain",
+    "british",
+    "england",
+    "scotland",
+    "wales"
+  ],
+  "languages": [
+    "English",
+    "Welsh",
+    "Scottish Gaelic"
+  ],
+  "schools": [
+    {
+      "stem": "Oxford",
+      "aliases": [
+        "University of Oxford"
+      ]
+    },
+    {
+      "stem": "Cambridge",
+      "aliases": [
+        "University of Cambridge"
+      ]
+    },
+    {
+      "stem": "Imperial",
+      "aliases": [
+        "Imperial College"
+      ]
+    },
+    {
+      "stem": "LSE",
+      "aliases": [
+        "London School of Economics"
+      ]
+    }
+  ],
+  "experience_places": [
+    "United Kingdom",
+    "London",
+    "Manchester",
+    "Edinburgh",
+    "Birmingham",
+    "Glasgow"
+  ],
+  "recall_tokens": [
+    {
+      "keywords": "Oxford",
+      "why": "school"
+    },
+    {
+      "keywords": "Cambridge",
+      "why": "school"
+    },
+    {
+      "keywords": "Imperial College",
+      "why": "school"
+    }
+  ],
+  "experience_companies": [],
+  "weak_about": [
+    "United Kingdom",
+    "united kingdom"
+  ]
+}

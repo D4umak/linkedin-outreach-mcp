@@ -1,0 +1,14 @@
+{
+  "name": "followup_fix",
+  "description": "unused — live path is message_fix",
+  "version": "v63",
+  "content": "GOAL:\nRewrite the message to resolve ALL validation issues and follow Stage-1 decisions.\n\nINPUTS:\nORIGINAL MESSAGE:\n{message}\n\nISSUES (from validator):\n{issues}\n\nDECISIONS FROM STAGE 1 (if available):\n{reasoning}\n\nCTA LIBRARY (use these when CTA needs replacing):\n- \"Worth connecting to swap notes?\"\n- \"If this resonates, open to a quick chat?\"\n- \"Shall we compare approaches for a few minutes?\"\n- \"Open to a short intro this week?\"\n- \"Would a brief chat be useful?\"\n- \"Okay to send a 2-line summary?\"\n- \"Want a quick walkthrough on timing and follow-ups?\"\n- \"If helpful, we can keep this to 10 minutes.\"\n\nREWRITE RULES (apply per issue type):\n- **CTA duplicated**: Pick a different CTA from the library above.\n- **Length too similar**: Shorten or extend by at least 20% within {symbols_limit}.\n- **First-sentence overlap**: Replace the first 3-5 content words with fresh alternatives.\n- **Link-gating failed**: Remove the link entirely and rephrase the CTA without it.\n- **Bullets invalid**: Convert bullet points to flowing sentences.\n- **Flagged words/names/roles/industries**: Remove or replace with generic alternatives.\n- **Greeting/signoff reuse**: Change to a different greeting or signoff variant.\n- **Buzzwords detected**: Replace with plain, conversational language.\n\nGENERAL RULES:\n- Keep the intent and pain/solve from the original when possible.\n- Keep 1 question max. No emojis. No exclamation marks. No em dashes.\n- Do not use our company name or theirs.\n- Do not use roles, titles, industries, or department names.\n- Avoid: innovative, leaders, landscape, optimize, unlock, robust, streamline, synergy, solution, platform.\n\nRESPONSE FORMAT:\nProvide only the fixed message text. No headers, labels, or explanations.",
+  "variables": [
+    "message",
+    "issues",
+    "reasoning",
+    "symbols_limit"
+  ],
+  "temperature": 0.7,
+  "response_limit": 200
+}

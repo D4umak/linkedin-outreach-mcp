@@ -1,0 +1,14 @@
+{
+  "name": "followup_news",
+  "description": "Stage 5: Optionally weave recent news into an existing follow-up message",
+  "version": "v63",
+  "content": "You have a follow-up message draft and recent news about the prospect's company or industry.\n\nDRAFT MESSAGE:\n{draft_message}\n\nNEWS CONTEXT:\n{news_context}\n\n{voice_rules}\n\nTASK: Rewrite the message to naturally reference the news. Rules:\n- Reference news ONLY if genuinely relevant to the conversation\n- Keep it brief — one mention, not a summary of the article\n- Maintain the original tone and voice\n- Keep under {symbols_limit} characters\n- If the news isn't relevant, return the original message unchanged\n- Do NOT mention the source, article title, or link\n- Do NOT say \"I read that\" or \"I noticed\" — weave it naturally\n- Do NOT use em dashes\n- Do NOT add any company names, role titles, or industry buzzwords unless the brief or stance requires that fact\n\nReturn ONLY the final message text, nothing else.",
+  "variables": [
+    "draft_message",
+    "news_context",
+    "symbols_limit",
+    "voice_rules"
+  ],
+  "temperature": 0.8,
+  "response_limit": 500
+}

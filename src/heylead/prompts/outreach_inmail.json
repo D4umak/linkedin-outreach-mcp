@@ -1,0 +1,26 @@
+{
+  "name": "outreach_inmail",
+  "description": "Prompt for LinkedIn InMail (subject + body) to a non-connection",
+  "version": "v67",
+  "content": "INPUT:\nContact Information: {contact_info}\nOutreach Trigger Information: {trigger_info}\nCompany Offerings: {offerings}\n{project_brief}Company Case Studies: {case_studies}\nCompany Social Proofs: {social_proofs}\nAdditional info:\n{custom_params}\n{tone_analysis_section}\n{pain_point_section}\n{signal_strategy}\n\nThis is a LinkedIn InMail to someone who is NOT a 1st-degree connection. They may already have a pending invitation from us; writing them here is an intentional escalation, not a duplicate pitch.\nPrimary goal is a short reply, not a meeting booking.\nHuman, concise, plain English, no hype.\nFriendly, not flattering; confident, not pushy.\nAvoid emojis, marketing buzzwords, and filler.\nNever use LinkedIn-SDR filler: \"hands-on\", \"in the weeds\", \"hits differently\". Do not label the prospect (\"as a builder\", \"as an operator\").\n\n{campaign_rules_section}\nVOICE: {voice_tone}. Never use: {voice_nogo}.\nPRECEDENCE: {message_brief} and campaign rules define WHAT (one paraphrased point). {voice_rules} and anonymity rules below define HOW. Do not name companies, products, titles, or industries unless the brief or campaign rules require that fact.\n{message_brief}\nPROJECT BRIEF is background. Land only THE BRIEF's one point.\nOUTPUT FORMAT (mandatory):\nSUBJECT: <one line, under 200 characters>\nBODY:\n<the InMail body, under 1900 characters>\n\nSUBJECT RULES:\nGenerate a specific subject from the brief and the prospect's situation. Never reuse a canned subject. No emojis, no exclamation marks, no em dashes, no bracketed placeholder tokens.\n\nBODY STRUCTURE:\n2-5 short sentences.\nOpen with a vague, understated observation about the prospect's situation (paraphrased from their activity, never quoting exact words or naming specifics).\nEnd with ONE question about THEIR daily experience -- not about trends, AI, or industry shifts.\nDo NOT mention your product, tool, or how you solve anything unless the campaign rules or brief explicitly require it.\nKeep to one question max.\n\n{voice_rules}\nANTI-PATTERNS (InMail — keep these):\n- Do not mention any company names, product names, or place names from the prospect's content unless the brief or campaign rules require that fact.\n- Do not pitch unless the campaign rules or brief explicitly require it.\n- Do not mention the pending invitation, InMail credits, or that this is an InMail.\n\nGuardrails (hard rules):\nDo not mention pricing unless the brief requires it.\nDo not use or reference any company names at all (theirs or ours) unless the brief requires it, including abbreviations, initials, or bracketed placeholder tokens of any kind.\nDo not include any links (website, calendar, deck).\nDo not use exclamation marks.\nNever emit bracketed placeholder tokens of any kind: every fact must be written out or omitted.\n\nBAD: \"That 21x gap suggests call cadence and market context may matter more than rapport. How much hands-on work does it take to make those habits repeatable?\"\nWHY BAD: Points at a specific stat from their content, then wraps it in sales-methodology jargon the sender would not say.\n\nCRITICAL:\n* Response **ONLY** with the SUBJECT:/BODY: format above. **NO reasoning.**\n* Subject max 200 characters. Body max 1900 characters.\n* {symbols_limit}\n\nFINAL REMINDER: never start the body with the prospect's name; never emit [placeholders].",
+  "variables": [
+    "contact_info",
+    "trigger_info",
+    "offerings",
+    "project_brief",
+    "case_studies",
+    "social_proofs",
+    "custom_params",
+    "tone_analysis_section",
+    "pain_point_section",
+    "signal_strategy",
+    "symbols_limit",
+    "campaign_rules_section",
+    "message_brief",
+    "voice_rules",
+    "voice_tone",
+    "voice_nogo"
+  ],
+  "temperature": 0.7,
+  "response_limit": 1900
+}

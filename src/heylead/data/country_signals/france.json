@@ -1,0 +1,65 @@
+{
+  "code": "france",
+  "label": "France",
+  "aliases": [
+    "france",
+    "french",
+    "français"
+  ],
+  "languages": [
+    "French",
+    "français"
+  ],
+  "schools": [
+    {
+      "stem": "Sorbonne",
+      "aliases": [
+        "Paris-Sorbonne"
+      ]
+    },
+    {
+      "stem": "École Polytechnique",
+      "aliases": [
+        "l'X",
+        "Polytechnique"
+      ]
+    },
+    {
+      "stem": "HEC",
+      "aliases": [
+        "HEC Paris"
+      ]
+    },
+    {
+      "stem": "Sciences Po",
+      "aliases": []
+    }
+  ],
+  "experience_places": [
+    "France",
+    "Paris",
+    "Lyon",
+    "Toulouse",
+    "Marseille",
+    "Lille"
+  ],
+  "recall_tokens": [
+    {
+      "keywords": "Sorbonne",
+      "why": "school"
+    },
+    {
+      "keywords": "French",
+      "why": "language"
+    },
+    {
+      "keywords": "HEC Paris",
+      "why": "school"
+    }
+  ],
+  "experience_companies": [],
+  "weak_about": [
+    "France",
+    "france"
+  ]
+}
