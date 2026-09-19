@@ -111,7 +111,7 @@ Campaigns are created as drafts and only start when explicitly launched. Every s
 | `edit_campaign` | Update name, mode, booking link, preferences, or agent act flags |
 | `import_prospects` | Import prospects from CSV |
 | `generate_and_send` | Send personalized connection invitations |
-| `send_message` | Follow-up DMs, replies, and voice memos |
+| `send_message` | Follow-up DMs and replies |
 | `send_email` | Send email via Unipile (Gmail/Outlook). Never Mail.app. |
 | `check_replies` | Monitor inbox, classify sentiment, surface hot leads |
 | `book_meeting` | Put an agreed call on your Google Calendar and invite the prospect |
@@ -140,8 +140,11 @@ Campaigns are created as drafts and only start when explicitly launched. Every s
 
 | Plan | Price | Limits |
 |------|-------|--------|
-| **Free** | $0 | 50 invitations/month, 1 campaign, 30 engagements/month |
-| **Pro** | $29/mo | Unlimited campaigns, 5 LinkedIn accounts, cloud scheduler |
+| **Free** | $0 | Up to 2 follow-ups per prospect |
+| **Pro** | $29 per connected LinkedIn account per month | Up to 5 follow-ups per prospect |
+
+Invitation limits follow the LinkedIn account (free, Premium or Sales Navigator), not the HeyLead plan.
+Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign.
 
 ## Privacy
 

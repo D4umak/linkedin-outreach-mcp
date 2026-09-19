@@ -31,6 +31,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.381 (2026-09-19)
+- public docs stop advertising voice memos, which are off by default and unused
+- README, SKILL and clawhub state what Stripe charges and what the code limits
+
 ## v0.10.380 (2026-09-19)
 - Change: campaigns send only in business hours unless you switch that off: Monday to Friday, 08:00-22:00 in your own timezone when your workspace has not set a window. show_status now names only a campaign that switched business hours off, and the create_campaign / edit_campaign docs say it is on by default
 

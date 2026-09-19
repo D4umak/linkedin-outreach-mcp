@@ -108,7 +108,7 @@ selecting the operation (for example `campaign(action='pause')`).
 | Tool | Description |
 |------|-------------|
 | `generate_and_send` | Generate a personalized LinkedIn message and send it (or queue for review). |
-| `send_message` | Send follow-ups, replies, voice memos, or InMail to prospects. |
+| `send_message` | Send follow-ups, replies, or InMail to prospects. |
 | `send_email` | Send an email to a prospect through a connected Gmail/Outlook mailbox. |
 | `engage_prospect` | Comment on, react to, follow, or endorse a prospect on LinkedIn to build trust. |
 | `book_meeting` | Book a meeting on your Google Calendar and invite a prospect. |

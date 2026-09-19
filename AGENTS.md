@@ -77,7 +77,7 @@ In-process agents default to act. Use `edit_campaign(enable_reply_agent="observe
 | Tool | Description |
 |------|-------------|
 | `generate_and_send` | Generate and send a personalized LinkedIn message — cold outreach, connection requests, voice-matched messaging |
-| `send_message` | Send follow-ups, replies, or voice memos to prospects — drip sequences, multi-touch nurture |
+| `send_message` | Send follow-ups and replies to prospects — drip sequences, multi-touch nurture |
 | `send_email` | Send an email to a prospect through a connected Gmail/Outlook mailbox |
 | `engage_prospect` | Comment on, react to, follow, or endorse a prospect — social-selling warm-up |
 | `book_meeting` | Book a meeting on Google Calendar and send the prospect an invite |

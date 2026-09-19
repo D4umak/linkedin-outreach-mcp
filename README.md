@@ -113,7 +113,7 @@ HeyLead gives your AI 35 tools:
 
 | Tool | What it does |
 |------|-------------|
-| `send_message` | Sends follow-ups, replies, or voice memos to prospects |
+| `send_message` | Sends follow-ups and replies to prospects |
 | `send_email` | Sends email via a connected Unipile mailbox (Gmail/Outlook). Never Mail.app. |
 | `engage_prospect` | Comments on, reacts to, follows, or endorses a prospect to build trust |
 | `inbox` | Browses and reads LinkedIn inbox messages directly |
@@ -182,8 +182,11 @@ HeyLead gives your AI 35 tools:
 
 | Plan | Price | What you get |
 |------|-------|-------------|
-| **Free** | $0 | 50 invitations/month, 1 campaign, 2 follow-ups per prospect, 30 engagements/month |
-| **Pro** | $29/mo | Unlimited campaigns, 5 follow-ups with multi-day schedule, 5 LinkedIn accounts, cloud scheduler |
+| **Free** | $0 | Up to 2 follow-ups per prospect |
+| **Pro** | $29 per connected LinkedIn account per month | Up to 5 follow-ups per prospect |
+
+Invitation limits follow the LinkedIn account (free, Premium or Sales Navigator), not the HeyLead plan.
+Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign.
 
 ---
 

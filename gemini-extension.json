@@ -1,12 +1,12 @@
 {
   "name": "heylead",
-  "version": "0.10.380",
+  "version": "0.10.381",
   "description": "LinkedIn outreach from your AI assistant: find the right people, write to them in your own voice, follow up and handle replies. For sales prospecting, recruiting, research and user-interview recruitment, job search, and investor or partner outreach. Campaigns are drafts until you launch them.",
   "mcpServers": {
     "heylead": {
       "command": "uvx",
       "args": [
-        "heylead@0.10.380"
+        "heylead@0.10.381"
       ]
     }
   },
