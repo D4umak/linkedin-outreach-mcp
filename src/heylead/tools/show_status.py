@@ -1473,6 +1473,21 @@ async def _show_overview_from_backend(data: dict) -> str:
     return "\n".join(output)
 
 
+def _business_hours_line(config: dict) -> str | None:
+    """The business-hours line for a campaign, or None when it is the default.
+
+    Since 19 Sep 2026 the cloud sends only in business hours unless a
+    campaign switched that off (heylead-api working_hours: weekdays
+    08:00-22:00 London when the workspace chose no window). Like the other
+    settings here, only a departure from what a new campaign starts with is
+    shown.
+    """
+    value = (config or {}).get("send_in_business_hours")
+    if value is False or str(value).strip().lower() in ("off", "false", "0", "no"):
+        return "🕐 Business hours: off (sends at any hour and on weekends)"
+    return None
+
+
 async def _show_campaign_detail(campaign_id: str) -> str:
     """Show detailed stats for a specific campaign."""
 
@@ -1532,8 +1547,9 @@ async def _show_campaign_detail(campaign_id: str) -> str:
         settings_lines.append(f"📅 Max follow-ups: {mf}")
 
     # Business hours
-    if config.get("send_in_business_hours") in (True, "on"):
-        settings_lines.append("🕐 Business hours: on")
+    bh_line = _business_hours_line(config)
+    if bh_line:
+        settings_lines.append(bh_line)
 
     # Active days
     ad = config.get("active_days")

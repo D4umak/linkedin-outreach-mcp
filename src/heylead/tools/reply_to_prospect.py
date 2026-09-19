@@ -605,27 +605,20 @@ async def run_reply_to_prospect(
             f"{targeting_reply_directive(targeting_strategy == 'confirm_fit', target_description)}"
         )
 
-    if not targeting_strategy and sentiment == "negative":
+    # A "no" is answered by the cloud: a short polite close, then the row
+    # closes (heylead-api #749). Until 19 Sep 2026 this marked the row
+    # opted_out and sent nothing — a courteous no became a permanent opt-out,
+    # which syncs up and which the cloud never answers. The row is left as it
+    # is so the cloud answers it once; nothing is sent from here.
+    if not targeting_strategy and (sentiment == "negative" or is_decline_message(reply_text)):
         await client.close()
-        await run_db(update_outreach, outreach_id, status="opted_out")
-        await run_db(log_action, "auto_reply_skipped_negative", outreach_id=outreach_id,
-                   result="skipped", details={"text": reply_text[:200]})
+        await run_db(log_action, "reply_left_to_cloud_decline", outreach_id=outreach_id,
+                   result="skipped", details={"text": reply_text[:200], "sentiment": sentiment})
         return (
-            f"Prospect sent a negative/decline message — skipping auto-reply.\n"
+            f"They declined:\n"
             f"   \"{reply_text[:100]}\"\n"
-            "Outreach closed. No further messages will be sent."
-        )
-
-    # Keyword-based decline detection (catches misclassified sentiments).
-    if not targeting_strategy and is_decline_message(reply_text):
-        await client.close()
-        await run_db(update_outreach, outreach_id, status="opted_out")
-        await run_db(log_action, "auto_reply_skipped_decline_keywords", outreach_id=outreach_id,
-                   result="skipped", details={"text": reply_text[:200]})
-        return (
-            f"Prospect's message contains decline keywords — skipping auto-reply.\n"
-            f"   \"{reply_text[:100]}\"\n"
-            "Outreach closed. No further messages will be sent."
+            "HeyLead's cloud answers this with a short polite close and then closes "
+            "the outreach. Nothing was sent from here."
         )
 
     # Fast vendor-pitch keyword guard (catches obvious pitches before LLM call).

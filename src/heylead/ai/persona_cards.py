@@ -466,64 +466,6 @@ PERSONA_CARDS: list[dict] = [
 ]
 
 # ──────────────────────────────────────────────
-# Objection Handling Patterns
-# ──────────────────────────────────────────────
-
-OBJECTION_PATTERNS: dict[str, dict] = {
-    "no_time": {
-        "label": "Too busy / no time",
-        "response_strategy": "Acknowledge their time, offer ultra-concise value prop, suggest async option",
-        "example_reframe": "Totally get it. Happy to send a 2-line summary you can glance at when convenient.",
-    },
-    "no_budget": {
-        "label": "No budget right now",
-        "response_strategy": "Reframe as ROI/payback, offer to build the business case together",
-        "example_reframe": "Makes sense. Most teams we work with found it paid for itself within a quarter. Worth a quick look at the math?",
-    },
-    "already_have_solution": {
-        "label": "Already using something",
-        "response_strategy": "Acknowledge current tool, differentiate on specific gap, offer comparison",
-        "example_reframe": "Good to know you're covered there. A few teams switched because of [specific gap]. Worth comparing notes?",
-    },
-    "bad_timing": {
-        "label": "Not the right time",
-        "response_strategy": "Respect timing, plant a seed for future, ask when would be better",
-        "example_reframe": "Understood. When would be a better time to revisit? Happy to circle back then.",
-    },
-    "need_to_check_with_team": {
-        "label": "Need internal alignment",
-        "response_strategy": "Offer to help build internal case, provide shareable materials",
-        "example_reframe": "Of course. Want me to send a quick summary your team can review? Makes the internal conversation easier.",
-    },
-    "not_interested": {
-        "label": "Not interested",
-        "response_strategy": "Graceful close with one value reframe, then respect the no",
-        "example_reframe": "No worries at all. If [specific value] ever becomes relevant, feel free to reach out. Appreciate your time.",
-    },
-    "too_expensive": {
-        "label": "Price concern",
-        "response_strategy": "Reframe as cost-per-outcome, show ROI calculation, offer smaller starting point",
-        "example_reframe": "Fair point. Most teams look at the cost per [outcome] rather than the sticker price. Happy to run those numbers together.",
-    },
-    "not_convinced": {
-        "label": "Skeptical about results",
-        "response_strategy": "Lead with specific proof point, offer pilot or trial, reference similar company",
-        "example_reframe": "Healthy skepticism. [Company similar to theirs] saw [specific metric] in [timeframe]. Worth a quick pilot to see?",
-    },
-    "send_info": {
-        "label": "Just send me info",
-        "response_strategy": "Send concise value summary, follow up with question to re-engage",
-        "example_reframe": "Sure thing. Here's a quick overview: [2-3 bullet value props]. Any of these particularly relevant to what you're working on?",
-    },
-    "wrong_person": {
-        "label": "I'm not the right person",
-        "response_strategy": "Ask for warm intro, offer to reach out directly with their blessing",
-        "example_reframe": "Appreciate the honesty. Who on your team handles [area]? Happy to reach out directly if you're okay with that.",
-    },
-}
-
-
-# ──────────────────────────────────────────────
 # Lookup Functions
 # ──────────────────────────────────────────────
 
@@ -570,18 +512,6 @@ def find_matching_persona(title: str) -> dict | None:
                 best_match = persona
 
     return best_match
-
-
-def get_objection_response(objection_type: str) -> dict | None:
-    """Get objection handling pattern by type.
-
-    Args:
-        objection_type: Key like "no_time", "no_budget", etc.
-
-    Returns:
-        Objection pattern dict or None.
-    """
-    return OBJECTION_PATTERNS.get(objection_type)
 
 
 def get_all_personas_summary() -> str:

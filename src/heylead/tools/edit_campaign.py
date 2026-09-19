@@ -136,7 +136,8 @@ async def run_edit_campaign(
         inmail_fallback_days: Quiet days before the InMail (1-20; must precede the day-21 withdrawal). 0 to keep current.
         inmail_first_touch: InMail as the first touch for Premium / Open Profile
             strangers: "on" or "off". Unset follows inmail_fallback.
-        send_in_business_hours: Respect prospect's business hours: "on" or "off".
+        send_in_business_hours: Send only in business hours: "on" or "off". On by default
+            (weekdays 08:00-22:00 London unless the workspace set its own window).
         active_days: Active send days as comma-separated numbers (0=Mon, 6=Sun).
             E.g., "0,1,2,3,4" for weekdays. Leave empty to keep current.
         campaign_type: Prompt family: "outbound" (default) or "job_search".

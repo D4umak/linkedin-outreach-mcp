@@ -171,9 +171,19 @@ SENTIMENT_ICONS = {
     "opt_out": "🚫",
 }
 
+# The status this sweep writes for a label; every other label stays "replied".
+# SENTIMENT_ACTIONS below must not say an outreach IS closed for a label this
+# table does not close (tests/test_client_mirrors_the_reply_policy.py).
+STATUS_ON_DETECTION = {"opt_out": "opted_out", "positive": "hot_lead"}
+
 SENTIMENT_ACTIONS = {
     "positive": "Auto-replying with booking link (if configured) or suggesting a time.",
-    "negative": "No action needed. Outreach closed.",
+    # Until 19 Sep 2026: "No action needed. Outreach closed." — while this
+    # sweep wrote "replied". The cloud answers a no first (api #749).
+    "negative": (
+        "No action needed. HeyLead sends a short, polite close, then closes the "
+        "outreach. If it is held for you, it shows under Needs attention."
+    ),
     "question": "ACTION NEEDED: Answer their question.",
     "neutral": "No action needed. Monitor.",
     "engaged": "ACTION NEEDED: Continue the conversation — deepen rapport.",
@@ -1217,7 +1227,7 @@ async def run_check_replies() -> str:
 
         # Handle opt-outs
         if sentiment == "opt_out":
-            await run_db(update_outreach, contact["outreach_id"], status="opted_out")
+            await run_db(update_outreach, contact["outreach_id"], status=STATUS_ON_DETECTION["opt_out"])
             await run_db(log_action, "opt_out_detected", outreach_id=contact["outreach_id"],
                          details={"text": reply_text[:200]})
 
@@ -1233,7 +1243,7 @@ async def run_check_replies() -> str:
 
         # Hot lead detection
         elif sentiment == "positive":
-            await run_db(update_outreach, contact["outreach_id"], status="hot_lead")
+            await run_db(update_outreach, contact["outreach_id"], status=STATUS_ON_DETECTION["positive"])
             details: dict[str, Any] = {"text": reply_text[:200]}
             if calendar_url:
                 details["prospect_calendar_url"] = calendar_url

@@ -2009,6 +2009,8 @@ def get_auto_reply_candidates(campaign_id: str | None = None, min_age_seconds: i
                  ), 0) AS INTEGER) < m.timestamp
              )
              AND m.role = 'prospect'
+             -- 'negative' stays excluded here on purpose: the client never
+             -- answers a no; the cloud does (heylead-api #749).
              AND m.sentiment NOT IN ('opt_out', 'out_of_office', 'negative')
              AND m.id = (
                  SELECT m2.id FROM messages m2
@@ -2100,6 +2102,12 @@ def _unanswered_lead_reason(
         return f"Booking link, unanswered {age}", calendar_url
     if sentiment in ("positive", "calendar"):
         return f"Meeting intent, unanswered {age}", calendar_url
+    if sentiment == "engaged":
+        return f"Engaged reply, unanswered {age}", calendar_url
+    if sentiment == "negative":
+        if '"hold_for_operator"' in (next_action or ""):
+            return f"Declined, held for you {age}", calendar_url
+        return f"Declined, closing reply unsent {age}", calendar_url
     return f"Unanswered reply, {age}", calendar_url
 
 
@@ -2136,11 +2144,16 @@ def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
              )
              AND m.role = 'prospect'
              AND m.timestamp <= ?
-             AND m.sentiment NOT IN ('opt_out', 'out_of_office', 'negative')
+             AND m.sentiment NOT IN ('opt_out', 'out_of_office')
              AND o.status != 'opted_out'
              AND (
                  o.status = 'hot_lead'
-                 OR (o.status = 'replied' AND m.sentiment IN ('positive', 'calendar'))
+                 -- The backend's list (heylead-api unanswered_leads.py). Since
+                 -- 18 Sep 2026 a "no" stays 'replied' until the cloud's closing
+                 -- reply is sent, so one still open past the grace window is a
+                 -- close that could not be sent, or one held for the operator.
+                 OR (o.status = 'replied'
+                     AND m.sentiment IN ('positive', 'calendar', 'engaged', 'negative'))
              )
              AND NOT EXISTS (
                  SELECT 1 FROM messages mx

@@ -31,6 +31,18 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.380 (2026-09-19)
+- Change: campaigns send only in business hours unless you switch that off: Monday to Friday, 08:00-22:00 in your own timezone when your workspace has not set a window. show_status now names only a campaign that switched business hours off, and the create_campaign / edit_campaign docs say it is on by default
+
+## v0.10.379 (2026-09-19)
+- Fix: check_replies no longer says a declined outreach is closed when it is not. HeyLead's cloud answers a "no" with a short, polite close and then closes the outreach; the reply line now says so
+- Fix: Needs attention lists a declined reply whose closing message could not be sent ("Declined, closing reply unsent") or that is held for you ("Declined, held for you"), and an unanswered engaged reply, as the dashboard already does
+- Fix: asking HeyLead to reply to someone who said no no longer marks them opted out (which stopped all future contact); the cloud sends the polite close instead
+- Change: in show_conversation, the reply move HeyLead chose for its own message shows as "[our move: ...]"
+
+## v0.10.378 (2026-09-18)
+- Removed an unused LinkedIn webhook path. Replies and accepted invitations were already detected only by check_replies, so nothing changes in behaviour.
+
 ## v0.10.377 (2026-09-18)
 - Fix: on hosted accounts, show_status, suggest_next_action and the daily digest now show the daily and weekly invitation limits your HeyLead backend actually enforces for your LinkedIn seat, instead of a number built into this client (it could read "0/80 today" on a seat stopped at 20)
 
@@ -1572,7 +1584,7 @@ mcp = FastMCP(
         "  - edit_campaign(enable_engagements='off') to disable comments/reactions\n"
         "  - edit_campaign(enable_followups='off') to disable follow-up DMs\n"
         "  - edit_campaign(engagement_mode='comment_only') to change engagement style\n"
-        "  - edit_campaign(send_in_business_hours='on') to only send during prospect business hours\n"
+        "  - edit_campaign(send_in_business_hours='off') to also send outside business hours (on by default)\n"
         "  - edit_campaign(max_followups=3) to limit follow-up count\n"
         "  - scheduler(action='status') to view the autonomous scheduler status\n"
         "  - scheduler(action='observe') to keep collecting and classifying signals while\n"
@@ -2582,7 +2594,8 @@ async def edit_campaign(
             Free tier sends only to Open Profile members (zero credits).
         inmail_fallback_days: Quiet days before the InMail (1-60). 0 to keep current.
         inmail_first_touch: InMail as first touch: "on" or "off". Unset follows inmail_fallback.
-        send_in_business_hours: Respect prospect's business hours: "on" or "off".
+        send_in_business_hours: Send only in business hours: "on" or "off". On by default
+            (weekdays 08:00-22:00 London unless the workspace set its own window).
         active_days: Active send days as comma-separated numbers (0=Mon, 6=Sun).
             E.g., "0,1,2,3,4" for weekdays. Leave empty to keep current.
     """

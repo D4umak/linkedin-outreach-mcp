@@ -47,8 +47,10 @@ _SKIP_TYPES = (
     "reply_cap_reached",
     "reply_dedup_blocked",
     "reply_dedup_blocked_chat_scoped",
+    # Written until 19 Sep 2026; kept so older rows still show.
     "auto_reply_skipped_negative",
     "auto_reply_skipped_decline_keywords",
+    "reply_left_to_cloud_decline",
     "reverse_pitch_keyword",
     "reverse_pitch_detected",
 )

@@ -201,16 +201,7 @@ async def run_show_conversation(outreach_id: str) -> str:
             else:
                 label = role
 
-            sentiment_badge = ""
-            if sentiment and sentiment != "neutral":
-                sentiment_badges = {
-                    "positive": "+",
-                    "negative": "-",
-                    "question": "?",
-                    "out_of_office": "OOO",
-                    "opt_out": "X",
-                }
-                sentiment_badge = f" [{sentiment_badges.get(sentiment, sentiment)}]"
+            sentiment_badge = _message_badge(role, sentiment)
 
             # Read receipt for SDR messages
             read_badge = ""
@@ -245,3 +236,25 @@ def _add_next_action_hint(output: list[str], status: str) -> None:
     hint = hints.get(status)
     if hint:
         output.append(hint)
+
+
+_SENTIMENT_BADGES = {
+    "positive": "+",
+    "negative": "-",
+    "question": "?",
+    "out_of_office": "OOO",
+    "opt_out": "X",
+}
+_MOVE_PREFIX = "move:"
+
+
+def _message_badge(role: str, sentiment: str) -> str:
+    """The label after a message. Our reply rows synced from the cloud carry
+    the reply policy's move as ``move:<name>`` (api #757); it is ours, never a
+    reading of the prospect, and says so."""
+    sentiment = sentiment or ""
+    if role == "sdr" and sentiment.startswith(_MOVE_PREFIX):
+        return f" [our move: {sentiment[len(_MOVE_PREFIX):].replace('_', ' ')}]"
+    if not sentiment or sentiment == "neutral":
+        return ""
+    return f" [{_SENTIMENT_BADGES.get(sentiment, sentiment)}]"
