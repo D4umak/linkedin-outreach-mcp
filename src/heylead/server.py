@@ -31,6 +31,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.383 (2026-09-19)
+- Fix: the inbox tool told your AI client it only reads, although replying and approving a drafted reply send a LinkedIn message. A client that runs read-only tools without asking could send without your say-so. It is now marked as sending, and its description says which actions only read
+
 ## v0.10.382 (2026-09-19)
 - Fix: the edit_campaign description now says the default sending window (weekdays 08:00-22:00) is in your own timezone, and London only when your timezone is unknown. It said London for everyone, which has not been true since 19 Sep
 
@@ -3581,7 +3584,7 @@ async def network(
         return f"Network intelligence failed: {e}"
 
 
-@mcp.tool(annotations=_reads("Read the LinkedIn inbox"))
+@mcp.tool(annotations=_acts("Read and answer the LinkedIn inbox"))
 async def inbox(
     action: str = "list",
     chat_id: str = "",
@@ -3589,9 +3592,13 @@ async def inbox(
     limit: int = 30,
     text: str = "",
 ) -> str:
-    """Browse and read LinkedIn inbox messages directly.
+    """Read the LinkedIn inbox, and answer from it.
 
     Read any conversation in your LinkedIn inbox, not just campaign contacts.
+    "list", "read" and "comment_drafts" only read. "reply" and "approve_draft"
+    SEND a LinkedIn message and cannot be undone; "discard_draft" throws a
+    draft away. Use send_message for a campaign contact, and this tool for
+    anyone else.
 
     Args:
         action: What to do:
