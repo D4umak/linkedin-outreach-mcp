@@ -1478,7 +1478,8 @@ def _business_hours_line(config: dict) -> str | None:
 
     Since 19 Sep 2026 the cloud sends only in business hours unless a
     campaign switched that off (heylead-api working_hours: weekdays
-    08:00-22:00 London when the workspace chose no window). Like the other
+    08:00-22:00 in the owner's timezone, London as the fallback, when the
+    workspace chose no window). Like the other
     settings here, only a departure from what a new campaign starts with is
     shown.
     """

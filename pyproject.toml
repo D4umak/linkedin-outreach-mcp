@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "heylead"
-version = "0.10.381"
+version = "0.10.382"
 description = "MCP-native autonomous LinkedIn SDR. Your AI sales rep, one command to fill your pipeline."
 readme = "README.md"
 license = "MIT"

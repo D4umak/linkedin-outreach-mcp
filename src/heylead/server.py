@@ -31,6 +31,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.382 (2026-09-19)
+- Fix: the edit_campaign description now says the default sending window (weekdays 08:00-22:00) is in your own timezone, and London only when your timezone is unknown. It said London for everyone, which has not been true since 19 Sep
+
 ## v0.10.381 (2026-09-19)
 - public docs stop advertising voice memos, which are off by default and unused
 - README, SKILL and clawhub state what Stripe charges and what the code limits
@@ -2599,7 +2602,8 @@ async def edit_campaign(
         inmail_fallback_days: Quiet days before the InMail (1-60). 0 to keep current.
         inmail_first_touch: InMail as first touch: "on" or "off". Unset follows inmail_fallback.
         send_in_business_hours: Send only in business hours: "on" or "off". On by default
-            (weekdays 08:00-22:00 London unless the workspace set its own window).
+            (weekdays 08:00-22:00 in your own timezone, or London when it is unknown,
+            unless the workspace set its own window).
         active_days: Active send days as comma-separated numbers (0=Mon, 6=Sun).
             E.g., "0,1,2,3,4" for weekdays. Leave empty to keep current.
     """
