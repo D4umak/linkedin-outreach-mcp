@@ -31,6 +31,17 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.386 (2026-09-20)
+- Change: check_replies now says in its description what it records — it marks an invitation accepted, moves an outreach to replied, stores the messages and sets opted-out when someone asks not to be contacted — so your AI client knows it changes things, and that it never sends
+- Change: edit_campaign's description says that empty fields keep their current value, what each group of settings is for, and that it edits settings only: it sends nothing and adds no prospects
+
+## v0.10.385 (2026-09-20)
+- New: seed a campaign from named people, with no search
+- the push gate is verified in production (#408)
+
+## v0.10.384 (2026-09-19)
+- Fix: the laptop does not bulk-push into a cloud-owned workspace (#403)
+
 ## v0.10.383 (2026-09-19)
 - Fix: the inbox tool told your AI client it only reads, although replying and approving a drafted reply send a LinkedIn message. A client that runs read-only tools without asking could send without your say-so. It is now marked as sending, and its description says which actions only read
 
@@ -2007,6 +2018,7 @@ async def create_campaign(
     exclude_connections: str = "",
     project_brief: str = "",
     campaign_type: str = "",
+    people: str = "",
     force: bool = False,
 ) -> str:
     """Create a LinkedIn outreach campaign from a natural language description.
@@ -2016,6 +2028,12 @@ async def create_campaign(
     prospecting, recruiting and candidate sourcing, research and
     user-interview recruitment, job-search networking, investor and partner
     outreach, vendor scouting and event invitations.
+
+    Reaching people you can already name — an article author, a warm intro, a
+    speaker, one founder a customer mentioned — is the `people` argument: pass
+    their profile URLs and the campaign is seeded from exactly them, with no
+    LinkedIn search. Everything else is unchanged: draft until launch, rate
+    limits, sending window, opt-outs.
 
     Describe your ideal customers and HeyLead will find them on LinkedIn.
     Supports lead generation, prospect discovery, SDR automation, cold outreach,
@@ -2056,6 +2074,14 @@ async def create_campaign(
             for "don't message my existing connections", "cold only",
             "skip people I already know". Cannot be combined with
             connections_only, which is its exact inverse.
+        people: LinkedIn profile URLs or public identifiers, comma or newline
+            separated (e.g. "linkedin.com/in/jane-doe, linkedin.com/in/john-doe").
+            The campaign is seeded from exactly these people: no LinkedIn
+            search runs, the goal <-> ICP audit is skipped (the audience is
+            stated, not inferred), a low ICP score does not drop anybody, and
+            discovery stays off so nothing tops the queue up with strangers.
+            Use it whenever the user names who to reach. Cannot be combined
+            with connections_only.
         campaign_type: Prompt family: "outbound" (default) or "job_search".
             job_search writes a job-search campaign: the invitation note and
             the first DM may name the recipient's company and the role, use
@@ -2086,6 +2112,7 @@ async def create_campaign(
                 exclude_connections=exclude_connections,
                 project_brief=project_brief,
                 campaign_type=campaign_type,
+                people=people,
                 force=force,
             ),
         )
@@ -2181,11 +2208,16 @@ async def book_meeting(
 
 @mcp.tool(annotations=_acts("Check LinkedIn replies and inbound invitations"))
 async def check_replies() -> str:
-    """Check for new LinkedIn replies across all campaigns.
+    """Read new LinkedIn replies and record what they mean.
 
-    Fetches new messages, classifies sentiment (positive/negative/question),
-    and surfaces hot leads that need your attention.
-    Handles inbox monitoring, lead response tracking, and conversation management.
+    Fetches new messages, classifies each reply (positive, negative, question)
+    and lists the people worth answering first.
+
+    It sends nothing, but it does write: it marks an invitation accepted once
+    the person answers or connects, moves an outreach to replied, stores the
+    messages, and sets opted-out when someone asks not to be contacted, which
+    stops all future outreach to them. It is the only path that notices an
+    accepted invitation, so follow-ups depend on it having run.
     """
     from .tools.check_replies import run_check_replies
 
@@ -2525,11 +2557,18 @@ async def edit_campaign(
     send_in_business_hours: str = "",
     active_days: str = "",
 ) -> str:
-    """Edit a campaign's name, mode, booking link, or context fields.
+    """Change one running or drafted campaign's settings.
 
-    Change the campaign name or configure campaign settings
-    modes, set a booking link, or configure campaign context for
-    better message personalization.
+    Pass only what you want to change; every field left empty keeps its current
+    value. Use it to rename a campaign, give it a booking link, feed it context
+    that makes the messages more specific (offerings, case studies, project
+    brief), say who it is for (campaign_intent, campaign_type), or set the
+    limits it sends under (volume, caps, follow-ups, business hours).
+
+    It edits settings only: it sends nothing and adds no prospects. A change
+    applies to the messages written from now on, not to ones already sent. Use
+    create_campaign for a new campaign, and campaign(action=...) to launch,
+    pause or stop one.
 
     Args:
         campaign_id: Which campaign to edit. Edits the first active campaign if empty.

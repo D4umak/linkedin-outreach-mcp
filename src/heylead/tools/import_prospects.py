@@ -655,6 +655,20 @@ async def run_import_prospects(
         if len(filtered) > 10:
             parts.append(f"... and {len(filtered) - 10} more")
 
+    # These contacts exist only on this machine until something carries them
+    # up, and the cloud is what sends to them. Until 19 Sep 2026 the periodic
+    # bulk push did it within 15 minutes; that push is refused in a
+    # cloud-owned workspace now (it overwrote what the cloud wrote), so the
+    # import says so itself. Scoped to this campaign: an import is authoring,
+    # and the cloud has nothing newer for rows it has never seen.
+    if not dry_run and imported:
+        try:
+            from ..services.cloud_sync import sync_to_cloud
+
+            await sync_to_cloud(campaign_id=campaign_id)
+        except Exception as e:  # noqa: BLE001 — the rows are saved either way
+            logger.warning("Import did not reach the cloud (will retry on launch): %s", e)
+
     parts.append("")
     if dry_run:
         parts.append("**Next**: re-run with `dry_run=False` to import.")

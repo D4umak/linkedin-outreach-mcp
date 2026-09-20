@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "heylead"
-version = "0.10.383"
+version = "0.10.386"
 description = "MCP-native autonomous LinkedIn SDR. Your AI sales rep, one command to fill your pipeline."
 readme = "README.md"
 license = "MIT"
@@ -103,3 +103,6 @@ select = ["E9", "F821", "F811", "F823", "F632", "F702", "F706", "B006", "T10", "
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "real_job_ownership: see the real local_scheduler_engine_enabled, not the suite's default",
+]

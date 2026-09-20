@@ -10,6 +10,8 @@ Takes a target description like "Find me fintech CTOs" and:
 
 from __future__ import annotations
 
+import re
+
 import json
 import logging
 from typing import Any
@@ -79,12 +81,37 @@ def resolve_exclude_connections(value: str, *, connections_only: str) -> bool:
     return str(connections_only or "").strip().lower() != "on"
 
 
+_PROFILE_URL_RE = re.compile(r"linkedin\.com/in/([^/?#\s]+)", re.IGNORECASE)
+
+
+def parse_people_identifiers(value: str) -> list[str]:
+    """Split a `people=` argument into LinkedIn public identifiers.
+
+    Accepts profile URLs or bare slugs, separated by commas, newlines or
+    spaces, in any mixture — an agent pasting three URLs on three lines and a
+    user typing one slug must both work. Order is kept and repeats are dropped,
+    so the queue reads back the way it was asked for.
+    """
+    out: list[str] = []
+    for chunk in re.split(r"[,\n\r\t ]+", (value or "").strip()):
+        chunk = chunk.strip().rstrip("/")
+        if not chunk:
+            continue
+        match = _PROFILE_URL_RE.search(chunk)
+        slug = match.group(1) if match else chunk
+        slug = slug.strip().strip("/").lower()
+        if slug and slug not in out:
+            out.append(slug)
+    return out
+
+
 def build_campaign_config(
     *,
     target_description: str,
     prospect_count: int,
     voice_mode: str,
     is_connections_only: bool,
+    seeded_from_people: bool = False,
     exclude_connections: bool = True,
     campaign_type: str,
     search_account_id: str,
@@ -115,6 +142,10 @@ def build_campaign_config(
         "enable_invitations": not is_connections_only,
         # Connections-only flag
         "connections_only": is_connections_only,
+        # Seeded from named people: the queue IS the list the user gave, so
+        # discovery must not top it up with strangers they never named.
+        "enable_discovery": not seeded_from_people,
+        "seeded_from_people": seeded_from_people,
         # Never reach someone who was already a 1st-degree connection before
         # this campaign invited them. Default ON for a new campaign (the
         # customer's ask, 9 Sep 2026); the dashboard toggle turns it off. An
@@ -162,6 +193,7 @@ async def run_create_campaign(
     exclude_connections: str = "",
     project_brief: str = "",
     campaign_type: str = "",
+    people: str = "",
     force: bool = False,
     _internal_source: str = "",
 ) -> str:
@@ -181,6 +213,9 @@ async def run_create_campaign(
             the ICP title filters. Example: "https://www.linkedin.com/company/google"
         voice_mode: Voice memo mode for follow-ups/replies. "text_only"
             (default), "mixed" (alternates text and voice), "voice_only", or "ab_test".
+        people: Optional LinkedIn profile URLs or public identifiers, comma
+            or newline separated. When given, the campaign is seeded from
+            exactly these people and no LinkedIn search runs.
         campaign_type: Prompt family. "outbound" (default) or "job_search".
             job_search selects the invitation note and the first DM that may
             name the recipient's company and the role, uses one proof point
@@ -222,6 +257,17 @@ async def run_create_campaign(
     # Mutually exclusive by construction: connections_only sources the campaign
     # FROM the connections table and exclude_connections removes everybody in
     # it, so together they describe an empty campaign (9 Sep 2026).
+    named_people = parse_people_identifiers(people)
+    if named_people and connections_only == "on":
+        return (
+            "❌ people and connections_only cannot both be set.\n\n"
+            "people seeds the campaign from exactly the profiles you name; "
+            "connections_only sources it from your 1st-degree connections. "
+            "Pick one.\n\n"
+            "Already connected to the people you named? Drop connections_only — "
+            "a people-seeded campaign DMs a connection and invites everybody else."
+        )
+
     if connections_only == "on" and exclude_connections == "on":
         return (
             "❌ connections_only and exclude_connections cannot both be on.\n\n"
@@ -387,7 +433,12 @@ async def run_create_campaign(
             )
 
     # ── Step 3b: Goal <-> ICP audit — before any search spends LinkedIn quota ──
-    refusal, goal_match_notes = await _goal_match_gate(
+    # It asks whether the ICP's personas can plausibly buy, because the ICP is
+    # what the search will go and find. A people-seeded campaign searches for
+    # nobody: the audience is the list the user typed, so there is nothing to
+    # audit and a mismatch verdict would refuse the one shape that cannot
+    # drift (heylead#407).
+    refusal, goal_match_notes = (None, "") if named_people else await _goal_match_gate(
         target_description=target_description,
         offer=project_brief or company_context or "",
         icp_json=judged_icp,
@@ -455,7 +506,40 @@ async def run_create_campaign(
     # Track which segment each prospect came from (for per-segment scoring)
     segment_index_map: dict[str, int] = {}  # prospect key → segment index
 
-    if connections_only == "on":
+    if named_people:
+        # ── NAMED PEOPLE: resolve each profile; no search, no ICP recall ──
+        missing: list[str] = []
+        for slug in named_people:
+            try:
+                profile = await client.get_profile(account_id=account_id, identifier=slug)
+            except Exception as e:  # a bad slug must not lose the good ones
+                logger.warning("people: profile fetch failed for %s: %s", slug, e)
+                profile = {}
+            if not isinstance(profile, dict) or not profile:
+                missing.append(slug)
+                continue
+            prospect = dict(profile)
+            prospect.setdefault("public_id", slug)
+            prospect.setdefault(
+                "linkedin_url", f"https://www.linkedin.com/in/{slug}",
+            )
+            prospect["_named_by_user"] = True
+            all_prospects.append(prospect)
+            segment_index_map[prospect.get("public_id") or slug] = 0
+        if missing and not all_prospects:
+            return (
+                "❌ LinkedIn returned no profile for "
+                + ", ".join(missing)
+                + ".\n\nCheck the profile URLs, or that the account can view them. "
+                "Nothing was created."
+            )
+        if missing:
+            dedup_summary_named = (
+                f"\n{len(missing)} not resolved on LinkedIn: " + ", ".join(missing)
+            )
+        else:
+            dedup_summary_named = ""
+    elif connections_only == "on":
         # ── CONNECTIONS-ONLY: source from local connections table ──
         # No LinkedIn search needed — we already have all 1st-degree connections.
         from ..services.connection_sync import ensure_synced, get_all_connections
@@ -710,7 +794,7 @@ async def run_create_campaign(
             unique_prospects.append(p)
 
     # ── Step 5a: Dedup — filter existing connections + cross-campaign contacts ──
-    dedup_summary = ""
+    dedup_summary = dedup_summary_named if named_people else ""
     try:
         from ..services.dedup_service import (
             dedup_prospects,
@@ -742,7 +826,26 @@ async def run_create_campaign(
                 logger.info("Excluded %d contacts from automation (do-not-automate)", excluded_count)
                 dedup_summary += f"\n{excluded_count} excluded from automation (do-not-automate)"
 
-        if connections_only == "on":
+        if named_people:
+            # Named people: the user chose them, so an existing connection is
+            # not a reason to drop anybody. Cross-campaign duplicates still go
+            # — two campaigns writing to one person is the older bug — and the
+            # do-not-automate filter above already ran.
+            pre_count = len(unique_prospects)
+            unique_prospects = [
+                p for p in unique_prospects
+                if not ({
+                    (p.get("public_id") or "").lower().strip(),
+                    (p.get("provider_id") or "").lower().strip(),
+                    (p.get("linkedin_url") or "").lower().strip(),
+                } - {""}) & known_ids
+            ]
+            dupes = pre_count - len(unique_prospects)
+            if dupes > 0:
+                dedup_summary += (
+                    f"\n{dupes} already in another campaign, left out"
+                )
+        elif connections_only == "on":
             # Connections-only: prospects come from local connections table
             # (already verified 1st-degree). Only remove cross-campaign dupes.
             pre_count = len(unique_prospects)
@@ -873,8 +976,16 @@ async def run_create_campaign(
 
     log_prospects_below_threshold(unique_prospects, threshold=MIN_FIT_SCORE_THRESHOLD)
     log_prospects_sampled(unique_prospects, threshold=MIN_FIT_SCORE_THRESHOLD)
-    unique_prospects = _drop_below_send_threshold(unique_prospects, {})
-    low_score_filtered = pre_filter_count - len(unique_prospects)
+    if named_people:
+        # The user named these people. Scoring still runs (the score is shown
+        # and stored), but a low ICP score cannot drop somebody who was asked
+        # for by name — that would empty the queue and leave no way to reach
+        # one person at all, which is the gap this path exists to close.
+        low_score_filtered = 0
+    else:
+        unique_prospects = _drop_below_send_threshold(unique_prospects, {})
+    if not named_people:
+        low_score_filtered = pre_filter_count - len(unique_prospects)
     if competitor_names:
         from ..services.competitors import drop_competitor_people
         before_comp = len(unique_prospects)
@@ -920,6 +1031,7 @@ async def run_create_campaign(
         prospect_count=len(prospects_to_save),
         voice_mode=voice_mode,
         is_connections_only=is_connections_only,
+        seeded_from_people=bool(named_people),
         exclude_connections=resolve_exclude_connections(
             exclude_connections, connections_only=connections_only,
         ),

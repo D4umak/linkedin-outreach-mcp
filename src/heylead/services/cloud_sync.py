@@ -156,6 +156,10 @@ _BACKFILL_TIMEOUT = httpx.Timeout(300.0, connect=15.0, read=300.0, write=120.0)
 # each one small enough to be served.
 _BACKFILL_CHUNK_ROWS = 250
 
+# What a text or JSON column holds when it holds nothing. A pushed field that
+# reads as one of these is a placeholder, not a fact, and stays home.
+_BLANK_JSON = frozenset({"", "{}", "[]", "null"})
+
 # The hosted dashboard renders whatever this client last pushed, with no notion
 # of how old that is. Observe withholds live campaigns outright (see
 # sync_to_cloud), a rejected push carries nothing, and either way heylead.dev
@@ -837,6 +841,32 @@ def local_scheduler_engine_enabled() -> bool:
     return config.get_sending_host() != "cloud"
 
 
+# A cloud-owned workspace is written by the cloud: it plans the jobs, sends the
+# messages, records the outreaches and enriches the contacts from its own
+# provider calls. This machine holds an older, thinner copy of those same rows.
+# The periodic push uploads that copy every 15 minutes and the backend applies
+# it, so the laptop silently overwrites work the cloud did — on 19 Sep 2026 it
+# blanked 322 hosted profiles (heylead #398 / api #753, repaired by #774), and
+# on 18 Aug 2026 it froze three campaigns' figures on heylead.dev. It also
+# makes the hosted product depend on one laptop being awake, which is the thing
+# we are removing.
+#
+# Authoring still flows up. A campaign-scoped push carries a campaign the chat
+# client just wrote and the cloud has never seen, and include_all is a person
+# asking for a backfill: in neither case is there newer cloud state to lose.
+BULK_PUSH_REFUSED = (
+    "the cloud owns this workspace — local state is not pushed "
+    "(it would overwrite what the cloud wrote)"
+)
+
+
+def refuse_bulk_push_to_cloud_owned(campaign_id: str = "", include_all: bool = False) -> bool:
+    """True when this is the unscoped periodic push into a cloud-owned workspace."""
+    if campaign_id or include_all:
+        return False
+    return not local_scheduler_engine_enabled()
+
+
 def stand_down_engine_off_leftovers() -> int:
     """Cancel cloud-owned leftovers when the local engine will not start."""
     if local_scheduler_engine_enabled():
@@ -954,6 +984,14 @@ async def dashboard_freshness_lines() -> list[str]:
     """
     if not config.is_backend_mode():
         return []
+
+    # Nothing here is stale when the cloud owns the workspace: it writes the
+    # dashboard from its own sends, and this client stops pushing on purpose
+    # (see refuse_bulk_push_to_cloud_owned). Reporting "last push 6h ago"
+    # would make a deliberate silence read as a fault — the same mistake the
+    # outbound_silent check made with a business-hours wait (api #776).
+    if refuse_bulk_push_to_cloud_owned():
+        return ["☁️ Dashboard: written by the cloud — this machine does not push."]
 
     log = await run_db(get_push_log)
     stamps = log["campaigns"]
@@ -1420,6 +1458,22 @@ async def sync_to_cloud(
     if not config.is_backend_mode():
         return {"error": "Backend mode not configured"}
 
+    if refuse_bulk_push_to_cloud_owned(campaign_id, include_all):
+        logger.info(BULK_PUSH_REFUSED)
+        # What this machine authors still goes up — it is the only writer of
+        # those, and the cloud has no newer copy to lose.
+        await push_locally_authored_records()
+        # Deliberately NOT an "error". Callers render an error as a problem in
+        # front of the user — scheduler_status turns one into "⚠️ Dashboard
+        # not caught up yet ... its figures stay stale", which would be false:
+        # the cloud writes that dashboard. A no-op by design reports zero work
+        # and says why, and every present and future caller that checks
+        # "error" stays quiet without having to know about this case.
+        return {
+            "skipped": "cloud_owns_workspace", "reason": BULK_PUSH_REFUSED,
+            "campaigns": 0, "contacts": 0, "outreaches": 0,
+        }
+
     # ── Gather settings ──
     voice_signature = await run_db(queries.get_setting, "voice_signature", {})
     profile = await run_db(queries.get_setting, "profile", {})
@@ -1538,23 +1592,28 @@ async def sync_to_cloud(
                 row[field] = value
         sync_campaigns.append(row)
 
-        # Contacts
+        # Contacts. The same rule as the campaign's JSON columns above, and
+        # for the same reason one payload further down: a field rides only
+        # when this DB actually holds it. A contact adopted from a cloud pull
+        # is built from the flat contact_* fields of an outreach update, which
+        # carry no profile and no analysis, so both sit blank here; sending
+        # them as '' overwrote the backend's own on all 495 contacts of one
+        # campaign every ~18 minutes (18 Sep 2026), seven of them the signal
+        # that enrolled the person. The backend's fields all default, so an
+        # omitted key is accepted by old and new backends alike.
         contacts = await run_db(queries.get_contacts_for_campaign, camp_id)
         for contact in contacts:
-            sync_contacts.append({
-                "id": contact["id"],
-                "campaign_id": camp_id,
-                "name": contact.get("name") or "",
-                "title": contact.get("title") or "",
-                "company": contact.get("company") or "",
-                "linkedin_id": contact.get("linkedin_id") or "",
-                "linkedin_url": contact.get("linkedin_url") or "",
-                "profile_json": contact.get("profile_json") or "",
-                "analysis_json": contact.get("analysis_json") or "",
-                "fit_score": contact.get("fit_score") or 0.0,
-                "source": contact.get("source") or "",
-                "source_detail": contact.get("source_detail") or "",
-            })
+            contact_row: dict[str, Any] = {"id": contact["id"], "campaign_id": camp_id}
+            for field in (
+                "name", "title", "company", "linkedin_id", "linkedin_url",
+                "profile_json", "analysis_json", "source", "source_detail",
+            ):
+                value = contact.get(field)
+                if isinstance(value, str) and value.strip() not in _BLANK_JSON:
+                    contact_row[field] = value
+            if contact.get("fit_score"):
+                contact_row["fit_score"] = contact["fit_score"]
+            sync_contacts.append(contact_row)
 
         # Outreaches
         def _get_outreaches(cid):
@@ -1900,7 +1959,20 @@ async def sync_to_cloud(
         result.get("campaigns", 0), result.get("contacts", 0), result.get("outreaches", 0),
     )
 
-    # ── Push signals to backend (separate endpoint) ──
+    await push_locally_authored_records()
+    return result
+
+
+async def push_locally_authored_records() -> None:
+    """Push the records this machine AUTHORS, on their own endpoints.
+
+    Signals, watchlists and ICPs are written here and only here — the cloud
+    reads them (hosted classify uses the ICPs) and never writes them, so there
+    is no newer cloud copy for these to overwrite. They ride with the bulk
+    push but are not part of it, and a cloud-owned workspace still needs them:
+    refusing them would mean an ICP created in chat never reaching the
+    classifier. Each one is non-fatal on its own.
+    """
     try:
         await _sync_signals_to_cloud()
     except Exception as e:
@@ -1915,8 +1987,6 @@ async def sync_to_cloud(
         await _sync_icps_to_cloud()
     except Exception as e:
         logger.warning("ICP sync failed (non-fatal): %s", e)
-
-    return result
 
 
 async def _sync_signals_to_cloud() -> None:
