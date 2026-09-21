@@ -19,7 +19,9 @@ from typing import Optional
 from mcp.server.fastmcp import FastMCP, Image
 from mcp.types import ToolAnnotations
 
-from . import __version__, config
+import os as _os
+
+from . import __version__, config, tool_profiles
 from .logging_setup import setup_logging
 from .ops_log import run_traced
 
@@ -30,6 +32,32 @@ from .ops_log import run_traced
 
 _CHANGELOG = """\
 # HeyLead Changelog
+
+## v0.10.389 (2026-09-20)
+- Changed: HeyLead now serves 22 tools by default instead of 47. Brand and
+  content, signals, profile editing, bulk import, CRM sync, email, the shared
+  network pool, knowledge, partner tracking and the local repository agent are
+  served only when the client is started with HEYLEAD_TOOLS=all in its
+  environment. Nothing was renamed or removed: set the variable and you have
+  exactly what you had before. A shorter list costs the model less context on
+  every turn, which is why this is the default.
+- Correction to the v0.10.388 note below: it named two tools, inbox_read and
+  contacts_read, that do not exist. The twelve tools added in that release are
+  named here instead.
+
+## v0.10.388 (2026-09-20)
+- New: reading and changing are separate tools, so a client can look without
+  being able to send. Twelve tools were added and none renamed or removed:
+  accounts, answer_inbox, brand_progress, campaign_status, partners,
+  prospect_view, restore_profile, scheduler_status, tune_signals,
+  update_contact, update_knowledge and update_network. Every name you already
+  use still works, and an action asked of the wrong half says where it moved.
+
+## v0.10.387 (2026-09-20)
+- Fix: a refused push still pulls the cloud statuses down (#417)
+- record the four decisions (build, two scopes, approval default, Team org)
+- merge main
+- design for OAuth, the read/write tool split and approval mode
 
 ## v0.10.386 (2026-09-20)
 - Change: check_replies now says in its description what it records — it marks an invitation accepted, moves an outreach to replied, stores the messages and sets opted-out when someone asks not to be contacted — so your AI client knows it changes things, and that it never sends
@@ -1480,14 +1508,7 @@ mcp = FastMCP(
         "Workflow: setup_profile → generate_icp → create_campaign → automated outreach.\n"
         "\n"
         "HeyLead is an AI LinkedIn SDR that sends personalized outreach messages "
-        "that sound like the user wrote them. It has 35 tools: setup_profile, "
-        "account, organization, generate_icp, icp, create_campaign, edit_campaign, campaign, "
-        "generate_and_send, send_message, send_email, check_replies, show_status, "
-        "engage_prospect, prospect, analytics, inspect, knowledge, product, "
-        "suggest_next_action, signals, manage_watchlist, scheduler, "
-        "create_post, brand_strategy, import_prospects, crm_sync, contacts, "
-        "network, inbox, backfill_inbox, partner, profile, profile_signals, "
-        "and book_meeting.\n"
+        "that sound like the user wrote them. It has 47 tools: show_status, analytics, icp, inspect, suggest_next_action, accounts, campaign_status, prospect_view, scheduler_status, brand_progress, partners, knowledge, profile, signals, contacts, network, inbox, setup_profile, account, organization, generate_icp, create_campaign, edit_campaign, campaign, generate_and_send, send_message, send_email, answer_inbox, check_replies, engage_prospect, prospect, update_knowledge, update_contact, update_network, restore_profile, tune_signals, product, manage_watchlist, scheduler, create_post, brand_strategy, import_prospects, crm_sync, backfill_inbox, partner, profile_signals and book_meeting.\n"
         "\n"
         "TOKEN RECOGNITION:\n"
         "A HeyLead setup message carries a HeyLead JWT (a long string starting with "
@@ -1784,8 +1805,7 @@ async def setup_profile(
 # Tool: account (consolidated)
 # ──────────────────────────────────────────────
 
-@mcp.tool(annotations=_acts("Manage connected LinkedIn and email accounts"))
-async def account(
+async def _account_impl(
     action: str = "list",
     account_id: str = "",
 ) -> str:
@@ -2266,8 +2286,7 @@ async def show_status(
 # Tool: campaign (consolidated lifecycle)
 # ──────────────────────────────────────────────
 
-@mcp.tool(structured_output=False, annotations=_acts("Launch, pause, archive or delete a campaign"))
-async def campaign(
+async def _campaign_impl(
     action: str,
     campaign_id: str = "",
     confirm: bool = False,
@@ -2712,8 +2731,7 @@ async def edit_campaign(
 # Tool: prospect (consolidated)
 # ──────────────────────────────────────────────
 
-@mcp.tool(annotations=_acts("Skip, close or review a prospect"))
-async def prospect(
+async def _prospect_impl(
     action: str,
     outreach_id: str = "",
     campaign_id: str = "",
@@ -2877,8 +2895,7 @@ async def inspect(
 # Tool: knowledge (hosted retrieval corpus)
 # ──────────────────────────────────────────────
 
-@mcp.tool(annotations=_acts("Curate the knowledge base behind messages"))
-async def knowledge(
+async def _knowledge_impl(
     action: str = "list",
     title: str = "",
     text: str = "",
@@ -2996,8 +3013,7 @@ async def product(action: str = "status", request: str = "") -> str:
 # Tool: scheduler (consolidated)
 # ──────────────────────────────────────────────
 
-@mcp.tool(annotations=_acts("Control the autonomous scheduler"))
-async def scheduler(
+async def _scheduler_impl(
     action: str = "status",
     enabled: bool = True,
     cloud: bool = False,
@@ -3117,8 +3133,7 @@ async def create_post(
 # Tool 30: brand_strategy
 # ──────────────────────────────────────────────
 
-@mcp.tool(annotations=_acts("Plan and run LinkedIn personal-brand content"))
-async def brand_strategy(
+async def _brand_strategy_impl(
     action: str = "analyze",
     focus: str = "",
     photo: str = "",
@@ -3167,8 +3182,7 @@ async def brand_strategy(
 # Tool 31: profile (change history + restore)
 # ──────────────────────────────────────────────
 
-@mcp.tool(annotations=_acts("View or restore LinkedIn profile changes"))
-async def profile(
+async def _profile_impl(
     action: str = "history",
     field: str = "",
     change_id: str = "",
@@ -3353,8 +3367,7 @@ async def manage_watchlist(
         return f"Watchlist management failed: {e}"
 
 
-@mcp.tool(annotations=_acts("View LinkedIn buying signals"))
-async def signals(
+async def _signals_impl(
     action: str = "show",
     campaign_id: str = "",
     signal_type: str = "",
@@ -3404,8 +3417,7 @@ async def signals(
         return f"Signals failed: {e}"
 
 
-@mcp.tool(annotations=_acts("Track partner, vendor and investor follow-ups"))
-async def partner(
+async def _partner_impl(
     action: str = "list",
     name: str = "",
     company: str = "",
@@ -3453,8 +3465,7 @@ async def partner(
         return f"Partner tracking failed: {e}"
 
 
-@mcp.tool(annotations=_acts("Search and manage contacts"))
-async def contacts(
+async def _contacts_impl(
     action: str = "list",
     query: str = "",
     contact_id: str = "",
@@ -3550,8 +3561,7 @@ async def contacts(
         return f"Contact management failed: {e}"
 
 
-@mcp.tool(annotations=_acts("Search the shared network pool"))
-async def network(
+async def _network_impl(
     action: str = "status",
     linkedin_id: str = "",
     linkedin_ids: str = "",
@@ -3623,8 +3633,7 @@ async def network(
         return f"Network intelligence failed: {e}"
 
 
-@mcp.tool(annotations=_acts("Read and answer the LinkedIn inbox"))
-async def inbox(
+async def _inbox_impl(
     action: str = "list",
     chat_id: str = "",
     name: str = "",
@@ -3707,6 +3716,695 @@ async def backfill_inbox(
 # ──────────────────────────────────────────────
 # Entry point
 # ──────────────────────────────────────────────
+
+# ──────────────────────────────────────────────
+# Reads and writes, as separate tools (20 Sep 2026)
+# ──────────────────────────────────────────────
+#
+# Twelve tools did both behind `action=`. A hint is per tool, not per action,
+# so each took the hint of its most dangerous action: asking to see your
+# contacts prompted you as if it were about to write to them. Anthropic's
+# Connectors Directory also requires reads and writes to be separate tools,
+# and Glama's review named the same thing.
+#
+# The name stays with the half that is used more — `contacts` still lists,
+# `campaign` still launches — so existing chats and saved prompts keep
+# working. The other half gets an explicit name, and each tool refuses the
+# other's actions BY NAME, so a client that calls the old one is told where
+# the action went rather than failing.
+
+_MOVED: dict[str, dict[str, str]] = {
+    # tool that no longer takes it -> {action: the tool that does}
+    "account": {"list": "accounts"},
+    "accounts": {a: "account" for a in ("switch", "switch_to", "unlink", "connect_email", "refresh_tier")},
+    "campaign": {"monitor": "campaign_status", "status_history": "campaign_status"},
+    "campaign_status": {a: "campaign" for a in (
+        "launch", "pause", "resume", "archive", "delete", "emergency_stop",
+        "retry_failed", "repair_queue", "clear_coordinator_hold")},
+    "prospect": {"conversation": "prospect_view", "timeline": "prospect_view"},
+    "prospect_view": {a: "prospect" for a in ("skip", "close", "dismiss")},
+    # "report" is NOT a read: it carries `enabled` and switches the daily
+    # report on or off (docs/incidents and scheduler_store both record this
+    # trap), so it stays with the writing half.
+    "scheduler": {a: "scheduler_status" for a in ("status", "logs", "activity", "diagnostics")},
+    "scheduler_status": {a: "scheduler" for a in (
+        "toggle", "observe", "always_on", "backfill_cloud", "send_from", "report")},
+    "brand_strategy": {"analyze": "brand_progress", "progress": "brand_progress"},
+    "brand_progress": {a: "brand_strategy" for a in (
+        "plan", "execute", "upload_photo", "upload_cover", "set_link",
+        "set_headline", "set_summary", "set_photo_library")},
+    "partner": {"list": "partners"},
+    "partners": {a: "partner" for a in ("add", "update", "complete", "snooze", "cancel")},
+    "knowledge": {a: "update_knowledge" for a in ("add", "remove", "refresh")},
+    "update_knowledge": {"list": "knowledge", "search": "knowledge"},
+    "profile": {"restore": "restore_profile"},
+    "restore_profile": {"history": "profile", "current": "profile"},
+    "signals": {a: "tune_signals" for a in (
+        "strategy", "feedback", "website_setup", "optimize", "optimize_rollback", "optimize_weights")},
+    "tune_signals": {a: "signals" for a in ("show", "report", "website_stats", "optimize_history")},
+    "contacts": {a: "update_contact" for a in ("tag", "note", "stage", "link", "enrich")},
+    "update_contact": {a: "contacts" for a in (
+        "list", "search", "view", "stats", "export", "linkedin_search", "my_connections")},
+    "network": {a: "update_network" for a in (
+        "opt_in", "opt_out", "sync", "opt_in_all", "sync_all", "enrich", "parallel")},
+    "update_network": {a: "network" for a in (
+        "status", "contact", "search", "reach", "intros", "insights", "trends", "patterns")},
+    "inbox": {a: "answer_inbox" for a in ("reply", "approve_draft", "discard_draft")},
+    "answer_inbox": {a: "inbox" for a in ("list", "read", "comment_drafts")},
+}
+
+
+def _moved(tool: str, action: str) -> str:
+    """"" when the action belongs to this tool, else where it went."""
+    target = _MOVED.get(tool, {}).get((action or "").strip().lower())
+    return "" if not target else (
+        f"'{action}' moved to the {target} tool: reading and changing are separate tools now. "
+        f'Call {target}(action="{action}").'
+    )
+
+
+@mcp.tool(annotations=_reads("List connected LinkedIn accounts"))
+async def accounts(action: str = "list") -> str:
+    """List the LinkedIn accounts connected to this HeyLead. Changes nothing.
+
+    Args:
+        action: "list" (switching, unlinking and connecting email are the account tool).
+    """
+    return _moved("accounts", action) or await _account_impl(action="list")
+
+
+@mcp.tool(structured_output=False, annotations=_reads("Read a campaign's progress and history"))
+async def campaign_status(action: str = "monitor", campaign_id: str = "") -> str | list[str | Image]:
+    """Watch a campaign run, or read its history of status changes. Changes nothing.
+
+    Args:
+        action: "monitor" (live progress) or "status_history".
+        campaign_id: Which campaign. Uses the active one if empty.
+    """
+    if moved := _moved("campaign_status", action):
+        return moved
+    return await _campaign_impl(action=action or "monitor", campaign_id=campaign_id)
+
+
+@mcp.tool(annotations=_reads("Read one prospect's conversation or timeline"))
+async def prospect_view(action: str = "conversation", outreach_id: str = "", campaign_id: str = "") -> str:
+    """Read the message thread with one prospect, or their timeline. Changes nothing.
+
+    Args:
+        action: "conversation" or "timeline".
+        outreach_id: Which outreach.
+        campaign_id: Which campaign. Uses the active one if empty.
+    """
+    if moved := _moved("prospect_view", action):
+        return moved
+    return await _prospect_impl(
+        action=action or "conversation", outreach_id=outreach_id, campaign_id=campaign_id,
+    )
+
+
+@mcp.tool(annotations=_reads("Read the autonomous scheduler"))
+async def scheduler_status(
+    action: str = "status",
+    cloud: bool = False,
+    hours: int | None = None,
+    event_type: str = "",
+    campaign_id: str = "",
+) -> str:
+    """Read the scheduler: status, logs, activity, diagnostics or the daily report.
+
+    Args:
+        action: "status", "logs", "activity" or "diagnostics". The daily
+            report is the scheduler tool: it switches reporting on and off.
+        cloud: Read the hosted scheduler rather than this machine's.
+        hours: Lookback window in hours.
+        event_type: Filter the log by event type.
+        campaign_id: Filter by campaign.
+    """
+    if moved := _moved("scheduler_status", action):
+        return moved
+    return await _scheduler_impl(
+        action=action or "status", cloud=cloud, hours=hours,
+        event_type=event_type, campaign_id=campaign_id,
+    )
+
+
+@mcp.tool(annotations=_reads("Read the personal-brand plan and progress"))
+async def brand_progress(action: str = "analyze", focus: str = "") -> str:
+    """Read the personal-brand picture: the analysis, or progress against the plan.
+
+    Args:
+        action: "analyze" or "progress".
+        focus: Which pillar to look at.
+    """
+    if moved := _moved("brand_progress", action):
+        return moved
+    return await _brand_strategy_impl(action=action or "analyze", focus=focus)
+
+
+@mcp.tool(annotations=_reads("List partner, vendor and investor follow-ups"))
+async def partners(action: str = "list", days: int = 0) -> str:
+    """List the partner, vendor and investor follow-ups you are tracking.
+
+    Args:
+        action: "list" (adding and updating are the partner tool).
+        days: Only those due within this many days.
+    """
+    if moved := _moved("partners", action):
+        return moved
+    return await _partner_impl(action="list", days=days)
+
+
+@mcp.tool(annotations=_acts("Add, remove or refresh knowledge"))
+async def update_knowledge(
+    action: str,
+    title: str = "",
+    text: str = "",
+    source_uri: str = "",
+    source_id: str = "",
+    scope: str = "all",
+    campaign_id: str = "",
+    sync: bool = False,
+) -> str:
+    """Add, remove or refresh what HeyLead knows about your offer.
+
+    What it holds shapes every message it writes from now on. Reading it is the
+    knowledge tool.
+
+    Args:
+        action: "add", "remove" or "refresh".
+        title: A name for the entry (add).
+        text: The content (add).
+        source_uri: A page to read instead of text (add).
+        source_id: Which entry (remove, refresh).
+        scope: "all" or a campaign's scope.
+        campaign_id: Which campaign the entry belongs to.
+        sync: Re-read the source before storing.
+    """
+    if moved := _moved("update_knowledge", action):
+        return moved
+    return await _knowledge_impl(
+        action=action, title=title, text=text, source_uri=source_uri, source_id=source_id,
+        scope=scope, campaign_id=campaign_id, sync=sync,
+    )
+
+
+@mcp.tool(annotations=_acts("Restore a previous LinkedIn profile field"))
+async def restore_profile(change_id: str = "") -> str:
+    """Put a LinkedIn profile field back to what it was before a change.
+
+    This writes to your live LinkedIn profile. Reading the history is the
+    profile tool.
+
+    Args:
+        change_id: Which change to undo, from profile(action="history").
+    """
+    return await _profile_impl(action="restore", change_id=change_id)
+
+
+@mcp.tool(annotations=_acts("Tune how buying signals are found and scored"))
+async def tune_signals(
+    action: str,
+    campaign_id: str = "",
+    signal_type: str = "",
+    signal_id: str = "",
+    feedback: str = "",
+) -> str:
+    """Change how signals are found, scored or acted on.
+
+    Reading them is the signals tool.
+
+    Args:
+        action: "strategy", "feedback", "website_setup", "optimize",
+            "optimize_rollback" or "optimize_weights".
+        campaign_id: Which campaign.
+        signal_type: Which kind of signal.
+        signal_id: Which signal (feedback, rollback).
+        feedback: What was wrong with it.
+    """
+    if moved := _moved("tune_signals", action):
+        return moved
+    return await _signals_impl(
+        action=action, campaign_id=campaign_id, signal_type=signal_type,
+        signal_id=signal_id, feedback=feedback,
+    )
+
+
+@mcp.tool(annotations=_acts("Tag, note or re-stage a contact"))
+async def update_contact(
+    action: str,
+    contact_id: str = "",
+    lifecycle_stage: str = "",
+    tag: str = "",
+    note: str = "",
+    campaign_id: str = "",
+    match: str = "name",
+    dry_run: bool = True,
+) -> str:
+    """Change one contact: tag it, note it, move its stage, or link it to a campaign.
+
+    Reading and searching contacts is the contacts tool.
+
+    Args:
+        action: "tag", "note", "stage", "link" or "enrich".
+        contact_id: Which contact.
+        lifecycle_stage: The stage to move it to.
+        tag: The tag to add.
+        note: The note to record.
+        campaign_id: Which campaign (link).
+        match: How to match when linking.
+        dry_run: Show what would change without changing it.
+    """
+    if moved := _moved("update_contact", action):
+        return moved
+    return await _contacts_impl(
+        action=action, contact_id=contact_id, lifecycle_stage=lifecycle_stage,
+        tag=tag, note=note, campaign_id=campaign_id, match=match, dry_run=dry_run,
+    )
+
+
+@mcp.tool(annotations=_acts("Opt in or out of the shared network, and sync it"))
+async def update_network(
+    action: str,
+    linkedin_id: str = "",
+    linkedin_ids: str = "",
+    max_accounts: int = 5,
+    force_refresh: bool = False,
+) -> str:
+    """Join or leave the shared network pool, sync it, or enrich a profile.
+
+    Opting in shares your connection graph with the pool. Reading it is the
+    network tool.
+
+    Args:
+        action: "opt_in", "opt_out", "sync", "opt_in_all", "sync_all",
+            "enrich" or "parallel".
+        linkedin_id: One profile.
+        linkedin_ids: Several, comma separated.
+        max_accounts: How many accounts to work through.
+        force_refresh: Re-read profiles already known.
+    """
+    if moved := _moved("update_network", action):
+        return moved
+    return await _network_impl(
+        action=action, linkedin_id=linkedin_id, linkedin_ids=linkedin_ids,
+        max_accounts=max_accounts, force_refresh=force_refresh,
+    )
+
+
+@mcp.tool(annotations=_acts("Answer the LinkedIn inbox"))
+async def answer_inbox(action: str, chat_id: str = "", text: str = "") -> str:
+    """Reply in a LinkedIn conversation, or approve or discard a drafted reply.
+
+    "reply" and "approve_draft" SEND a LinkedIn message and cannot be undone.
+    Reading the inbox is the inbox tool.
+
+    Args:
+        action: "reply", "approve_draft" or "discard_draft".
+        chat_id: Which conversation, or which draft.
+        text: What to send, or an edited version of the draft.
+    """
+    if moved := _moved("answer_inbox", action):
+        return moved
+    return await _inbox_impl(action=action, chat_id=chat_id, text=text)
+
+
+# The other half of each pair: the original name, now doing one thing.
+
+
+@mcp.tool(annotations=_acts("Switch, unlink or connect an account"))
+async def account(action: str, account_id: str = "") -> str:
+    """Switch the active LinkedIn account, unlink it, or connect an email account.
+
+    Which account is active decides who outreach is sent as. Listing them is
+    the accounts tool.
+
+    Args:
+        action: "switch", "switch_to", "unlink", "connect_email" or "refresh_tier".
+        account_id: The account id (switch_to).
+    """
+    return _moved("account", action) or await _account_impl(action=action, account_id=account_id)
+
+
+@mcp.tool(structured_output=False, annotations=_acts("Launch, pause or stop a campaign"))
+async def campaign(action: str, campaign_id: str = "", confirm: bool = False) -> str | list[str | Image]:
+    """Launch, pause, resume, archive, delete or emergency-stop a campaign.
+
+    Every action here changes what happens next. Watching one run, or reading
+    its history, is campaign_status.
+
+    Args:
+        action: "launch", "pause", "resume", "archive", "delete",
+            "emergency_stop", "retry_failed", "repair_queue" or
+            "clear_coordinator_hold".
+        campaign_id: Which campaign. Uses the active one if empty.
+        confirm: Required by the actions that destroy work.
+    """
+    if moved := _moved("campaign", action):
+        return moved
+    return await _campaign_impl(action=action, campaign_id=campaign_id, confirm=confirm)
+
+
+@mcp.tool(annotations=_acts("Skip, close or dismiss a prospect"))
+async def prospect(
+    action: str,
+    outreach_id: str = "",
+    campaign_id: str = "",
+    outcome: str = "won",
+    reason: str = "",
+    meeting_link: str = "",
+    confirm: bool = False,
+    reason_code: str = "",
+    reason_note: str = "",
+) -> str:
+    """Skip a prospect, close one with an outcome, or dismiss it.
+
+    Closing with outcome="opt_out" stops all future contact with that person.
+    Reading a prospect is prospect_view.
+
+    Args:
+        action: "skip", "close" or "dismiss".
+        outreach_id: Which outreach.
+        campaign_id: Which campaign. Uses the active one if empty.
+        outcome: "won", "lost" or "opt_out" (close).
+        reason: Why, recorded with the outcome.
+        meeting_link: The booked meeting, recorded with a won outcome.
+        confirm: Required where the action cannot be undone.
+        reason_code: A coded reason, for reporting.
+        reason_note: A free note alongside the code.
+    """
+    if moved := _moved("prospect", action):
+        return moved
+    return await _prospect_impl(
+        action=action, outreach_id=outreach_id, campaign_id=campaign_id, outcome=outcome,
+        reason=reason, meeting_link=meeting_link, confirm=confirm,
+        reason_code=reason_code, reason_note=reason_note,
+    )
+
+
+@mcp.tool(annotations=_acts("Turn the autonomous scheduler on or off"))
+async def scheduler(
+    action: str,
+    enabled: bool = True,
+    cloud: bool = False,
+    host: str = "",
+    hours: int | None = None,
+    campaign_id: str = "",
+) -> str:
+    """Turn the autonomous scheduler on or off, or change how it runs.
+
+    Off means nothing sends until it is on again. Reading its state, logs,
+    activity or diagnostics is scheduler_status.
+
+    Args:
+        action: "toggle", "observe", "always_on", "backfill_cloud",
+            "send_from" or "report".
+        enabled: True to enable, False to disable (toggle, report).
+        cloud: Act on the hosted scheduler rather than this machine's.
+        host: Which machine should send (send_from).
+        hours: The reporting interval (report).
+        campaign_id: Which campaign (report).
+    """
+    if moved := _moved("scheduler", action):
+        return moved
+    return await _scheduler_impl(
+        action=action, enabled=enabled, cloud=cloud, host=host,
+        hours=hours, campaign_id=campaign_id,
+    )
+
+
+@mcp.tool(annotations=_acts("Plan and run the personal-brand strategy"))
+async def brand_strategy(action: str, focus: str = "", photo: str = "") -> str:
+    """Plan the personal-brand work, run it, or change the LinkedIn profile.
+
+    "execute" publishes to LinkedIn under your own name. Reading the plan and
+    the progress is brand_progress.
+
+    Args:
+        action: "plan", "execute", "upload_photo", "upload_cover", "set_link",
+            "set_headline", "set_summary" or "set_photo_library".
+        focus: Which pillar to work on.
+        photo: A file path or base64 image.
+    """
+    if moved := _moved("brand_strategy", action):
+        return moved
+    return await _brand_strategy_impl(action=action, focus=focus, photo=photo)
+
+
+@mcp.tool(annotations=_acts("Track a partner, vendor or investor follow-up"))
+async def partner(
+    action: str,
+    name: str = "",
+    company: str = "",
+    email: str = "",
+    context: str = "",
+    next_followup: str = "",
+    partner_id: str = "",
+    note: str = "",
+) -> str:
+    """Record a partner, vendor or investor follow-up, or change one.
+
+    Listing them is the partners tool.
+
+    Args:
+        action: "add", "update", "complete", "snooze" or "cancel".
+        name: Who.
+        company: Where.
+        email: Their address.
+        context: What it is about.
+        next_followup: When to come back to it.
+        partner_id: Which one (update, complete, snooze, cancel).
+        note: What happened.
+    """
+    if moved := _moved("partner", action):
+        return moved
+    return await _partner_impl(
+        action=action, name=name, company=company, email=email, context=context,
+        next_followup=next_followup, partner_id=partner_id, note=note,
+    )
+
+
+@mcp.tool(annotations=_reads("Read what HeyLead knows about your offer"))
+async def knowledge(
+    action: str = "list",
+    scope: str = "all",
+    campaign_id: str = "",
+    query: str = "",
+    kinds: str = "",
+    top_k: int = 6,
+) -> str:
+    """List or search what HeyLead knows about your offer. Changes nothing.
+
+    Adding, removing and refreshing are update_knowledge.
+
+    Args:
+        action: "list" or "search".
+        scope: "all" or a campaign's scope.
+        campaign_id: Which campaign.
+        query: What to search for.
+        kinds: Restrict to these kinds of entry.
+        top_k: How many results.
+    """
+    if moved := _moved("knowledge", action):
+        return moved
+    return await _knowledge_impl(
+        action=action or "list", scope=scope, campaign_id=campaign_id,
+        query=query, kinds=kinds, top_k=top_k,
+    )
+
+
+@mcp.tool(annotations=_reads("Read LinkedIn profile change history"))
+async def profile(action: str = "history", field: str = "", limit: int = 20) -> str:
+    """Read the history of changes to your LinkedIn profile, or what is on it now.
+
+    Putting a field back is restore_profile.
+
+    Args:
+        action: "history" or "current".
+        field: Which field.
+        limit: How many changes to show.
+    """
+    if moved := _moved("profile", action):
+        return moved
+    return await _profile_impl(action=action or "history", field=field, limit=limit)
+
+
+@mcp.tool(annotations=_reads("Read LinkedIn buying signals"))
+async def signals(
+    action: str = "show",
+    campaign_id: str = "",
+    signal_type: str = "",
+    status: str = "",
+    limit: int = 20,
+    days: int = 30,
+) -> str:
+    """Read the buying signals found for your campaigns. Changes nothing.
+
+    Changing how they are found or scored is tune_signals.
+
+    Args:
+        action: "show", "report", "website_stats" or "optimize_history".
+        campaign_id: Which campaign.
+        signal_type: Which kind of signal.
+        status: Filter by status.
+        limit: How many to show.
+        days: Over how many days.
+    """
+    if moved := _moved("signals", action):
+        return moved
+    return await _signals_impl(
+        action=action or "show", campaign_id=campaign_id, signal_type=signal_type,
+        status=status, limit=limit, days=days,
+    )
+
+
+@mcp.tool(annotations=_reads("Search and read contacts"))
+async def contacts(
+    action: str = "list",
+    query: str = "",
+    contact_id: str = "",
+    lifecycle_stage: str = "",
+    min_fit_score: float = 0.0,
+    limit: int = 25,
+    format: str = "table",
+    campaign_id: str = "",
+    connected_since: str = "",
+    connected_before: str = "",
+) -> str:
+    """Search, browse and read your contacts, and export them. Changes nothing.
+
+    Tagging, noting, re-staging and linking are update_contact.
+
+    Args:
+        action: "list", "search", "view", "stats", "export", "linkedin_search"
+            or "my_connections".
+        query: Search text for "search", "linkedin_search" and "my_connections".
+            For "linkedin_search" the query is passed to LinkedIn as KEYWORDS,
+            matched literally — a company name, a job title, a person's name, or a
+            combination such as 'Acme Corp CTO' or 'Jane Doe'. A natural-language
+            question ('who is the CTO of Acme?') is sent through unchanged and
+            usually comes back empty, so prefer keywords. Nothing is filtered out
+            locally. An empty result and a failed search are reported in different
+            words, so a "no matches" line means LinkedIn really returned nobody
+            rather than "the search broke". Results are capped at 25 per call
+            because every result costs a profile fetch and a LinkedIn read.
+        contact_id: Which contact (view).
+        lifecycle_stage: Filter by stage.
+        min_fit_score: Only those scoring at least this.
+        limit: How many.
+        format: "table", "csv" or "json" (export).
+        campaign_id: Filter by campaign.
+        connected_since: Only those connected on or after this date.
+        connected_before: Only those connected before this date.
+    """
+    if moved := _moved("contacts", action):
+        return moved
+    return await _contacts_impl(
+        action=action or "list", query=query, contact_id=contact_id,
+        lifecycle_stage=lifecycle_stage, min_fit_score=min_fit_score, limit=limit,
+        format=format, campaign_id=campaign_id, connected_since=connected_since,
+        connected_before=connected_before,
+    )
+
+
+@mcp.tool(annotations=_reads("Read the shared network pool"))
+async def network(
+    action: str = "status",
+    linkedin_id: str = "",
+    query: str = "",
+    title: str = "",
+    insight_type: str = "",
+    segment: str = "",
+    min_confidence: float = 0.0,
+) -> str:
+    """Network Intelligence — read a reciprocal pool of members' connected accounts.
+
+    Pool members lend each other their LinkedIn accounts as "network sensors"
+    for enrichment, search, network analysis, and anonymized message insights.
+
+    The pool is reciprocal: it lends other members' connections and seats only
+    to a workspace whose own LinkedIn seat is an active member. The consuming
+    actions below are marked "members only" and are refused until you join;
+    joining is free and takes two update_network calls, opt_in then sync.
+    `status` reports whether you are
+    opted in. The same is true of pooled Premium/Sales Navigator seats used
+    for search elsewhere in HeyLead: a non-member is not lent one and quietly
+    falls back to its own seat.
+
+    Args:
+        action: What to read:
+            "status"     — Pool health, member accounts, your participation
+            "contact"    — Members only: get email/phone via a 1st-degree connected pool account
+            "search"     — Members only: distributed search across pool (merged, deduplicated)
+            "reach"      — Members only: show which pool accounts can reach a prospect
+            "intros"     — Members only: find warm introduction paths to a prospect
+            "insights"   — Members only: query aggregated message insights (objections, trends, patterns)
+            "trends"     — Members only: industry trend analysis from cross-account conversations
+            "patterns"   — Members only: objection and response patterns with timing data
+            Joining and refreshing are update_network:
+            "opt_in"     — Join the network pool (share your connections; this is what unlocks the members-only actions)
+            "opt_out"    — Leave the network pool (also ends your access to it)
+            "enrich"     — Members only: smart profile lookup via closest-connected pool account
+            "parallel"   — Members only: enrich up to 100 profiles in parallel across pool
+        linkedin_id: Target prospect's LinkedIn provider_id (contact, reach, intros).
+        query: Search keywords (search).
+        title: Job title filter (search).
+        insight_type: Which kind of insight.
+        segment: Which segment.
+        min_confidence: Only results at least this confident.
+    """
+    if moved := _moved("network", action):
+        return moved
+    return await _network_impl(
+        action=action or "status", linkedin_id=linkedin_id, query=query, title=title,
+        insight_type=insight_type, segment=segment, min_confidence=min_confidence,
+    )
+
+
+@mcp.tool(annotations=_reads("Read the LinkedIn inbox"))
+async def inbox(action: str = "list", chat_id: str = "", name: str = "", limit: int = 30) -> str:
+    """Read any conversation in your LinkedIn inbox, and the drafted replies.
+
+    Replying, approving a draft and discarding one are answer_inbox.
+
+    Args:
+        action: "list", "read" or "comment_drafts".
+        chat_id: Which conversation.
+        name: Find the conversation by the person's name.
+        limit: How many to show.
+    """
+    if moved := _moved("inbox", action):
+        return moved
+    return await _inbox_impl(action=action or "list", chat_id=chat_id, name=name, limit=limit)
+
+
+# ── The surface this process serves ──
+#
+# Every tool above is registered, and then the ones outside the requested
+# profile are removed again. Gating each decorator would put a second copy of
+# 47 names in the file and let one of them go stale silently; this way
+# ALL_TOOL_NAMES is the honest full inventory and the profile is one filter
+# over it, which is exactly what tests/test_tool_profiles.py compares.
+ALL_TOOL_NAMES: tuple[str, ...] = tuple(
+    sorted(t.name for t in mcp._tool_manager.list_tools())
+)
+TOOL_PROFILE: str = tool_profiles.profile_from_env(_os.environ)
+for _hidden in ALL_TOOL_NAMES:
+    if not tool_profiles.keep(_hidden, TOOL_PROFILE):
+        mcp.remove_tool(_hidden)
+
+# The instructions name every tool, in an order somebody chose. Narrow that
+# sentence to what this process serves, rather than keeping a second hand-
+# maintained list: an agent told about `crm_sync` on a client that does not
+# serve it will try to call it, and one served 47 tools but told about 22
+# will never reach the other 25.
+# FastMCP.instructions is a read-only property over the low-level server's
+# field, which is where the value actually lives.
+mcp._mcp_server.instructions = tool_profiles.narrow_instructions(
+    mcp.instructions or "",
+    [t.name for t in mcp._tool_manager.list_tools()],
+    TOOL_PROFILE,
+)
+
 
 def main(transport: str = "stdio", host: str = "0.0.0.0", port: int = 8080) -> None:
     """Run the HeyLead MCP server.

@@ -2,7 +2,9 @@
 
 > MCP-native autonomous LinkedIn SDR — AI-powered lead generation, voice-matched cold outreach, multi-touch drip sequences, and campaign analytics inside Cursor, Claude Code, or any MCP client.
 
-HeyLead gives AI agents 35 tools covering the full SDR workflow: prospect discovery, ICP generation with buyer personas, personalized connection invitations, follow-up DMs, engagement warm-ups (comments, likes, follows, endorsements), reply handling with sentiment classification, outcome tracking, and 24/7 autonomous scheduling.
+HeyLead gives AI agents 22 tools covering the full SDR workflow: prospect discovery, ICP generation with buyer personas, personalized connection invitations, follow-up DMs, engagement warm-ups (comments, likes, follows, endorsements), reply handling with sentiment classification, outcome tracking, and 24/7 autonomous scheduling.
+
+Brand and content, signals, bulk import, CRM sync and the shared network pool are registered only when the client is started with `HEYLEAD_TOOLS=all`, which brings the full set of 47.
 
 Install: Claude Code `claude mcp add heylead -- uvx heylead` · Cursor: add an MCP server with command `uvx heylead`
 
@@ -10,7 +12,7 @@ Work from your AI chat or from the web dashboard at https://heylead.dev/dashboar
 
 ## Documentation
 
-- [README](https://github.com/D4umak/linkedin-outreach-mcp/blob/main/README.md): Installation, getting started, 35-tool reference, pricing, troubleshooting
+- [README](https://github.com/D4umak/linkedin-outreach-mcp/blob/main/README.md): Installation, getting started, 22-tool reference, pricing, troubleshooting
 - [Agent Integration Guide](https://github.com/D4umak/linkedin-outreach-mcp/blob/main/AGENTS.md): Complete tool reference for AI agents with workflow, auth, and capabilities
 - [Full Documentation](https://github.com/D4umak/linkedin-outreach-mcp/blob/main/llms-full.txt): Comprehensive single-file documentation for AI agents
 - [PyPI Package](https://pypi.org/project/heylead/): Published package with version history

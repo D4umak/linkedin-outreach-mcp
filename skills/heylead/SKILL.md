@@ -11,7 +11,7 @@ HeyLead is an MCP-native autonomous LinkedIn SDR that gives your OpenClaw agent 
 
 ## What This Skill Does
 
-This skill connects HeyLead as an MCP server in your OpenClaw agent, giving it 35 specialized LinkedIn outreach tools:
+This skill connects HeyLead as an MCP server in your OpenClaw agent, giving it 22 specialized LinkedIn outreach tools:
 
 - **ICP Generation** — RAG-powered buyer personas with pain points, fears, barriers, and LinkedIn search parameters
 - **Campaign Management** — Create, pause, resume, archive, and compare outreach campaigns
@@ -96,7 +96,9 @@ In-process agents default to act. Use `edit_campaign(enable_reply_agent="observe
 
 Campaigns are created as drafts and only start when explicitly launched. Every send passes rate limits, working-hours checks, and a 1st-degree connection guard.
 
-## All 35 Tools
+## All 22 Tools
+
+Brand and content, signals, bulk import, CRM sync and the shared network pool are registered only when the client is started with `HEYLEAD_TOOLS=all`, which brings the full set of 47.
 
 | Tool | What it does |
 |------|-------------|

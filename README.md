@@ -93,7 +93,7 @@ nothing is sent, from either machine.
 
 ## Tools
 
-HeyLead gives your AI 35 tools:
+HeyLead gives your AI 22 tools:
 
 ### Core Workflow
 
@@ -286,7 +286,7 @@ Sign in at [heylead.dev](https://heylead.dev) (hosted), or bring your own Unipil
 
 **Capabilities:** LinkedIn lead generation, cold outreach automation, ICP generation with buyer personas, voice-matched personalized messaging, multi-touch drip sequences, reply sentiment classification, engagement warm-ups, campaign analytics, and autonomous 24/7 scheduling.
 
-**35 tools** covering the full SDR workflow: prospect discovery → outreach → follow-up → reply handling → deal closing.
+**22 tools** covering the full SDR workflow: prospect discovery → outreach → follow-up → reply handling → deal closing.
 
 See [`AGENTS.md`](AGENTS.md) for the full agent integration guide.
 

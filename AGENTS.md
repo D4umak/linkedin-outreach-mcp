@@ -49,7 +49,9 @@ In-process agents default to act. Use `edit_campaign(enable_reply_agent="observe
 - **Self-hosted:** a Unipile account (LinkedIn access) plus the user's own LLM key in `~/.heylead/config.json`; run `setup_profile()` with no token.
 - Optional: bring your own key (Gemini/Claude/OpenAI) via `setup_profile(llm_api_key="...")`.
 
-## All 35 Tools
+## All 22 Tools
+
+Brand and content, signals, bulk import, CRM sync and the shared network pool are registered only when the client is started with `HEYLEAD_TOOLS=all`, which brings the full set of 47.
 
 ### Setup & Account
 | Tool | Description |

@@ -1460,6 +1460,18 @@ async def sync_to_cloud(
 
     if refuse_bulk_push_to_cloud_owned(campaign_id, include_all):
         logger.info(BULK_PUSH_REFUSED)
+        # PULL before returning. refresh_campaign_statuses_from_cloud() is a
+        # read, and it is the path by which a campaign paused or archived on
+        # the dashboard comes DOWN to this machine. Skipping it with the push
+        # let the local copy drift from the cloud — and a later scoped push
+        # (launch, edit) carries status, so a stale local 'active' would be
+        # sent back up as the go-signal for a campaign the cloud had paused.
+        # That is the 10 Sep 2026 resurrection shape (be5f78ff), reintroduced
+        # by gating a read behind a write gate.
+        try:
+            await refresh_campaign_statuses_from_cloud()
+        except Exception as e:  # noqa: BLE001 — a failed read must not raise here
+            logger.debug("Campaign status refresh failed (non-fatal): %s", e)
         # What this machine authors still goes up — it is the only writer of
         # those, and the cloud has no newer copy to lose.
         await push_locally_authored_records()

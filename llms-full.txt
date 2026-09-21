@@ -71,28 +71,28 @@ claude mcp add heylead -- uvx heylead
 
 Launch is the only step that starts sending; there is no separate scheduler step. On a hosted account, `campaign(action="launch")` marks the campaign active, resumes it on the HeyLead backend, switches the backend's 24/7 cloud scheduler on if it was off, and queues the first connection request. Outreach then runs from the cloud with your laptop closed; this machine sends only if you move sending here with the scheduler tool's `send_from` action. On a self-hosted install, launch turns this machine's scheduler on if it was off. In observe mode, launch activates the campaign for signal collection only and sends nothing.
 
-## All 35 Tools
+## All 22 Tools
 
-Tools are action-routed: one tool per domain, with an `action` argument
-selecting the operation (for example `campaign(action='pause')`).
+These are the tools a HeyLead client serves by default. Tools are
+action-routed: an `action` argument selects the operation (for example
+`campaign(action='pause')`). Since 20 September 2026 reading and changing are
+separate tools, so a client can look without prompting the person: `contacts`
+reads and `update_contact` writes, `campaign_status` reads and `campaign`
+writes. Each refuses the other's actions and says which tool took them.
 
 ### Setup & Accounts
 
 | Tool | Description |
 |------|-------------|
 | `setup_profile` | Connect your LinkedIn account and analyze your writing style. Required first step. |
-| `account` | Manage your LinkedIn accounts — list, switch, or disconnect. |
-| `organization` | List, switch, or manage hosted organizations — invite an editor/viewer or create a client workspace. |
-| `profile` | View and restore LinkedIn profile change history. |
-| `network` | Network Intelligence — a reciprocal pool of members' connected accounts; join the pool to use it. |
+| `account` | Switch the active LinkedIn account, unlink it, or connect an email account. |
+| `accounts` | List the connected LinkedIn accounts. Reads only. |
 
 ### ICP & Targeting
 
 | Tool | Description |
 |------|-------------|
 | `generate_icp` | Generate a rich Ideal Customer Profile with buyer personas. |
-| `icp` | Preview which LinkedIn profiles a saved ICP matches, without creating anything. |
-| `profile_signals` | Compile a targeting request (country ties, interests) into LinkedIn recall queries and profile evidence. |
 
 ### Campaign Lifecycle
 
@@ -100,17 +100,14 @@ selecting the operation (for example `campaign(action='pause')`).
 |------|-------------|
 | `create_campaign` | Create a LinkedIn outreach campaign from a natural language description. |
 | `edit_campaign` | Edit a campaign's name, mode, booking link, or context fields. |
-| `campaign` | Control campaign lifecycle — launch, monitor, pause, resume, archive, delete, emergency stop, or retry failed. |
-| `import_prospects` | Import prospects from a CSV/XLSX file into a campaign. |
+| `campaign` | Launch, pause, resume, archive, delete or emergency-stop a campaign. |
+| `campaign_status` | Watch a campaign run, or read its status history. Reads only. |
 
 ### Outreach Execution
 
 | Tool | Description |
 |------|-------------|
-| `generate_and_send` | Generate a personalized LinkedIn message and send it (or queue for review). |
 | `send_message` | Send follow-ups, replies, or InMail to prospects. |
-| `send_email` | Send an email to a prospect through a connected Gmail/Outlook mailbox. |
-| `engage_prospect` | Comment on, react to, follow, or endorse a prospect on LinkedIn to build trust. |
 | `book_meeting` | Book a meeting on your Google Calendar and invite a prospect. |
 
 ### Review & Approval
@@ -118,16 +115,18 @@ selecting the operation (for example `campaign(action='pause')`).
 | Tool | Description |
 |------|-------------|
 | `suggest_next_action` | Suggest the best next action for your outreach. |
-| `prospect` | Manage prospects — skip, close with outcome, view conversation, or timeline. |
-| `contacts` | Search, browse, and manage your global contact base. |
+| `prospect` | Skip a prospect, close one with an outcome, or dismiss it. |
+| `prospect_view` | Read one prospect's conversation or timeline. Reads only. |
+| `contacts` | Search, browse, read and export your contacts. Reads only. |
+| `update_contact` | Tag a contact, note it, move its stage, or link it to a campaign. |
 
 ### Inbox & Replies
 
 | Tool | Description |
 |------|-------------|
 | `check_replies` | Check for new LinkedIn replies across all campaigns. |
-| `inbox` | Browse and read LinkedIn inbox messages directly. |
-| `backfill_inbox` | Process unreplied LinkedIn inbox messages through the inbound pipeline. |
+| `inbox` | Read any conversation in your LinkedIn inbox, and drafted replies. Reads only. |
+| `answer_inbox` | Reply in a conversation, or approve or discard a drafted reply. Sends. |
 
 ### Analytics & Reporting
 
@@ -135,25 +134,89 @@ selecting the operation (for example `campaign(action='pause')`).
 |------|-------------|
 | `show_status` | Show your outreach dashboard — campaigns, stats, hot leads, account health. Links to the matching heylead.dev/dashboard page and, on hosted accounts, attaches a snapshot card. |
 | `analytics` | Campaign analytics — reports, comparisons, and exports. |
+
+### Automation
+
+| Tool | Description |
+|------|-------------|
+| `scheduler` | Turn the autonomous scheduler on or off, and switch the daily report. Local or cloud (24/7, runs even when your laptop is off). |
+| `scheduler_status` | Read the scheduler: status, logs, activity, diagnostics. Reads only. |
+
+## Beyond the default set
+
+Brand and content, signals, bulk import, CRM sync, the shared network pool and
+the local repository agent are registered only when the client is started with
+`HEYLEAD_TOOLS=all` in its environment. Nothing is renamed or removed by the
+default; setting the variable gives a session the full set of 47.
+
+```json
+{ "mcpServers": { "heylead": { "command": "uvx", "args": ["heylead"],
+  "env": { "HEYLEAD_TOOLS": "all" } } } }
+```
+
+### Setup & Accounts
+
+| Tool | Description |
+|------|-------------|
+| `restore_profile` | Put a LinkedIn profile field back to what it was before a change. |
+| `update_network` | Join or leave the shared network pool, sync it, or enrich a profile. |
+| `organization` | List, switch, or manage hosted organizations — invite an editor/viewer or create a client workspace. |
+| `profile` | Read LinkedIn profile change history. Reads only. |
+| `network` | Network Intelligence — a reciprocal pool of members' connected accounts; join the pool to use it. |
+
+### ICP & Targeting
+
+| Tool | Description |
+|------|-------------|
+| `icp` | Preview which LinkedIn profiles a saved ICP matches, without creating anything. |
+| `profile_signals` | Compile a targeting request (country ties, interests) into LinkedIn recall queries and profile evidence. |
+
+### Campaign Lifecycle
+
+| Tool | Description |
+|------|-------------|
+| `import_prospects` | Import prospects from a CSV/XLSX file into a campaign. |
+
+### Outreach Execution
+
+| Tool | Description |
+|------|-------------|
+| `generate_and_send` | Generate a personalized LinkedIn message and send it (or queue for review). |
+| `send_email` | Send an email to a prospect through a connected Gmail/Outlook mailbox. |
+| `engage_prospect` | Comment on, react to, follow, or endorse a prospect on LinkedIn to build trust. |
+
+### Inbox & Replies
+
+| Tool | Description |
+|------|-------------|
+| `backfill_inbox` | Process unreplied LinkedIn inbox messages through the inbound pipeline. |
+
+### Analytics & Reporting
+
+| Tool | Description |
+|------|-------------|
 | `inspect` | Read-only digest of operator holds, strategist replans, closer decisions, reply skips, and gated jobs. |
-| `knowledge` | Curate the knowledge base that grounds generated messages — list, add, remove, refresh, or search sources. Hosted only. |
+| `knowledge` | List or search what HeyLead knows about your offer. Reads only. Hosted only. |
+| `update_knowledge` | Add, remove or refresh what HeyLead knows about your offer. Hosted only. |
 | `crm_sync` | Sync campaign contacts and deals to HubSpot CRM. |
 
 ### Signals & Brand
 
 | Tool | Description |
 |------|-------------|
-| `signals` | View and analyze buying signals from LinkedIn. |
+| `signals` | Read the buying signals found for your campaigns. Reads only. |
+| `tune_signals` | Change how signals are found, scored or acted on. |
 | `manage_watchlist` | Add, remove, and list signal keyword watchlists. |
 | `create_post` | Generate and publish a voice-matched post to LinkedIn, X/Twitter, or both. |
-| `brand_strategy` | Analyze and improve your LinkedIn personal brand to drive more leads. |
-| `partner` | Track follow-ups with business partners, vendors, and investors. |
+| `brand_strategy` | Plan the personal-brand work, run it, or change your LinkedIn profile. |
+| `brand_progress` | Read the brand analysis and progress against the plan. Reads only. |
+| `partner` | Record a partner, vendor or investor follow-up, or change one. |
+| `partners` | List the follow-ups you are tracking. Reads only. |
 
 ### Automation
 
 | Tool | Description |
 |------|-------------|
-| `scheduler` | Manage the autonomous scheduler — view status or toggle on/off. Local or cloud (24/7, runs even when your laptop is off). |
 | `product` | Local git checkout only — patch this repo and/or open a PR. Never from the send path. |
 
 ## Key Features
