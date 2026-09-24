@@ -2133,14 +2133,17 @@ _INBOUND_ROLES = ("prospect", "them", "inbound")
 _HANDOFF_CANDIDATES_MAX = 500
 
 
-def _pending_handoff(messages: list[dict]) -> dict | None:
+def pending_handoff(messages: list[dict]) -> dict | None:
     """The prospect message that handed over a way to meet and still waits on
     a person, or None. ``messages`` oldest first.
 
-    Twin of heylead-api unanswered_leads._pending_handoff: the lane's own
-    messages are passed over, any other message of ours means a person has
-    spoken, and the first prospect message carrying a number or their own
-    booking page is the action.
+    Twin of heylead-api unanswered_leads.pending_handoff: the lane's own
+    messages are passed over, and so are the prospect's later ones ("I was
+    blaming LinkedIn" does not ring either); any other message of ours means a
+    person has spoken, and the first prospect message carrying a number or
+    their own booking page is the action. The one reading of a pending
+    handoff: until 24 Sep 2026 Needs attention read the newest message instead
+    and "Call <number>" became "Engaged reply" when he asked why nobody rang.
     """
     from ..constants import MOVE_PREFIX
     from ..services.meeting_handoff import handoff_in
@@ -2155,6 +2158,32 @@ def _pending_handoff(messages: list[dict]) -> dict | None:
             continue
         return None
     return None
+
+
+def _threads(db: Any, ids: list[str]) -> dict[str, list[dict]]:
+    """Each outreach's messages, oldest first, in one read."""
+    threads: dict[str, list[dict]] = {oid: [] for oid in ids}
+    if not ids:
+        return threads
+    for raw in db.execute(
+        "SELECT outreach_id, role, text, sentiment, timestamp FROM messages "
+        f"WHERE outreach_id IN ({', '.join('?' for _ in ids)}) ORDER BY timestamp ASC",
+        tuple(ids),
+    ).fetchall():
+        message = dict(raw)
+        threads[str(message["outreach_id"])].append(message)
+    return threads
+
+
+def _as_the_action(candidate: dict, pending: dict) -> dict:
+    """The row, read from the handoff that waits on a person: its text gives the
+    reason and its time how long the person has been waited on."""
+    return {
+        **candidate,
+        "last_reply_text": pending.get("text") or "",
+        "last_sentiment": pending.get("sentiment") or "",
+        "last_message_ts": int(pending.get("timestamp") or 0),
+    }
 
 
 def _acknowledged_handoffs(db: Any) -> list[dict]:
@@ -2189,26 +2218,13 @@ def _acknowledged_handoffs(db: Any) -> list[dict]:
     candidates = [dict(r) for r in rows]
     if not candidates:
         return []
-    ids = [str(c["outreach_id"]) for c in candidates]
-    threads: dict[str, list[dict]] = {oid: [] for oid in ids}
-    for raw in db.execute(
-        "SELECT outreach_id, role, text, sentiment, timestamp FROM messages "
-        f"WHERE outreach_id IN ({', '.join('?' for _ in ids)}) ORDER BY timestamp ASC",
-        tuple(ids),
-    ).fetchall():
-        message = dict(raw)
-        threads[str(message["outreach_id"])].append(message)
+    threads = _threads(db, [str(c["outreach_id"]) for c in candidates])
     out: list[dict] = []
     for candidate in candidates:
-        pending = _pending_handoff(threads.get(str(candidate["outreach_id"]), []))
+        pending = pending_handoff(threads.get(str(candidate["outreach_id"]), []))
         if pending is None:
             continue
-        out.append({
-            **candidate,
-            "last_reply_text": pending.get("text") or "",
-            "last_sentiment": pending.get("sentiment") or "",
-            "last_message_ts": int(pending.get("timestamp") or 0),
-        })
+        out.append(_as_the_action(candidate, pending))
     return out
 
 
@@ -2278,7 +2294,15 @@ def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
     # Replies nobody has answered, and ways to meet the lane acknowledged and
     # a person has still to act on, oldest first. They cannot be the same
     # row: one ends with the prospect, the other with the lane.
-    candidates = [dict(raw) for raw in rows] + _acknowledged_handoffs(db)
+    candidates = [dict(raw) for raw in rows]
+    # A reply that follows a handoff nobody has acted on is still that
+    # handoff's: the action is the call, not an answer to "any news?".
+    threads = _threads(db, [str(c["outreach_id"]) for c in candidates])
+    for i, candidate in enumerate(candidates):
+        pending = pending_handoff(threads.get(str(candidate["outreach_id"]), []))
+        if pending is not None:
+            candidates[i] = _as_the_action(candidate, pending)
+    candidates += _acknowledged_handoffs(db)
     db.close()
     candidates.sort(key=lambda r: int(r.get("last_message_ts") or 0))
 

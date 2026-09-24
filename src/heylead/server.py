@@ -33,6 +33,26 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.396 (2026-09-24)
+- Fix: the client's size cap skips docs/, as the api's does
+- Fix: the orchestrator reads the api from origin/main and hands roles the excerpts
+- the curl line on one line; a second exit 2 is owed
+- Fix: the skill names both repos' merge paths, keeps evidence links through the privacy gate, and handles every case_api exit code
+- New: a PR that names a case carries its Case section
+- New: the skill: evidence, JTBD, result, three rounds, prototype, then the fixing rules
+- Fix: the deliverable fence is four backticks so inner fences survive; id role token; Dissent re-sends result
+- Fix: roles answer in one parseable JSON block plus a deliverable; question ids; privacy sentence asserted verbatim
+- New: four read-only roles that argue in the AskUserQuestion shape
+- Fix: fold in review — network errors, non-JSON bodies, optional httpx
+- New: the one script that reads, claims, moves and receipts a case
+- case loop, four slices: board, skill and roles, cloud trigger, outcome read-back
+- case loop design: one board, a ✅ trigger, four roles, prototype before code
+- New: a park alert names the PR's branch, so its owner is known
+- Fix: stamp the head and the merge commit with the merge-queue status (api twin)
+- Fix: the mirror job exports the tag's tree with main's tooling
+- Fix: a pending handoff keeps its reason after the prospect writes again
+- New: the mirror job pushes over a deploy key; the public repo releases itself
+
 ## v0.10.395 (2026-09-24)
 - New: the polish pass reads back warm-up comments and inbound DMs
 - New: the public repository follows every release on its own
