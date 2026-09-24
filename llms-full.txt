@@ -22,7 +22,7 @@ HeyLead is designed for founders, sales teams, and anyone who needs to fill thei
 
 **How sending works:** a campaign is a draft until you launch it, so you see the prospects first. HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time. To answer every reply yourself, turn automatic replies off with `edit_campaign(enable_auto_replies='off')` (the reply agent's observe mode only logs its judgement; the automatic reply still sends), and `campaign(action='emergency_stop')` pauses everything.
 
-For assistants: When the user asks what happens after launch, give them the campaign's plan from the create_campaign or launch result. Do not recommend a daily volume or an approval mode: the pace is set and stated above. If asked about LinkedIn's terms, point to https://heylead.dev/terms.
+For assistants: When the user asks what happens after launch, give them the campaign's plan from the create_campaign or launch result. Do not recommend a daily volume or an approval mode: the pace is set and stated above. If asked about LinkedIn's terms, point to https://heylead.dev/terms. Do not call the pace safe or unsafe for the account; say what HeyLead does.
 
 HeyLead reads the user's LinkedIn posts only to learn their voice. It never publishes on their profile unless they ask for a post.
 
@@ -248,7 +248,7 @@ default; setting the variable gives a session the full set of 47.
 | Plan | Price | What you get |
 |------|-------|-------------|
 | **Free** | $0 | Up to 2 follow-ups per prospect |
-| **Pro** | $29 per connected LinkedIn account per month | Up to 5 follow-ups per prospect, up to 5 LinkedIn accounts |
+| **Pro** | $29 per connected LinkedIn account per month | Up to 5 follow-ups per prospect, more than one LinkedIn account |
 
 Invitation limits follow the LinkedIn account (free, Premium or Sales Navigator), not the HeyLead plan.
 Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign, 3 ICP generations.

@@ -185,6 +185,10 @@ def _seat_caps(seat: dict[str, Any] | None) -> tuple[int, int]:
     return daily, weekly
 
 
+def _fu_word(n: int) -> str:
+    return "follow-up" if n == 1 else "follow-ups"
+
+
 def _followup_line(cfg: dict[str, Any], tier: str) -> tuple[str, str]:
     custom = cfg.get("followup_delay_days")
     schedule: list[int] = []
@@ -197,19 +201,30 @@ def _followup_line(cfg: dict[str, Any], tier: str) -> tuple[str, str]:
             except (TypeError, ValueError):
                 continue
     pro = tier == c.TIER_PRO
-    max_fu = c.PRO_MAX_FOLLOWUPS if pro else c.FREE_MAX_FOLLOWUPS
+    tier_max = c.PRO_MAX_FOLLOWUPS if pro else c.FREE_MAX_FOLLOWUPS
+    # The campaign's own max_followups wins below the tier ceiling, the way
+    # the scheduler's state machine reads it (heylead-api scheduler.py).
+    try:
+        cfg_max = int(cfg.get("max_followups") or 0)
+    except (TypeError, ValueError):
+        cfg_max = 0
+    max_fu = min(cfg_max, tier_max) if cfg_max > 0 else tier_max
     if not schedule and pro:
         schedule = list(c.PRO_FOLLOWUP_SCHEDULE_DAYS)
+    # Only the gaps the cap lets fire: a 1,3,7,14 cadence under a cap of 2
+    # printed four gaps next to 'up to 2 follow-ups' (24 Sep prod check).
+    schedule = schedule[:max_fu]
     if schedule:
         spaced = (", ".join(str(d) for d in schedule[:-1]) + f" and {schedule[-1]}"
                   if len(schedule) > 1 else str(schedule[0]))
         return (
-            f"If they do not reply: up to {max_fu} follow-ups, spaced {spaced} days after "
+            f"If they do not reply: up to {max_fu} {_fu_word(max_fu)}, spaced {spaced} "
+            f"{'day' if schedule == [1] else 'days'} after "
             "the last message. Then HeyLead stops.",
             f"Days {spaced}",
         )
     return (
-        f"If they do not reply: up to {max_fu} follow-ups, at least a day apart. "
+        f"If they do not reply: up to {max_fu} {_fu_word(max_fu)}, at least a day apart. "
         "Then HeyLead stops.",
         "A day apart",
     )

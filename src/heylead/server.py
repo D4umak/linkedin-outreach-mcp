@@ -33,6 +33,11 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.398 (2026-09-24)
+- Fix: the follow-up step lists only the follow-ups the cap lets fire
+- New: the model is told not to call the pace safe or unsafe
+- Fix: Pro no longer claims a five-account cap the product does not have
+
 ## v0.10.397 (2026-09-24)
 - New: a campaign carries its goal: create_campaign, edit_campaign, generate_icp and icp(goal_match) take goal= (sell, job_search, hire, partner, buy, research); the ICP and the fit check follow it, and every listing names the six goals (#1153).
 - New: a session without an api token records its receipts as issue comments

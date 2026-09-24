@@ -125,7 +125,8 @@ MODEL_PACE_INSTRUCTION = (
     "When the user asks what happens after launch, give them the campaign's plan "
     "from the create_campaign or launch result. Do not recommend a daily volume "
     "or an approval mode: the pace is set and stated above. If asked about "
-    "LinkedIn's terms, point to https://heylead.dev/terms."
+    "LinkedIn's terms, point to https://heylead.dev/terms. Do not call the "
+    "pace safe or unsafe for the account; say what HeyLead does."
 )
 
 # A silent capability is assumed to be on: the same user assumed HeyLead would
