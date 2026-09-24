@@ -43,6 +43,7 @@ from ..services.brand_service import (
 )
 from ..services.health_score import coerce_daily_limit, compute_health_score
 from ..db.async_bridge import run_db
+from ..ai.voice_block import voice_prompt_block
 
 logger = logging.getLogger(__name__)
 
@@ -1001,14 +1002,15 @@ async def _execute_engagement_action(
                     )
                     break
 
-                voice_tone = voice.get("tone", "professional")
+                voice_desc = voice_prompt_block(voice) or "Plain and direct."
                 comment_prompt = f"""Write a brief, authentic LinkedIn comment on this post.
 
 Post by {post['author']}:
 "{post['text'][:500]}"
 
 You are {profile.get('name', '')} ({profile.get('title', '')}).
-Your voice: {voice_tone}
+Your voice:
+{voice_desc}
 
 Rules:
 - 50-200 characters max

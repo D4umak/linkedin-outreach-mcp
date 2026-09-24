@@ -791,7 +791,7 @@ async def _show_overview(offline: bool = False) -> str:
         output.append(f"├── Comments: {eng_comments}")
         output.append(f"└── Reactions: {eng_reactions}")
         output.append("")
-    elif (not config.is_backend_mode()) and tier != TIER_PRO:
+    elif config.apply_free_monthly_caps():
         eng_used = usage.get("engagements_sent", 0)
         if eng_used > 0:
             output.append(f"💬 Engagements: {eng_used}/{FREE_MAX_ENGAGEMENTS} this month")

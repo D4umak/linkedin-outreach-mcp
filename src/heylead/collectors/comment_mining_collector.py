@@ -14,6 +14,7 @@ Runs every 2 hours via the scheduler (SIGNAL_COMMENT_MINING_SECONDS).
 from __future__ import annotations
 
 import json
+from ..services.profile_signals import role_hit
 from ..textutil import contains_term
 import logging
 import time
@@ -73,6 +74,7 @@ async def mine_post_comments() -> str:
         SIGNAL_SEARCH_TYPE_COMMENT_MINING,
     )
     from ..db.async_bridge import run_db
+    from ..services.post_freshness import post_item_published_at
     from ..db.queries import get_setting, save_setting
     from ..db.signal_queries import (
         list_watchlists,
@@ -148,6 +150,9 @@ async def mine_post_comments() -> str:
                     post_id = post.get("post_id", "")
                     post_text = (post.get("text") or "")[:300]
                     comments_count = int(post.get("comments_count", 0) or 0)
+                    # The post the comment sits under: its date, from the id or
+                    # the provider, so activation can refuse a months-old thread.
+                    published_at = post_item_published_at(post_id, post.get("timestamp"))
 
                     if not post_id:
                         continue
@@ -196,6 +201,7 @@ async def mine_post_comments() -> str:
                                     "post_text": post_text,
                                     "comment_text": comment_text[:200],
                                     "comments_on_post": comments_count,
+                                    "published_at": published_at,
                                     "contact_name": known_contact.get("name", ""),
                                     "contact_campaign_id": known_contact.get("campaign_id", ""),
                                 }
@@ -238,6 +244,7 @@ async def mine_post_comments() -> str:
                                     "author_headline": author_headline,
                                     "is_question": is_question,
                                     "comments_on_post": comments_count,
+                                    "published_at": published_at,
                                 }
                                 # Boost confidence for questions (stronger intent)
                                 confidence = 0.60 if is_question else 0.45
@@ -317,6 +324,7 @@ async def mine_post_comments() -> str:
                 for post in viral_posts[:3]:  # Max 3 viral posts per keyword
                     post_id = post.get("post_id", "")
                     post_text = (post.get("text") or "")[:300]
+                    published_at = post_item_published_at(post_id, post.get("timestamp"))
 
                     if not post_id:
                         continue
@@ -358,6 +366,7 @@ async def mine_post_comments() -> str:
                         metadata = {
                             "industry_keyword": keyword,
                             "post_text": post_text,
+                            "published_at": published_at,
                             "comment_text": comment_text[:200],
                             "author_headline": author_headline,
                             "is_question": is_question,
@@ -501,10 +510,9 @@ def _matches_icp(headline: str, matcher: dict[str, Any]) -> bool:
 
     # Check ICP title match (at least partial)
     titles = matcher.get("titles", set())
-    if titles:
-        for title in titles:
-            if contains_term(headline_lower, title):
-                return True
+    # The shared title matcher: "CTO" holds an ICP's "Chief Technology Officer".
+    if titles and role_hit(headline_lower, titles):
+        return True
 
     # If no specific titles to match but has seniority, accept
     if not titles:

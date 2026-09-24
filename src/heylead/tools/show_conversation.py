@@ -245,7 +245,7 @@ _SENTIMENT_BADGES = {
     "out_of_office": "OOO",
     "opt_out": "X",
 }
-_MOVE_PREFIX = "move:"
+from ..constants import MOVE_PREFIX as _MOVE_PREFIX  # noqa: E402 - one definition
 
 
 def _message_badge(role: str, sentiment: str) -> str:

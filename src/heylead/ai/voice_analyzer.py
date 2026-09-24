@@ -206,29 +206,6 @@ async def analyze_voice(profile: dict[str, Any]) -> dict[str, Any]:
 
 # ── Prompt rendering ──
 
-# create_post asked for voice["style"] and voice["patterns"]. Neither key is
-# in the schema above, so both fell through to their defaults for every user
-# and the prompt claimed a "professional" style it had never measured. One
-# renderer now, named against the keys analyze_voice actually returns.
-_VOICE_PROMPT_FIELDS: tuple[tuple[str, str], ...] = (
-    ("tone", "Tone"),
-    ("sentence_length", "Sentence length"),
-    ("signature_pattern", "Opens and closes"),
-    ("vocabulary_preferences", "Words they reach for"),
-    ("communication_style", "How they communicate"),
-    ("no_go", "Never writes"),
-)
-
-
-def voice_prompt_block(voice: dict[str, Any] | None) -> str:
-    """The voice signature as prompt lines, skipping fields we do not have."""
-    voice = voice or {}
-    lines: list[str] = []
-    for key, label in _VOICE_PROMPT_FIELDS:
-        value = voice.get(key)
-        if isinstance(value, (list, tuple)):
-            value = ", ".join(str(v).strip() for v in value if str(v).strip())
-        value = str(value or "").strip()
-        if value:
-            lines.append(f"{label}: {value}")
-    return "\n".join(lines)
+# The renderer lives in voice_block (a leaf module: prompt_loader needs it
+# and this module imports prompt_loader). Re-exported for existing callers.
+from .voice_block import voice_prompt_block  # noqa: E402,F401

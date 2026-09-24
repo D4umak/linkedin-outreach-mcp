@@ -8,7 +8,13 @@ Read the commons digest, then decide.
 Decisions:
 - none: sidecar digest is enough
 - note: leave one short note for the next tick
-- hold: a human should look (stale sibling, conflicting notes, or you are unsure)
+- hold: a human must look at the whole campaign (conflicting notes).
+  Do not hold because you are unsure.
+
+A sibling beat marked [one prospect] (reply, closer, strategist,
+send_fit) is about ONE person: a reply hold parks one conversation for a
+human, it does not pause the campaign. It is never a reason to hold the
+campaign.
 
 Do not write LinkedIn messages. Do not turn other agents on or off.
 Default to none when nothing is wrong."""

@@ -20,6 +20,7 @@ from ..ai.sentiment import (
     detect_meeting_agreement,
 )
 from ..db.async_bridge import run_db
+from ..author_identity import contact_provider_id
 from ..db.queries import (
     get_inbound_signal_by_sender,
     get_messages_for_outreach,
@@ -36,6 +37,7 @@ from ..db.queries import (
     update_outreach,
 )
 from ..db.schema import get_db
+from ..linkedin.message_sender import message_is_ours
 from ..services.connection_sync import mark_connected
 from ..linkedin import (
     UnipileAuthError,
@@ -75,12 +77,10 @@ def _revisit_candidates(
             continue
         if r.get("campaign_status") not in (None, "active", "paused"):
             continue
-        profile = r.get("profile_json") or ""
-        try:
-            profile = json.loads(profile) if isinstance(profile, str) else (profile or {})
-        except (TypeError, ValueError):
-            profile = {}
-        pid = str((profile or {}).get("provider_id") or "").strip()
+        # Both places the id is stored: a row whose id sits in the
+        # linkedin_id column used to be dropped here, and this is the only
+        # path that notices an accepted invitation.
+        pid = contact_provider_id(r)
         if not pid or pid in seen_provider_ids:
             continue
         out.append((str(r.get("outreach_id") or ""), pid))
@@ -126,7 +126,7 @@ async def _revisit_off_page_threads(
         newest = None
         for m in msgs or []:
             sender = str(m.get("sender_id") or "")
-            if not sender or sender == our_provider_id or sender != pid:
+            if not sender or message_is_ours(m, our_provider_id) or sender != pid:
                 continue
             if not (m.get("text") or "").strip():
                 continue
@@ -644,6 +644,10 @@ async def _collect_new_prospect_turns(
     try:
         chat_msgs = await client.get_chat_messages(account_id, chat_id, limit=limit)
     except Exception as e:
+        if getattr(getattr(e, "response", None), "status_code", None) == 404:
+            # A gone chat has no new turns to collect.
+            logger.info("Chat %s no longer exists (404); no new turns", str(chat_id)[:12])
+            return []
         logger.warning("Could not fetch chat %s: %s", str(chat_id)[:12], e)
         return []
 
@@ -657,7 +661,7 @@ async def _collect_new_prospect_turns(
     for cm in sorted(chat_msgs or [], key=lambda m: m.get("timestamp") or 0):
         sender = cm.get("sender_id") or ""
         text = (cm.get("text") or "").strip()
-        if not sender or not text or sender == our_provider_id:
+        if not sender or not text or message_is_ours(cm, our_provider_id):
             continue
         mid = str(cm.get("message_id") or cm.get("id") or "").strip()
         if mid and mid in stored_ids:
@@ -826,9 +830,9 @@ async def run_check_replies() -> str:
         sender_id = msg.get("sender_id") or ""
         if not sender_id:
             continue
+        if message_is_ours(msg, our_provider_id):
+            continue  # Our own message is never a reply, whatever id it carries
         if sender_id not in contact_lookup:
-            if our_provider_id and sender_id == our_provider_id:
-                continue  # Our own message
             # Fallback: match by sender_name when provider_id is missing
             # from profile_json (common for DM-only / connections-only campaigns).
             sender_name_key = (msg.get("sender_name") or "").strip().lower()

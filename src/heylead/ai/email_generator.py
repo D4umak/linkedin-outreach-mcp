@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from .llm_router import call_llm
+from .voice_block import voice_prompt_block
 
 logger = logging.getLogger(__name__)
 
@@ -174,10 +175,7 @@ async def generate_email_followup(
     """
     prospect_first = first_name(prospect.get("name"), "there")
     sender_name = sender_profile.get("name") or ""
-    # voice_signature has no "style" key — the analyzer emits tone,
-    # sentence_length, signature_pattern, vocabulary_preferences and no_go.
-    style = voice_signature.get("sentence_length", "")
-    tone = voice_signature.get("tone", "conversational")
+    voice_desc = voice_prompt_block(voice_signature) or "Plain and direct."
 
     prompt = f"""Generate a follow-up email for B2B outreach.
 
@@ -188,7 +186,8 @@ PROSPECT: {prospect_first}
 PREVIOUS SUBJECT: {previous_subject}
 PREVIOUS EMAIL: {previous_body[:300]}
 
-VOICE: {tone}{", " + style if style else ""}
+VOICE:
+{voice_desc}
 
 RULES:
 1. Subject: "Re: {previous_subject}" (keep the thread)

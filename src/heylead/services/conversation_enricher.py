@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 from ..db.async_bridge import run_db
+from ..linkedin.message_sender import message_is_ours
 from ..db.queries import get_messages_for_outreach
 
 logger = logging.getLogger(__name__)
@@ -52,8 +53,8 @@ async def fetch_linkedin_history(
         text = msg.get("text", "")
         if not text or not text.strip():
             continue
-        msg_sender_id = msg.get("sender_id", "")
-        role = "sdr" if msg_sender_id == sender_provider_id else "prospect"
+        # Unipile's is_sender first; the profile id is only the fallback.
+        role = "sdr" if message_is_ours(msg, sender_provider_id) else "prospect"
         timestamp = msg.get("timestamp", 0)
         if isinstance(timestamp, str):
             try:
@@ -168,6 +169,8 @@ async def get_enriched_conversation(
             client, account_id, chat_id, sender_provider_id,
         )
     except Exception as e:
+        if getattr(getattr(e, "response", None), "status_code", None) == 404:
+            raise
         logger.warning("Failed to fetch LinkedIn chat history, using local-only: %s", e)
         return local_messages
 

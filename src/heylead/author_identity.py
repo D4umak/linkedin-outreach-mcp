@@ -23,6 +23,7 @@ Stdlib-only on purpose: it is imported from both ``linkedin`` clients and
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 from urllib.parse import unquote
@@ -41,6 +42,44 @@ def looks_like_provider_id(value: Any) -> bool:
     if not isinstance(value, str):
         return False
     return bool(_PROVIDER_ID_RE.match(value.strip()))
+
+
+def provider_id_from(linkedin_id: Any, profile_json: Any = "") -> str:
+    """The member id (``ACoAA…``) a stored row carries, from either place.
+
+    A contact keeps that id in ``profile_json["provider_id"]`` when a profile
+    blob was stored and in the ``linkedin_id`` column when it was not, and the
+    caller does not get to know which. Reading one place alone makes an
+    id-carrying row look like a row with no id -- see
+    docs/incidents/2026-09-22-a-provider-id-was-read-from-one-of-the-two-places-it-lives.md.
+
+    ``linkedin_id`` also holds vanity slugs, so the column counts only when it
+    actually carries a member id. Deliberately the narrow ``ACoAA`` test and
+    not ``looks_like_provider_id`` above: the callers pass this straight to
+    Unipile's classic endpoints, which reject a Sales Navigator ``AC…`` id.
+
+    Pure and stdlib-only, like the rest of this module, so it is callable from
+    the event-loop thread -- the reason it does not live beside the row
+    queries that use it.
+    """
+    blob = profile_json
+    if isinstance(blob, str):
+        try:
+            blob = json.loads(blob) if blob else {}
+        except (ValueError, TypeError):
+            blob = {}
+    if isinstance(blob, dict):
+        pid = str(blob.get("provider_id") or "").strip()
+        if pid:
+            return pid
+    raw = str(linkedin_id or "").strip()
+    return raw if raw.startswith("ACoAA") else ""
+
+
+def contact_provider_id(contact: dict[str, Any] | None) -> str:
+    """``provider_id_from`` for a whole stored contact row."""
+    row = contact or {}
+    return provider_id_from(row.get("linkedin_id"), row.get("profile_json") or "")
 
 
 def _last_urn_segment(value: str) -> str:

@@ -25,6 +25,7 @@ from ..constants import (
     INBOUND_ENGAGE_CONFIDENCE,
     INBOUND_MAX_DM_ATTEMPTS,
 )
+from ..timeutil import signal_sent_at, to_epoch
 from ..db.queries import (
     count_inbound_dms_today,
     enroll_prospect,
@@ -231,7 +232,11 @@ async def send_discovery_dms() -> str:
         # Friend / existing-conversation guard — skip if there's a
         # pre-existing chat (messages before we detected this signal)
         if sender_id:
-            signal_created_at = signal.get("created_at") or int(time.time())
+            # "Before this message": when they sent it if we know, else when
+            # we noticed it -- a boundary, not a stored time.
+            signal_created_at = (
+                signal_sent_at(signal) or signal.get("created_at") or int(time.time())
+            )
             is_friend = await _has_prior_conversation(
                 client, account_id, sender_id, signal_created_at,
             )
@@ -478,6 +483,10 @@ async def check_post_comments() -> str:
                     sender_id=author_id,
                     content=comment_text,
                     post_id=post_id,
+                    sent_at=to_epoch(
+                        comment.get("date") or comment.get("created_at")
+                        or comment.get("timestamp")
+                    ),
                 )
                 new_commenters += 1
 
@@ -507,6 +516,8 @@ async def check_post_comments() -> str:
                                 content=comment_text,
                                 post_id=post_id,
                                 metadata_json=_json.dumps({
+                                    # The user's own post; the table stamps it.
+                                    "published_at": post.get("published_at"),
                                     "match_type": "campaign_contact",
                                     "contact_name": contact.get("name", author_name),
                                     "contact_company": contact.get("company", ""),

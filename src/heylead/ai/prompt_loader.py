@@ -14,6 +14,8 @@ Usage:
 from __future__ import annotations
 
 from ..textutil import first_name
+from .voice_block import voice_prompt_block
+from .copywriter import rules_for
 
 import json
 import logging
@@ -778,6 +780,7 @@ def build_context_block(
     expertise_map: dict[str, Any] | None = None,
     brief: Any = None,
     reply_text: str | None = None,
+    channel: str = "dm",
 ) -> dict[str, str]:
     """Build the complete variable dict mapping HeyLead data → v63 variable names.
 
@@ -889,19 +892,15 @@ def build_context_block(
         "language_rule": _detect_conversation_language(history),
         # Conversation stage — how many prospect replies we've received
         "conversation_stage": _compute_conversation_stage(history, ctx, campaign_config),
-        "voice_rules": load_fragment("voice_rules"),
+        # The house rules for whatever this prompt is writing. "dm" is
+        # the conservative default: every conversational rule binds it.
+        "voice_rules": rules_for(channel),
     }
 
     # Voice-related variables (used by HeyLead prompts, not v63 — but included for compatibility)
-    voice_vocab = voice.get("vocabulary_preferences", [])
-    if isinstance(voice_vocab, list):
-        voice_vocab = ", ".join(voice_vocab)
 
     variables.update({
-        "voice_tone": voice.get("tone", "Professional, direct"),
-        "voice_sentence": voice.get("sentence_length", "Medium"),
-        "voice_vocab": voice_vocab or "None specified",
-        "voice_nogo": voice.get("no_go", "Generic sales phrases"),
+        "voice_block": voice_prompt_block(voice),
         # Prospect shorthand
         "prospect_name": first_name(prospect.get("name"), "there"),
         "prospect_title": prospect.get("title", ""),

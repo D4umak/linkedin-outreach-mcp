@@ -17,7 +17,7 @@ import logging
 from typing import Any
 
 from ..ai.icp_schemas import IcpResult, icp_result_from_dict
-from ..config import get_tier, is_backend_mode, load_config
+from ..config import apply_free_monthly_caps, get_tier, is_backend_mode, load_config
 from ..constants import (
     CAMPAIGN_TYPE_JOB_SEARCH,
     DEFAULT_CAMPAIGN_TYPE,
@@ -293,8 +293,7 @@ async def run_create_campaign(
     # Hosted billing lives on the host. A leftover local `tier: free` must
     # not cap a signed-in account. Drafts send nothing, so they do not use
     # the self-hosted free campaign slot either.
-    tier = get_tier()
-    apply_free_caps = (not is_backend_mode()) and tier != TIER_PRO
+    apply_free_caps = apply_free_monthly_caps()
     existing = await run_db(list_campaigns)
     if apply_free_caps:
         active_campaigns = [c for c in existing if c["status"] == STATUS_ACTIVE]

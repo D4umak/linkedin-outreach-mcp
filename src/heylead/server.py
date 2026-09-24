@@ -33,6 +33,65 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.395 (2026-09-24)
+- New: the polish pass reads back warm-up comments and inbound DMs
+- New: the public repository follows every release on its own
+- New: one open PR per product outcome, enforced by outcome_gate
+- New: post parked PRs and merges that bypassed the queue to Slack
+- Fix: who sent a message is is_sender first, our id only as a fallback
+- Fix: hold only a live campaign, and only on campaign-level evidence
+- the skipped-run fix is verified in production; the shape came from #461
+- Fix: a skipped run cannot take the waiting slot; the group sits on the job
+- Fix: signal_sent_at lives in timeutil, so async code may call it
+- Fix: a signal keeps the send time, and its message is stored at it
+- Fix: re-run cancelled CI at the run's path, with the token that may
+- Fix: comment mining records the date of the post a comment sits under
+
+## v0.10.394 (2026-09-23)
+- Fix: CISO and CIO read as the titles they abbreviate
+- the gone-chat fix is verified in production
+- the id decode is proven for activity ids only
+- Fix: a signal citing a LinkedIn post carries the post's date, and activation declines a stale or undatable one
+- Fix: one title matcher, so the client reads "CTO" as Chief Technology Officer
+
+## v0.10.393 (2026-09-23)
+- Fix: a handoff stays in view until a person acts (client twin)
+- Fix: stop at the first refusal; guard tests carry controls
+- Fix: the gate refuses a reply the coordinator hold would refuse
+- Fix: the chat-404 rule sees bare and tuple handlers, and only the try that holds the read
+- Fix: forget a stored chat id that 404s, on the reply lanes too
+- the gone chat was swallowed at the source, not only one layer up
+- Fix: a gone chat reaches the code that decides what it means
+- Fix: read the head from the ref, not from the pull request
+- the provider-id fix is verified in production
+- Fix: Verify chat existence before generating reply
+- Fix: a cancelled shard is not a verdict
+- Fix: install the versions this repo names, not the newest
+
+## v0.10.392 (2026-09-22)
+- Fix: a stored provider id is read from both places it lives
+- Fix: a stored booking link is the same action as one in their message
+- Fix: a phone number or their own link is an action, not a wait
+- Fix: a lost head race on update is retried, not parked
+- Fix: the client reads the same rules table as the cloud
+- Fix: a quiet or unfinished agent does not freeze a campaign
+- Merge the queue's branch update
+- Fix: the cross-repo digest is over source bytes, not the AST
+- Fix: stand aside instead of holding the conversation
+
+## v0.10.391 (2026-09-21)
+- Fix: the verdict reads the configured checks, not a default bound to the api's
+- Fix: every prompt renders the whole voice signature through one renderer
+- record the Slack surface split (#heylead-reports vs HeyLead Agent DM) (#425)
+- New: open claims and the files of open fix PRs reach the model
+- backlog reflects #426, v0.10.390 and heylead-dashboard #120
+- brand foundation, landing copy, design system and backlog for the heylead.dev redesign
+- what it would take to tell recipients an AI wrote the first message
+
+## v0.10.390 (2026-09-21)
+- Fix: the monthly ICP cap no longer stops a hosted account
+- say which approval mode is on, and draft the Connectors Directory application
+
 ## v0.10.389 (2026-09-20)
 - Changed: HeyLead now serves 22 tools by default instead of 47. Brand and
   content, signals, profile editing, bulk import, CRM sync, email, the shared
@@ -1503,7 +1562,9 @@ mcp = FastMCP(
         "Safety: create_campaign saves a draft and sends nothing. Outreach starts only "
         "with campaign(action='launch'), and only when the user asks. Sends respect "
         "rate limits, quiet hours and opt-outs. campaign(action='emergency_stop') "
-        "pauses everything.\n"
+        "pauses everything. On a hosted workspace that has not chosen otherwise, "
+        "opening DMs and follow-ups wait for the user's approval (inspect(action="
+        "'waiting') lists them); the approved text is what is sent.\n"
         "Not set up yet? Call setup_profile(); it returns a sign-in link.\n"
         "Workflow: setup_profile → generate_icp → create_campaign → automated outreach.\n"
         "\n"
@@ -2073,7 +2134,11 @@ async def create_campaign(
         project_brief: Optional. Full project paste the model sees: what you are
             building, go-live, volume, what a vendor must confirm. Required before
             launch, resume, or auto-send.
-        mode: Always autopilot. Copilot mode removed.
+        mode: Always autopilot (copilot mode was removed). Whether opening DMs
+            and follow-ups wait for a person is the WORKSPACE's approval mode,
+            not this: a hosted workspace that never chose holds them
+            (inspect(action="waiting") lists them); scheduler(action=
+            "approval_mode") switches it.
         company_url: Optional LinkedIn company URL for account-based targeting.
             Searches for employees at that specific company matching the ICP.
             Example: "https://www.linkedin.com/company/google"
@@ -2592,7 +2657,9 @@ async def edit_campaign(
     Args:
         campaign_id: Which campaign to edit. Edits the first active campaign if empty.
         name: New campaign name. Leave empty to keep current name.
-        mode: Only "autopilot" supported. Copilot mode removed.
+        mode: Only "autopilot" supported (copilot mode was removed). Whether
+            messages wait for a person is the workspace's approval mode:
+            scheduler(action="approval_mode").
         booking_link: Calendar/booking URL (e.g., "https://cal.com/you/15min").
             Used in reply_to_prospect() for positive replies to suggest meetings.
         offerings: What you offer (products, services, value props). Used in follow-up messages.

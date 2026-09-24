@@ -35,7 +35,7 @@ _DB_RETRY_BACKOFF = 0.1  # seconds, doubles each attempt
 #    dedup read it as "already in a campaign" and never let the person back in.
 # 7: outreaches.chat_id (and headline A/B columns) — a v6 stamp skipped the
 #    ALTER, so planning died with `no such column: o.chat_id`.
-SCHEMA_VERSION = 12  # 12: connections.connected_at/removed_at; 11: outreach_tombstones; 10: agent_commons (beats + notes); 9: contacts.timezone (per-prospect planning windows); 8: versioned outreach sync
+SCHEMA_VERSION = 13  # 13: inbound_signals.sent_at (the provider's send time); 12: connections.connected_at/removed_at; 11: outreach_tombstones; 10: agent_commons (beats + notes); 9: contacts.timezone (per-prospect planning windows); 8: versioned outreach sync
 
 # Singleton connection — avoids opening multiple connections per process
 # which causes "database is locked" errors with WAL mode.
@@ -348,6 +348,7 @@ CREATE TABLE IF NOT EXISTS inbound_signals (
     decline_reason     TEXT,                -- why declined (for auditing)
     message_id         TEXT,                -- LinkedIn message ID (for reactions)
     reaction_sent      INTEGER DEFAULT 0,   -- was a reaction sent?
+    sent_at            INTEGER,             -- when the message/invite/comment was SENT (provider time); created_at is when we noticed it
     FOREIGN KEY (matched_icp_id) REFERENCES icps(id)
 );
 
@@ -2463,6 +2464,18 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         """)
         conn.commit()
         logger.info("Migration: added agent_commons table")
+
+    # inbound_signals.sent_at: the time the message was SENT, from the
+    # provider. created_at is when we noticed it, and until 23 Sep 2026 the
+    # paths acting on a signal stored the prospect's message at created_at --
+    # a backfilled month-old message stamped the day of the backfill.
+    try:
+        conn.execute("ALTER TABLE inbound_signals ADD COLUMN sent_at INTEGER")
+        conn.commit()
+        logger.info("Migration: added sent_at to inbound_signals")
+    except sqlite3.OperationalError as e:
+        _reraise_if_migration_interrupted(e)
+        pass  # Column already exists
 
 
 def _backfill_global_contacts(conn: sqlite3.Connection) -> None:

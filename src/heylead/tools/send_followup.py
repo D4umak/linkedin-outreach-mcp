@@ -380,6 +380,20 @@ async def run_send_followup(
                 client, account_id, chat_id, outreach_id, sender_provider_id,
             )
         except Exception as e:
+            if getattr(getattr(e, "response", None), "status_code", None) == 404:
+                # Same stop as reply_to_prospect: a follow-up written from
+                # local history cannot be delivered into a chat that is gone.
+                # Forget the id too; a stored one may just predate a reconnect.
+                await client.close()
+                await db.update_outreach(outreach_id, chat_id=None)
+                await db.log_action(
+                    "chat_not_found", outreach_id=outreach_id, result="skipped",
+                    details={"prospect": candidate.get("name", "Unknown"), "chat_id": chat_id},
+                )
+                return (
+                    f"⏭️ Chat not found for {candidate.get('name', 'Unknown')}: the "
+                    "LinkedIn chat no longer exists (deleted, or the person disconnected)."
+                )
             logger.warning("Conversation enrichment failed, using local-only: %s", e)
             messages = await db.get_messages_for_outreach(outreach_id)
     else:

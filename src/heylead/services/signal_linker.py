@@ -25,6 +25,7 @@ from typing import Any
 
 from ..flags import flag_enabled
 from ..textutil import contains_term
+from .post_freshness import post_date_decline
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,12 @@ def scan_signal_pool_for_campaign(
 
         linkedin_id = sig.get("linkedin_id") or ""
         if not linkedin_id:
+            continue
+
+        # The activator's gate, on this second road into a campaign: a post
+        # older than PROSPECT_POST_MAX_AGE_DAYS, or undatable, is not a lead.
+        # Before the per-person dedup, so a stale row cannot shadow a fresh one.
+        if _declined_for_its_post_date(sig, now, update_signal):
             continue
 
         # Dedup: skip if we've already processed this person in this batch
@@ -245,6 +252,12 @@ def match_signals_to_campaigns() -> str:
             skipped += 1
             continue
 
+        # A homeless signal only gets older; one citing a stale or undatable
+        # post is closed here rather than enrolled when a campaign appears.
+        if _declined_for_its_post_date(sig, now, update_signal):
+            skipped += 1
+            continue
+
         # Check if already a contact somewhere
         existing = resolve_existing_contact(sig)
         if existing:
@@ -329,6 +342,22 @@ def match_signals_to_campaigns() -> str:
     if matched > 0:
         logger.info(summary)
     return summary
+
+
+def _declined_for_its_post_date(sig: dict[str, Any], now: int, update_signal) -> bool:
+    """Park a signal whose cited post is stale or undatable; True if parked."""
+    from ..constants import SIGNAL_STATUS_SKIPPED
+
+    decline = post_date_decline(sig, now)
+    if not decline:
+        return False
+    update_signal(
+        sig["id"],
+        status=SIGNAL_STATUS_SKIPPED,
+        action_taken=decline,
+        actioned_at=now,
+    )
+    return True
 
 
 # ──────────────────────────────────────────────

@@ -47,6 +47,10 @@ async def has_prior_conversation(
 
         return False
     except Exception as e:
+        if getattr(getattr(e, "response", None), "status_code", None) == 404:
+            # The chat is gone, so there is no prior conversation left in it.
+            logger.debug("Prior conversation chat for %s no longer exists (404)", sender_id)
+            return False
         logger.debug(
             "Prior conversation check failed for sender %s: %s — allowing DM",
             sender_id, e,

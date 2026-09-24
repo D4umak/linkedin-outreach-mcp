@@ -30,6 +30,7 @@ from ..author_identity import (
 )
 from ..constants import UNIPILE_POLL_INTERVAL_SECONDS, UNIPILE_POLL_TIMEOUT_SECONDS
 from ..guardrails import check_message, prepare_outbound_text
+from .message_sender import sender_flag
 from .api_metrics import api_metrics
 from .relations import RelationsPage
 from .search_traffic import SearchTraffic
@@ -2374,6 +2375,7 @@ class UnipileClient:
                 messages.append({
                     "message_id": message_id,
                     "sender_id": str(sender_id),
+                    "is_sender": sender_flag(msg),
                     "sender_name": str(sender_name),
                     "text": text,
                     "timestamp": timestamp,
@@ -2382,6 +2384,12 @@ class UnipileClient:
         except UnipileAuthError:
             raise
         except Exception as e:
+            # A 404 is a gone chat (deleted, or the person disconnected), not
+            # an empty one. Returning [] here left every caller's 404 branch
+            # unreachable: a reply was written from local history and the send
+            # then failed with the same 404. Each caller says what it means.
+            if getattr(getattr(e, "response", None), "status_code", None) == 404:
+                raise
             logger.warning(f"Failed to fetch chat messages: {e}")
             return []
 
@@ -2404,6 +2412,11 @@ class UnipileClient:
                     return True
             return False
         except Exception as e:
+            if getattr(getattr(e, "response", None), "status_code", None) == 404:
+                # The chat is gone, so the message is not in it: the same
+                # False as a read-back that did not find it, named as such.
+                logger.warning("DM verification: chat %s no longer exists (404)", chat_id)
+                return False
             logger.warning("DM verification failed for chat %s: %s", chat_id, e)
             return False
 
@@ -3503,6 +3516,7 @@ class UnipileClient:
                         pass
                 messages.append({
                     "sender_id": str(sender_id),
+                    "is_sender": sender_flag(msg),
                     "sender_name": str(sender_name),
                     "text": text,
                     "timestamp": timestamp,
@@ -3577,6 +3591,7 @@ class UnipileClient:
                         pass
                 messages.append({
                     "sender_id": str(msg_sender_id),
+                    "is_sender": sender_flag(msg),
                     "sender_name": str(sender_name),
                     "text": text,
                     "timestamp": timestamp,
@@ -4563,6 +4578,7 @@ class UnipileClient:
                 messages.append({
                     "sender_name": sender_name,
                     "sender_id": str(sender_id),
+                    "is_sender": sender_flag(last_msg),
                     "text": text,
                     "timestamp": timestamp,
                     "conversation_urn": str(chat_id),

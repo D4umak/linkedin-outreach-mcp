@@ -89,6 +89,14 @@ and a 1st-degree connection guard before it goes out. Launching is also what
 commissions 24/7 cloud sending — in `observe` mode nothing is commissioned and
 nothing is sent, from either machine.
 
+**Approval mode (hosted):** a workspace that has not chosen otherwise holds
+every opening DM and follow-up until a person approves it, and the approved
+text is what is sent. Read what is waiting on the dashboard's Approvals page or
+with `inspect(action="waiting")`; decide with `prospect(action="approve_message")`
+or `discard_message`. Autopilot sends them unread and is one switch away
+(Settings → Sending, or `scheduler(action="approval_mode", mode="autopilot")`).
+Invitations, InMail and replies are never held.
+
 ---
 
 ## Tools

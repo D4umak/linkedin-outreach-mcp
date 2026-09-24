@@ -29,11 +29,14 @@ def beat_is_stale(
     mode: str,
     now: int | None = None,
 ) -> bool:
-    if (mode or "").strip().lower() == "off":
-        return False
-    ts = int(beat.get("created_at") or 0)
-    when = int(now if now is not None else time.time())
-    return bool(ts) and (when - ts) > STALE_AFTER_SECONDS
+    """Sibling agents are event-driven, not periodic daemons.
+
+    They execute only when triggers arrive (replies, accepted invites, signals).
+    An idle agent with no pending events is normal and never stale. Reading an
+    old beat as a fault let the coordinator hold a whole campaign because
+    nobody had replied lately; the hosted repo fixed it the same way.
+    """
+    return False
 
 
 def upsert_beat(

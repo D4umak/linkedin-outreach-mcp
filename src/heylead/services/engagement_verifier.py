@@ -148,6 +148,11 @@ async def verify_dm(
 
         result["error"] = "Message not found in chat history"
     except Exception as e:
+        if getattr(getattr(e, "response", None), "status_code", None) == 404:
+            # A gone chat holds no message of ours: unverified, as before,
+            # with the cause named instead of the transport's wording.
+            result["error"] = "Chat no longer exists (404)"
+            return result
         logger.debug("verify_dm failed: %s", e)
         result["error"] = str(e)
 
@@ -336,6 +341,12 @@ async def post_send_verify_and_delete(
 
     except Exception as e:
         # Verification must NEVER crash the send flow
+        if getattr(getattr(e, "response", None), "status_code", None) == 404:
+            # The chat went away after the send: nothing to verify or delete.
+            # This used to arrive as an empty chat (no_messages_returned).
+            logger.warning("post_send_verify: chat %s no longer exists (404)", chat_id)
+            result["error"] = "Chat no longer exists (404)"
+            return result
         logger.warning("post_send_verify_and_delete failed: %s", e)
         result["error"] = str(e)
     finally:

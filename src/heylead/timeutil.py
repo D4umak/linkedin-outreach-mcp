@@ -78,3 +78,15 @@ def to_epoch(value: Any, now: int | None = None) -> int | None:
             return to_epoch(number, now) if math.isfinite(number) else None
         return _from_relative(text.lower(), now if now is not None else int(_time.time()))
     return None
+
+
+def signal_sent_at(signal: dict | None) -> int | None:
+    """When an inbound signal's message was sent, or None when nobody told us.
+
+    Never the signal's ``created_at``: that is when WE noticed it, and a
+    message stored at that time reads as fresh for as long as a backfill lags
+    (heylead-api stored a 2021 message as 9 Sep 2026 this way). None says the
+    time is unknown; the caller decides what that means. Pure: no database, so
+    async code may call it directly.
+    """
+    return to_epoch((signal or {}).get("sent_at"))

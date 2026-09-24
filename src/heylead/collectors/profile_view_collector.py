@@ -30,6 +30,7 @@ from ..db.signal_queries import (
     signal_exists,
     upsert_signal_account,
 )
+from ..services.profile_signals import role_hit
 from ..textutil import contains_term
 
 logger = logging.getLogger(__name__)
@@ -405,7 +406,10 @@ def _title_phrase_matches(keyword: str, title_lower: str) -> bool:
     """True when *keyword* appears in *title_lower*, allowing plural stems."""
     if not keyword:
         return False
-    if contains_term(title_lower, keyword):
+    # The shared title matcher first ("CTO" holds "Chief Technology Officer",
+    # "VP Engineering" holds "VP of Engineering"); the stemmed fallback below
+    # still reads "Heads of Product" as "Head of Product".
+    if role_hit(title_lower, [keyword]):
         return True
     stemmed_kw = _normalize_title_phrase(keyword)
     stemmed_title = _normalize_title_phrase(title_lower)

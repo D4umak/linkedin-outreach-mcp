@@ -11,7 +11,7 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Collection
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +59,27 @@ _HIRING_ROLE_NEEDLES = [
 _TITLE_EXPANSIONS: dict[str, list[str]] = {
     "cto": ["cto", "chief technology officer", "chief technology"],
     "chief technology officer": ["cto", "chief technology officer", "chief technology"],
+    # The backend's table (heylead-api app/services/profile_signals.py), which
+    # this copy had fallen behind: "ceo" was the C-level both missed, and an
+    # ICP written "VP Engineering" got no expansion at all.
+    "ceo": ["ceo", "chief executive officer"],
+    "chief executive officer": ["ceo", "chief executive officer"],
+    # The security and information chiefs, which headlines abbreviate too
+    # (23 Sep 2026: "CISO | ...", "CIO @ALTEN" filed icp_mismatch against an
+    # ICP naming them in full). "CIO" also means Chief Investment Officer on
+    # LinkedIn; the fit check reads the profile before anyone is enrolled.
+    "ciso": ["ciso", "chief information security officer"],
+    "chief information security officer": ["ciso", "chief information security officer"],
+    "cio": ["cio", "chief information officer"],
+    "chief information officer": ["cio", "chief information officer"],
     "cpo": ["cpo", "chief product officer"],
     "cfo": ["cfo", "chief financial officer"],
     "coo": ["coo", "chief operating officer"],
     "vp of engineering": [
         "vp of engineering", "vice president of engineering", "vp engineering",
+    ],
+    "vp engineering": [
+        "vp engineering", "vp of engineering", "vice president of engineering",
     ],
     "vice president of engineering": [
         "vp of engineering", "vice president of engineering",
@@ -366,13 +382,52 @@ def _role_needles(titles: list[str] | None, hiring: bool) -> list[str]:
     return out
 
 
+# Between the words of a role needle, people write a space, a comma, a dash, or
+# a connective — "VP Engineering", "VP of Engineering", "VP, Engineering",
+# "VP - Engineering" are one job. Only these may bridge the gap: an arbitrary
+# word must not, or "engineering manager" would match "engineering intern and
+# marketing manager". Same as the backend's.
+_ROLE_GAP = r"[\s,\-\u2013\u2014/|]+(?:(?:of|the|for|and)[\s,\-\u2013\u2014/|]+)?"
+
+
 def _role_match(hay: str, needle: str) -> bool:
     n = _norm(needle)
     if not n or not hay:
         return False
     if n == "chief":
         return bool(re.search(r"(?<!in-)(?<!\w)chief(?!\w)", hay))
-    return bool(re.search(rf"(?<!\w){re.escape(n)}(?!\w)", hay))
+    body = _ROLE_GAP.join(re.escape(part) for part in n.split())
+    return bool(re.search(rf"(?<!\w){body}(?!\w)", hay))
+
+
+def role_hit(
+    text: str | Collection[str] | None,
+    titles: Collection[str] | None,
+    *,
+    hiring: bool = False,
+) -> str:
+    """The ICP title (or the alias of one) that *text* holds as a role, or "".
+
+    The one answer to "is this person's title one the ICP names?", shared with
+    the backend (heylead-api profile_signals.role_hit). Until 23 Sep 2026 only
+    the role gate below knew that "CTO" is the Chief Technology Officer;
+    icp_match_scorer, the comment-mining collector and the profile-view
+    collector matched the ICP's words as one exact phrase, so an ICP that
+    spelled its titles out turned every CTO away.
+    tests/test_one_title_matcher.py holds them to one answer.
+
+    *text* is one field or several (title, headline), matched one at a time:
+    the gap between a title's words tolerates a space, so a title ending
+    "... VP" and a headline starting "Engineering intern" must not be joined.
+    """
+    fields = [text] if isinstance(text, str) or text is None else list(text)
+    hays = [h for h in (_norm(str(f or "")) for f in fields) if h]
+    if not hays:
+        return ""
+    for needle in _role_needles(list(titles or []), hiring):
+        if any(_role_match(hay, needle) for hay in hays):
+            return needle
+    return ""
 
 
 def score_role(
@@ -382,16 +437,16 @@ def score_role(
     """Keep hiring titles / stems. Never a bare 'engineering' or stopword."""
     if not role_facet or not role_facet.get("required"):
         return {"keep": True, "hit": "", "explain": []}
-    hay = _norm(_field_text([
-        (card_or_profile or {}).get("title"),
-        (card_or_profile or {}).get("headline"),
-    ]))
-    for needle in _role_needles(
-        list(role_facet.get("titles") or []),
-        bool(role_facet.get("hiring")),
-    ):
-        if _role_match(hay, needle):
-            return {"keep": True, "hit": needle, "explain": [f"role:{needle}"]}
+    fields = [
+        _field_text((card_or_profile or {}).get("title")),
+        _field_text((card_or_profile or {}).get("headline")),
+    ]
+    needle = role_hit(
+        fields, list(role_facet.get("titles") or []),
+        hiring=bool(role_facet.get("hiring")),
+    )
+    if needle:
+        return {"keep": True, "hit": needle, "explain": [f"role:{needle}"]}
     return {
         "keep": False, "hit": "", "explain": ["role_miss"], "dropped": "role_miss",
     }

@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from .llm import LLMClient
+from .voice_block import voice_prompt_block
 
 logger = logging.getLogger(__name__)
 
@@ -730,12 +731,17 @@ async def _guard_inbound_result(
     message_type: str,
     max_chars: int = 500,
 ) -> dict[str, str]:
-    """Run the shared draft guard so opaque consulting-speak cannot ship."""
+    """Run the shared draft guard so opaque consulting-speak cannot ship, then
+    the copy rules' read-back, so a formula opener or a sign-off cannot
+    either (23 Sep 2026; the api reads its own inbound DMs back the same way)."""
+    from .copywriter import channel_for_message_type
+    from .copywriter.polish import read_back
     from .draft_guard import guard_draft
 
     out = dict(result)
-    out["message"] = await guard_draft(
-        result.get("message", ""), voice, message_type, max_chars,
+    out["message"] = await read_back(
+        await guard_draft(result.get("message", ""), voice, message_type, max_chars),
+        channel=channel_for_message_type(message_type), max_chars=max_chars,
     )
     return out
 
@@ -767,7 +773,8 @@ Output a JSON object with "message" and "reasoning" fields. No markdown or code 
 
 _DISCOVERY_PROMPT = """Generate a contextual LinkedIn reply.
 
-My voice: {voice_desc}
+MY VOICE
+{voice_desc}
 {sender_context}
 
 Signal type: {signal_type}
@@ -805,7 +812,8 @@ Output a JSON object with "message" and "reasoning" fields. No markdown or code 
 
 _COUNTER_PITCH_PROMPT = """Generate a counter-pitch LinkedIn reply to a vendor who pitched me.
 
-My voice: {voice_desc}
+MY VOICE
+{voice_desc}
 {sender_context}
 
 My product/company: {my_offering}
@@ -871,7 +879,7 @@ async def generate_counter_pitch(
         len(content or ""),
         len(conversation_history or []),
     )
-    voice_desc = f"Tone: {voice.get('tone', 'professional')}, style: {voice.get('sentence_length', 'concise')}"
+    voice_desc = voice_prompt_block(voice) or "Plain and direct."
 
     # Build our offering description from campaign context
     my_offering = ""
@@ -995,7 +1003,7 @@ async def generate_discovery_question(
         message_hash(content),
         len(content or ""),
     )
-    voice_desc = f"Tone: {voice.get('tone', 'professional')}, style: {voice.get('sentence_length', 'concise')}"
+    voice_desc = voice_prompt_block(voice) or "Plain and direct."
 
     content_section = f'Their message(s):\n"""\n{(content or "")[:2500]}\n"""' if content else "No message — silent connection."
 

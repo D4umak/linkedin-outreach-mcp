@@ -13,6 +13,7 @@ from typing import Any
 
 from .llm import LLMClient
 from .llm import loads_json_object as parse_json
+from .voice_block import voice_prompt_block
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ Campaign Acceptance Rate: {acceptance_rate}
 Campaign Reply Rate: {reply_rate}
 
 ## VOICE ANALYSIS
-Tone: {voice_tone}
+{voice_block}
 Expertise: {expertise}
 
 ## TARGET AUDIENCE (from active campaigns)
@@ -160,7 +161,8 @@ Name: {name}
 Title: {title} at {company}
 Industry: {industry}
 Expertise: {expertise}
-Voice Tone: {voice_tone}
+Voice:
+{voice_block}
 
 ## BRAND AUDIT RESULTS
 Overall Score: {overall_score}/100
@@ -273,8 +275,7 @@ Industry: {industry}
 Expertise: {expertise}
 
 ## VOICE
-Tone: {voice_tone}
-Formality: {formality_level}/10
+{voice_block}
 
 ## ISSUES WITH CURRENT
 {issues}
@@ -312,9 +313,7 @@ Industry: {industry}
 Expertise: {expertise}
 
 ## VOICE
-Tone: {voice_tone}
-Formality: {formality_level}/10
-Patterns: {voice_patterns}
+{voice_block}
 
 ## ISSUES
 {issues}
@@ -429,7 +428,7 @@ async def analyze_brand_profile(
         "ssi_pillars": pillar_str,
         "acceptance_rate": f"{campaign_stats.get('acceptance_rate', 0):.0%}",
         "reply_rate": f"{campaign_stats.get('reply_rate', 0):.0%}",
-        "voice_tone": voice.get("tone", "Not analyzed"),
+        "voice_block": voice_prompt_block(voice) or "Not analyzed",
         "expertise": expertise.get("core", "Not analyzed"),
         "icp_context": format_icp_context(icp_context),
     }
@@ -468,7 +467,7 @@ async def generate_brand_plan(
         "company": profile.get("company", ""),
         "industry": profile.get("industry", ""),
         "expertise": expertise.get("core", ""),
-        "voice_tone": voice.get("tone", "professional"),
+        "voice_block": voice_prompt_block(voice),
         "overall_score": analysis.get("overall_score", 0),
         "headline_score": areas.get("headline", {}).get("score", 0),
         "headline_issues": ", ".join(areas.get("headline", {}).get("issues", [])),
@@ -549,9 +548,7 @@ async def generate_brand_action(
         "company": profile.get("company", ""),
         "industry": profile.get("industry", ""),
         "expertise": _expertise_core(expertise, profile),
-        "voice_tone": voice.get("tone", "professional"),
-        "formality_level": voice.get("formality_level", 5),
-        "voice_patterns": ", ".join(voice.get("communication_style", [])[:5]),
+        "voice_block": voice_prompt_block(voice),
         "icp_context": icp_str,
     }
 

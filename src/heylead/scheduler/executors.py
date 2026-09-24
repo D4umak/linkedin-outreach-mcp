@@ -1555,6 +1555,7 @@ async def _execute_auto_reply(job: dict[str, Any]) -> str:
         "negative sentiment", "reverse pitch", "vendor pitch", "failed validation",
         "limit reached", "wrong person", "targeting mismatch",
         "held for operator", "reply agent skipped",
+        "chat not found",
         JOB_SEARCH_HELD_MESSAGE.lower(),
     )
     _error_phrases = (
@@ -1619,6 +1620,8 @@ async def _execute_accept_inbound(job: dict[str, Any]) -> str:
     """
     from ..linkedin import UnipileError, get_account_id, get_linkedin_client
 
+    from ..timeutil import to_epoch as _to_epoch
+
     logger.info("Scheduler: checking inbound invitations")
 
     account_id = await run_db(get_account_id)
@@ -1657,6 +1660,7 @@ async def _execute_accept_inbound(job: dict[str, Any]) -> str:
                 sender_id=sender_id,
                 sender_headline=inv.get("headline", ""),
                 content=inv.get("message", ""),
+                sent_at=_to_epoch(inv.get("timestamp")),
             )
             saved += 1
 

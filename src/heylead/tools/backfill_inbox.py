@@ -12,7 +12,7 @@ import logging
 import time
 from typing import Any
 
-from ..timeutil import to_epoch
+from ..timeutil import signal_sent_at, to_epoch
 from ..ai.inbound_qualifier import (
     InboundQualification,
     generate_discovery_question,
@@ -33,6 +33,7 @@ from ..db.queries import (
     update_outreach,
 )
 from ..db.signal_queries import get_contact_by_linkedin_id
+from ..linkedin.message_sender import message_is_ours
 from ..tools.inbox import _extract_chat_info, _fetch_raw_chats, _resolve_profile
 
 logger = logging.getLogger(__name__)
@@ -277,9 +278,10 @@ async def _send_classified_signals(
                     await run_db(
                         save_message, outreach_id, role="prospect",
                         text=signal.get("content", ""),
-                        # Backfill runs long after the fact — stamp the message
-                        # when the signal was detected, not when we import it.
-                        timestamp=to_epoch(signal.get("created_at")),
+                        # Backfill runs long after the fact: stamp the message
+                        # when they SENT it (the signal's provider time) --
+                        # the signal's own created_at is only when we noticed.
+                        timestamp=signal_sent_at(signal),
                         external_message_id=signal.get("message_id") or None,
                     )
                     await run_db(
@@ -413,7 +415,7 @@ async def _backfill(
             # Check if we (account owner) ever replied in this chat
             our_messages = [
                 m for m in msgs
-                if m.get("sender_id") == our_provider_id
+                if message_is_ours(m, our_provider_id)
             ]
             our_last_message = ""
             if our_messages:
@@ -428,7 +430,7 @@ async def _backfill(
             # Collect the prospect's messages
             prospect_msgs = [
                 m for m in msgs
-                if m.get("sender_id") and m.get("sender_id") != our_provider_id
+                if m.get("sender_id") and not message_is_ours(m, our_provider_id)
             ]
             if not prospect_msgs:
                 skipped_no_text += 1
@@ -536,6 +538,7 @@ async def _backfill(
             sender_headline=u.get("sender_headline", ""),
             content=u["text"],
             message_id=u.get("message_id", ""),
+            sent_at=to_epoch(u.get("timestamp")),
         )
 
         # Classify

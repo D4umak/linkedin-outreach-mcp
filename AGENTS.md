@@ -1,5 +1,9 @@
 # HeyLead — Agent Integration Guide
 
+For repository changes, read CLAUDE.md and [docs/delivery.md](docs/delivery.md).
+Ship one complete outcome per PR, with its tests and self-review corrections.
+Queue labels never replace the user's separate merge/release authorization.
+
 ## What HeyLead Does
 
 HeyLead is an autonomous LinkedIn SDR (Sales Development Representative) that runs entirely via MCP tools. It finds prospects, sends personalized outreach, follows up, tracks replies, and closes deals — all through natural language commands.

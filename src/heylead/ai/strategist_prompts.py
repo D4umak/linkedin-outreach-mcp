@@ -49,7 +49,8 @@ STRATEGIST_BATCH_PROMPT = """Plan today's actions for each prospect below.
 ## Campaign Context
 Campaign: {campaign_name}
 ICP: {icp_summary}
-Voice style: {voice_summary}
+Voice:
+{voice_summary}
 
 ## Previous Plan Feedback (best & worst from last 7 days)
 {feedback_section}

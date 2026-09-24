@@ -14,6 +14,7 @@ no campaign_id, and nobody is enrolled as a contact — this collector only read
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any
@@ -23,7 +24,7 @@ from ..db.async_bridge import run_db
 from ..db.queries import get_connections_to_scan, mark_connection_scanned
 from ..db.signal_queries import save_signal, signal_exists
 from ..linkedin import get_account_id, get_linkedin_client
-from ..timeutil import to_epoch
+from ..services.post_freshness import post_item_published_at
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,8 @@ async def collect_network_posts(limit: int = 25) -> str:
     scanned = 0
     saved = 0
     errors = 0
-    cutoff = int(time.time()) - (SIGNAL_PROSPECT_POST_LOOKBACK_DAYS * 86400)
+    now = int(time.time())
+    cutoff = now - (SIGNAL_PROSPECT_POST_LOOKBACK_DAYS * 86400)
 
     try:
         for conn in connections:
@@ -70,10 +72,14 @@ async def collect_network_posts(limit: int = 25) -> str:
                 text = (post.get("text") or "").strip()
                 if not text:
                     continue
-                posted_at = to_epoch(post.get("date") or post.get("timestamp"))
-                if posted_at and posted_at < cutoff:
-                    continue
                 post_id = str(post.get("id") or "")
+                # An undated post is skipped, not kept: `if posted_at and ...`
+                # let a post whose age could not be read through as fresh.
+                posted_at = post_item_published_at(
+                    post_id, post.get("date") or post.get("timestamp"), now,
+                )
+                if posted_at is None or posted_at < cutoff:
+                    continue
                 # Rotation re-reads the same connection on later runs, so without
                 # this the same post was saved once per scan: 2,229 prospect_post
                 # signals over 1,450 distinct post_ids, one post stored 36 times,
@@ -107,6 +113,7 @@ async def collect_network_posts(limit: int = 25) -> str:
                         campaign_id=None,
                         content=text[:4000],
                         post_id=post_id,
+                        metadata_json=json.dumps({"published_at": posted_at}),
                     )
                     saved += 1
                 except Exception as e:

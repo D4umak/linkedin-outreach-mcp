@@ -239,6 +239,11 @@ async def _resolve_from_outreach(
     try:
         chat_messages = await client.get_chat_messages(account_id, chat_id, limit=10)
     except Exception as e:
+        if getattr(getattr(e, "response", None), "status_code", None) == 404:
+            return {
+                "error": "This LinkedIn chat no longer exists (deleted, or the "
+                "person disconnected), so there is no message to delete.",
+            }
         logger.error(f"Failed to fetch chat messages: {e}")
         return {"error": f"Could not fetch chat messages: {e}"}
 

@@ -49,6 +49,7 @@ from ..constants import (
     JOB_SEND_DM,
 )
 from ..db.async_bridge import run_db
+from ..ai.voice_block import voice_prompt_block
 
 logger = logging.getLogger(__name__)
 
@@ -680,6 +681,7 @@ async def _legal_channels(prospect: dict, *, dm_only: bool) -> tuple[str, bool]:
     """First-touch picker + email legality for one prospect row."""
     from .action_timeline import email_is_legal
     from .outreach_channel import choose_first_touch
+    from ..author_identity import contact_provider_id
     from ..tier import get_caps
 
     try:
@@ -700,7 +702,9 @@ async def _legal_channels(prospect: dict, *, dm_only: bool) -> tuple[str, bool]:
             is_first_degree=is_first,
             can_send_credit_inmail=caps.can_send_credit_inmail,
             is_open_profile=bool(profile.get("is_open_profile")),
-            has_provider_id=bool(profile.get("provider_id")),
+            # Both places the id is stored: reading the blob alone judged a
+            # reachable person unreachable and picked the wrong first touch.
+            has_provider_id=bool(contact_provider_id(prospect)),
         )
     from .channel_selector import _extract_email
     has_address = bool(_extract_email(prospect) or _extract_email(profile))
@@ -766,12 +770,12 @@ async def _build_campaign_context(campaign: dict) -> dict:
     # so it must be read fresh — no module cache. run_db keeps the sync read
     # off the event loop thread, where get_db() raises.
     voice = await run_db(get_setting, "voice_signature", {})
-    voice_summary = ""
-    if isinstance(voice, dict):
-        voice_summary = voice.get("tone", "professional") + ", " + voice.get("style", "")
+    # The whole signature. This used to read the tone and a "style" key no
+    # analysis ever wrote, so the planner saw "professional, " for everyone.
+    voice_summary = voice_prompt_block(voice) if isinstance(voice, dict) else ""
 
     return {
         "name": campaign.get("name", ""),
         "icp_summary": icp_summary[:200],
-        "voice_summary": voice_summary[:100],
+        "voice_summary": voice_summary[:600],
     }

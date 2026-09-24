@@ -20,11 +20,12 @@ import time
 from typing import Any
 
 from ..ai.comment_generator import generate_comment, COMMENT_MAX_CHARS
+from ..ai.voice_block import voice_prompt_block
 from ..ai.message_fixer import fix_message
 from ..ai.message_improver import improve_message
 from ..ai.message_validator import validate_comment
 from ..ai.prospect_analyzer import analyze_prospect
-from ..config import get_tier, is_backend_mode
+from ..config import apply_free_monthly_caps, get_tier, is_backend_mode
 from ..constants import (
     AUTO_REACT_PROBABILITY,
     COMMENT_MAX_CHARS as COMMENT_LIMIT,
@@ -200,9 +201,7 @@ async def run_engage_prospect(
     # ── Step 2: Check monthly limits ──
     # Hosted billing lives on the host. A leftover local `tier: free` must
     # not cap a signed-in account — same rule as create_campaign.
-    tier = get_tier()
-    apply_free_caps = (not is_backend_mode()) and tier != TIER_PRO
-    if apply_free_caps:
+    if apply_free_monthly_caps():
         usage = await db.get_monthly_usage()
         monthly_engagements = usage.get("engagements_sent", 0)
         if monthly_engagements >= FREE_MAX_ENGAGEMENTS:
@@ -631,6 +630,8 @@ async def run_engage_prospect(
 
 def _is_post_by_prospect(search_result: dict, candidate: dict) -> bool:
     """Check if a search_posts result was authored by the given prospect."""
+    from ..author_identity import contact_provider_id
+
     author_name = (search_result.get("author_name") or "").lower().strip()
     prospect_name = (candidate.get("name") or "").lower().strip()
     if not author_name or not prospect_name:
@@ -645,13 +646,9 @@ def _is_post_by_prospect(search_result: dict, candidate: dict) -> bool:
     # Check author_id matches provider_id
     author_id = search_result.get("author_id", "")
     if author_id:
-        profile_data = {}
-        if candidate.get("profile_json"):
-            try:
-                profile_data = json.loads(candidate["profile_json"])
-            except (json.JSONDecodeError, TypeError):
-                pass
-        provider_id = profile_data.get("provider_id", "")
+        # Both places the id is stored, so an id-carrying row is not left to
+        # the name comparison above.
+        provider_id = contact_provider_id(candidate)
         if provider_id and author_id == provider_id:
             return True
     return False
@@ -1371,19 +1368,7 @@ async def _handle_reply_comment(
             voice = await db.get_setting("voice_signature", {})
             from ..ai.llm_router import call_llm
 
-            prompt = f"""Generate a brief reply to this LinkedIn comment thread.
-
-Your original comment: "{our_comment}"
-{prospect_name}'s reply: "{reply_text}"
-
-Write a natural, voice-matched reply (2-3 sentences max).
-Voice style: {voice.get('style', 'professional')}
-Tone: {voice.get('tone', 'conversational')}
-
-Keep it short and conversational. If they asked a question, answer it.
-If they agreed, build on the point. Aim to advance the relationship.
-
-Return ONLY the reply text."""
+            prompt = comment_reply_prompt(our_comment, reply_text, prospect_name, voice)
 
             reply_content = await call_llm(prompt, max_tokens=200)
         except Exception as e:
@@ -1450,3 +1435,28 @@ Return ONLY the reply text."""
         f"No new replies from {prospect_name} on your comments.\n\n"
         "They haven't responded to your comments yet. Try engaging with a new post."
     )
+
+
+def comment_reply_prompt(
+    our_comment: str, reply_text: str, prospect_name: str, voice: dict[str, Any] | None,
+) -> str:
+    """The prompt for a reply in a comment thread we started.
+
+    Renders the whole voice signature. Until 21 Sep 2026 this asked for a
+    "style" key no analysis writes, and told the model "professional" for
+    every user.
+    """
+    return f"""Generate a brief reply to this LinkedIn comment thread.
+
+Your original comment: "{our_comment}"
+{prospect_name}'s reply: "{reply_text}"
+
+Write a natural, voice-matched reply (2-3 sentences max).
+
+HOW YOU WRITE
+{voice_prompt_block(voice) or "Plain and direct."}
+
+Keep it short and conversational. If they asked a question, answer it.
+If they agreed, build on the point. Aim to advance the relationship.
+
+Return ONLY the reply text."""

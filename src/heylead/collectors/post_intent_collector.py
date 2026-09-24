@@ -74,6 +74,7 @@ async def classify_post_intents() -> str:
         update_signal,
         upsert_signal_account,
     )
+    from ..services.post_freshness import post_id_published_at, post_published_at
 
     hook_types = (
         SIGNAL_POST_PAIN_POINT,
@@ -151,6 +152,10 @@ async def classify_post_intents() -> str:
             continue
 
         classified += 1
+        # Every signal derived here cites this post. The window above is on
+        # first_seen_at, i.e. when we found it, which says nothing about when
+        # it was written; activation reads this instead.
+        published_at = post_id_published_at(post_id, now)
 
         # ── Keyword-based intent detection ──
         detected_intents: list[tuple[str, str, float, int]] = []  # (signal_type, category, confidence, ttl)
@@ -201,11 +206,14 @@ async def classify_post_intents() -> str:
             )
             prospect_id = None
             campaign_id = None
+            source_published_at = None
             if prospect_signals:
                 prospect_id = prospect_signals[0].get("prospect_id")
                 campaign_id = prospect_signals[0].get("campaign_id")
+                source_published_at = post_published_at(prospect_signals[0], now)
 
             metadata = {
+                "published_at": source_published_at or published_at,
                 "intent_category": category,
                 "post_text_preview": text[:200],
                 "impressions_count": post.get("impressions_count", 0),
@@ -259,6 +267,7 @@ async def classify_post_intents() -> str:
                             content=f"Reshared competitor content mentioning {comp_name}",
                             post_id=dedup_key,
                             metadata_json=json.dumps({
+                                "published_at": published_at,
                                 "competitor_name": comp_name,
                                 "post_preview": text[:200],
                             }),
@@ -287,6 +296,7 @@ async def classify_post_intents() -> str:
                             content=f"Reshared our content ({our_name})",
                             post_id=dedup_key,
                             metadata_json=json.dumps({
+                                "published_at": published_at,
                                 "our_company": our_name,
                                 "post_preview": text[:200],
                             }),
@@ -326,6 +336,7 @@ def _classify_company_posts(now: int) -> int:
     )
     from ..db.post_queries import list_posts
     from ..db.signal_queries import save_signal, signal_exists, upsert_signal_account
+    from ..services.post_freshness import post_id_published_at
 
     # Map topic categories to signal types and TTLs
     topic_map: dict[str, tuple[str, int]] = {
@@ -374,6 +385,7 @@ def _classify_company_posts(now: int) -> int:
                 content=f"Company post about {category}: {text[:200]}",
                 post_id=dedup_key,
                 metadata_json=json.dumps({
+                    "published_at": post_id_published_at(post_id, now),
                     "topic": category,
                     "matched_keywords": matched[:5],
                     "post_preview": text[:200],

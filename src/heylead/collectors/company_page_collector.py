@@ -50,6 +50,7 @@ async def collect_company_page_signals() -> str:
     )
     from ..linkedin import get_account_id, get_linkedin_client
     from ..linkedin.search_traffic import search_scope
+    from ..services.post_freshness import post_item_published_at
 
     account_id = await run_db(get_account_id)
     if not account_id:
@@ -135,6 +136,10 @@ async def collect_company_page_signals() -> str:
 
                 if not post_id:
                     continue
+                # The engagement cites this post; activation reads its age.
+                published_at = post_item_published_at(
+                    post_id, post.get("timestamp") or post.get("date"), now,
+                )
 
                 # Ensure post is tracked
                 tracked = await run_db(get_company_post_by_post_id, post_id)
@@ -191,6 +196,7 @@ async def collect_company_page_signals() -> str:
                                     "commenter_name": author_name,
                                     "commenter_id": author_id,
                                     "post_id": post_id,
+                                    "published_at": published_at,
                                     "post_text": post_text[:200],
                                     "comment_text": (comment.get("text") or "")[:200],
                                 }
@@ -249,6 +255,7 @@ async def collect_company_page_signals() -> str:
                                 "reactor_name": author_name,
                                 "reactor_id": author_id,
                                 "post_id": post_id,
+                                "published_at": published_at,
                                 "reaction_type": "POST_MENTION",
                                 "source": "search",
                             }
@@ -302,6 +309,7 @@ async def collect_company_page_signals() -> str:
                                     "reactor_name": author_name,
                                     "reactor_id": author_id,
                                     "post_id": post_id,
+                                    "published_at": published_at,
                                     "reaction_type": reaction.get("type", "LIKE"),
                                 }
                                 await run_db(

@@ -887,6 +887,12 @@ SIGNAL_CLASSIFY_ROW_TIMEOUT_SECONDS = 10.0
 # this ratio.
 SIGNAL_CLASSIFY_OLDEST_SHARE = 2 / 3
 SIGNAL_PROSPECT_POST_LOOKBACK_DAYS = 7   # Only analyze posts from last 7 days
+# Activation declines a signal whose cited LinkedIn post was published longer
+# ago than this ("stale_source"), or whose publication time is unknown
+# ("missing_source_time"): an opener must not cite a months-old post as news.
+# Same name and value as heylead-api's hosted_signals.PROSPECT_POST_MAX_AGE_DAYS;
+# it covers every signal that cites a post, not only prospect_post.
+PROSPECT_POST_MAX_AGE_DAYS = 30
 SIGNAL_JOB_CHANGE_BATCH = 50             # Max profiles per job change scan
 SIGNAL_JOB_CHANGE_RESCAN_DAYS = 7        # Re-scan each contact weekly
 
@@ -1587,3 +1593,10 @@ SOURCE_LABELS: dict[str, str] = {
     SOURCE_MANUAL: "Manual",
     "search": "LinkedIn Search",  # backwards compat for old data
 }
+
+
+# The label the cloud's reply lane puts on every message it writes, in the
+# message's ``sentiment``: ``move:<name>`` (heylead-api reply_policy.MOVE_PREFIX).
+# The cloud pull brings it down; show_conversation renders it and Needs
+# attention reads it to tell the lane from a person (db.queries._pending_handoff).
+MOVE_PREFIX = "move:"

@@ -26,7 +26,6 @@ from ..flags import flag_enabled
 from .agent_commons import async_commons_tools
 from .coordinator import after_sibling_loop
 from ..services.prospect_email import extract_profile_email
-from ..services.reply_agent import persist_operator_hold
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,23 @@ _AFFIRM = re.compile(
     r"go ahead)\b",
     re.I,
 )
-CloserKind = Literal["continue", "hold", "booked"]
+CloserKind = Literal["continue", "hold", "not_yet", "booked"]
+
+# The kernel words that mean "I could not finish my step this turn".
+_KERNEL_NOT_YET = frozenset({"hold", "none"})
+
+
+def beat_decision(kernel_decision: str) -> str:
+    """What the beat says the closer DID, not the word its kernel used.
+
+    The coordinator reads these beats and may hold the WHOLE campaign for
+    human review. On 22 Sep 2026 one prospect who expressed interest without
+    naming a time put a campaign under a coordinator hold -- reason "closer
+    agent is on hold, requiring human review" -- and blocked 21 sends to other
+    people until an operator cleared it. Nothing the closer decides for itself
+    is a human hold.
+    """
+    return "not_yet" if (kernel_decision or "") in _KERNEL_NOT_YET else kernel_decision
 
 
 @dataclass
@@ -149,12 +164,12 @@ async def maybe_run_hot_lead_closer(
 
         if mode == "act":
             if await run_db(_has_closer_today, outreach_id):
-                return await _hold(
+                return await _not_yet(
                     outreach_id, "already ran today", last_message_ts, last_message_id,
                     prospect_calendar_url,
                 )
             if await run_db(_books_today) >= HOT_LEAD_CLOSER_MAX_BOOKS_PER_DAY:
-                return await _hold(
+                return await _not_yet(
                     outreach_id, "daily book cap reached", last_message_ts, last_message_id,
                     prospect_calendar_url,
                 )
@@ -165,7 +180,7 @@ async def maybe_run_hot_lead_closer(
         if campaign_id and await run_db(coordinator_blocks_send, campaign_id):
             if mode == "observe":
                 return HotLeadCloserOutcome(kind="continue", reason="coordinator hold")
-            return await _hold(
+            return await _not_yet(
                 outreach_id, "coordinator hold", last_message_ts, last_message_id,
                 prospect_calendar_url,
             )
@@ -210,7 +225,7 @@ async def maybe_run_hot_lead_closer(
         await after_sibling_loop(
             agent="closer",
             campaign_id=campaign_id,
-            decision=result.decision,
+            decision=beat_decision(result.decision),
             reason=result.reason,
             config=campaign_config,
         )
@@ -258,7 +273,7 @@ async def maybe_run_hot_lead_closer(
                         "mode": mode,
                     },
                 )
-                return await _hold(
+                return await _not_yet(
                     outreach_id, booked[:240], last_message_ts, last_message_id,
                     prospect_calendar_url,
                 )
@@ -293,7 +308,7 @@ async def maybe_run_hot_lead_closer(
                 reason=f"observe — {reason}",
                 message=f"observe — {reason}",
             )
-        return await _hold(
+        return await _not_yet(
             outreach_id, reason, last_message_ts, last_message_id, prospect_calendar_url,
         )
     except Exception as e:
@@ -305,15 +320,15 @@ async def maybe_run_hot_lead_closer(
                 message=f"observe — closer could not run: {e}",
             )
         try:
-            return await _hold(
+            return await _not_yet(
                 outreach_id, str(e)[:240], last_message_ts, last_message_id,
                 prospect_calendar_url,
             )
         except Exception:
             return HotLeadCloserOutcome(
-                kind="hold",
+                kind="not_yet",
                 reason=str(e)[:240],
-                message="Held for operator — closer could not run. No reply will be sent.",
+                message="No booking yet — the closer could not run. The conversation continues.",
             )
 
 
@@ -343,22 +358,26 @@ def _booking_failed(result: str) -> bool:
     return text.startswith("could not") or text.startswith("error:")
 
 
-async def _hold(
+async def _not_yet(
     outreach_id: str,
     reason: str,
     message_ts: int,
     message_id: str,
     prospect_calendar_url: str,
 ) -> HotLeadCloserOutcome:
-    extra = {"prospect_calendar_url": prospect_calendar_url} if prospect_calendar_url else None
-    await run_db(
-        persist_operator_hold, outreach_id, reason, int(message_ts or 0),
-        message_id or "", extra,
-    )
+    """"I could not finish MY step this turn" — which is not a hold.
+
+    Until 22 Sep 2026 every one of these wrote ``hold_for_operator`` on the
+    row, and reply_to_prospect reads that field before anything else: the
+    closer needs a time to book, and the reply that would have ASKED for one
+    was the thing the hold silenced. The closer owns the booking step only, so
+    it now stands aside and the reply lane keeps the conversation. The field
+    is left to work only a person can do (reply_agent).
+    """
     return HotLeadCloserOutcome(
-        kind="hold",
+        kind="not_yet",
         reason=reason,
-        message=f"Held for operator — {reason}. No reply will be sent.",
+        message=f"No booking yet — {reason}. The conversation continues.",
     )
 
 

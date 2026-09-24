@@ -24,6 +24,7 @@ import time
 from typing import Any
 
 from ..db.async_bridge import run_db
+from .post_freshness import MISSING_SOURCE_TIME, STALE_SOURCE, post_date_decline
 from .signal_linker import _match_best_campaign
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,8 @@ _QUIET_PARK_REASONS = frozenset({
     "no_in_campaign_match",
     "icp_mismatch",
     "behavioral_icp_mismatch",
+    MISSING_SOURCE_TIME,
+    STALE_SOURCE,
 })
 
 
@@ -113,6 +116,7 @@ def _backfill_pending_stamps() -> int:
         hooks = [
             s for s in list_signals(linkedin_id=contact["linkedin_id"], limit=50)
             if (s.get("signal_type") or "") in CLASSIFIED_POST_HOOK_TYPES
+            and post_date_decline(s) is None
         ]
         if not hooks:
             continue
@@ -682,6 +686,19 @@ async def activate_pending_signals() -> str:
         )
         by_id = {s["id"]: s for s in siblings}
         by_id[raw["id"]] = raw
+        # A post the opener would cite must be recent, and datable. Decline
+        # the rest before the per-person pick: a stale post that ranks higher
+        # would otherwise win, supersede a fresh sibling, and then be useless.
+        # After the identity check (rows with no linkedin_id went above), so a
+        # company-level row keeps its own label.
+        for sibling_id, sibling in list(by_id.items()):
+            decline = post_date_decline(sibling, now)
+            if decline:
+                await _mark_signal_parked(sibling, decline, now)
+                skipped += 1
+                del by_id[sibling_id]
+        if not by_id:
+            continue
         winner = _pick_best_signal(list(by_id.values()))
         for sibling in by_id.values():
             if sibling["id"] == winner["id"]:

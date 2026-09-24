@@ -18,6 +18,7 @@ from heylead import __version__
 from ..author_identity import parse_author_identity
 from ..constants import UNIPILE_POLL_INTERVAL_SECONDS, UNIPILE_POLL_TIMEOUT_SECONDS
 from ..guardrails import check_message, prepare_outbound_text
+from .message_sender import sender_flag
 from .api_metrics import api_metrics
 from .relations import RelationsPage
 from .search_traffic import SearchTraffic
@@ -161,6 +162,13 @@ _NO_LINKEDIN_SHORT = "No LinkedIn account connected."
 # 403 a viewer tried to act, 404 the active workspace is stale or gone.
 _REFUSAL_STATUSES = (400, 403, 404)
 
+# The one 404 from a proxy route that is about the chat, not the workspace:
+# /chats/{chat_id}/messages answers 404 with this ``code`` when Unipile says the
+# chat is gone (deleted, or the person disconnected). heylead-api sets it in
+# app/routers/proxy.py. Every other 404 there means a stale workspace, and a
+# stale workspace must not read as a gone chat.
+GONE_CHAT_CODE = "chat_not_found"
+
 # Framework defaults that name the status and nothing else. Showing "Not Found"
 # instead of today's message would lose information, so treat them as absent.
 _GENERIC_DETAILS = frozenset({"bad request", "forbidden", "not found"})
@@ -181,6 +189,15 @@ STALE_WORKSPACE_MSG = (
     "to see your workspaces, then "
     "organization(action='switch', org_id='...') to move to one."
 )
+
+
+def _is_gone_chat(resp: httpx.Response) -> bool:
+    """True for the proxy's 404 that says the chat itself is gone."""
+    try:
+        body = resp.json()
+    except Exception:
+        return False
+    return isinstance(body, dict) and body.get("code") == GONE_CHAT_CODE
 
 
 def _refusal_detail(resp: httpx.Response) -> str:
@@ -1751,6 +1768,7 @@ class BackendClient:
                 messages.append({
                     "sender_name": sender_name,
                     "sender_id": str(sender_id),
+                    "is_sender": sender_flag(last_msg),
                     "text": text,
                     "timestamp": timestamp,
                     "conversation_urn": str(chat_id),
@@ -2065,6 +2083,7 @@ class BackendClient:
                 messages.append({
                     "message_id": message_id,
                     "sender_id": str(sender_id),
+                    "is_sender": sender_flag(msg),
                     "sender_name": str(sender_name),
                     "text": text,
                     "timestamp": timestamp,
@@ -2073,6 +2092,12 @@ class BackendClient:
         except UnipileAuthError:
             raise
         except Exception as e:
+            # Only the proxy's gone-chat 404 goes through, as the same 404 the
+            # direct client raises; its other 404 is a stale workspace, which
+            # keeps today's handling. See GONE_CHAT_CODE.
+            response = getattr(e, "response", None)
+            if getattr(response, "status_code", None) == 404 and _is_gone_chat(response):
+                raise
             logger.warning(f"Failed to fetch chat messages via backend: {e}")
             return []
 
@@ -2095,6 +2120,11 @@ class BackendClient:
                     return True
             return False
         except Exception as e:
+            if getattr(getattr(e, "response", None), "status_code", None) == 404:
+                # The chat is gone, so the message is not in it: the same
+                # False as a read-back that did not find it, named as such.
+                logger.warning("DM verification: chat %s no longer exists (404)", chat_id)
+                return False
             logger.warning("DM verification failed for chat %s: %s", chat_id, e)
             return False
 
@@ -3051,6 +3081,7 @@ class BackendClient:
                         pass
                 messages.append({
                     "sender_id": str(sender_id),
+                    "is_sender": sender_flag(msg),
                     "sender_name": str(sender_name),
                     "text": text,
                     "timestamp": timestamp,
@@ -3124,6 +3155,7 @@ class BackendClient:
                         pass
                 messages.append({
                     "sender_id": str(msg_sender_id),
+                    "is_sender": sender_flag(msg),
                     "sender_name": str(sender_name),
                     "text": text,
                     "timestamp": timestamp,

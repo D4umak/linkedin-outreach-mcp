@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -18,18 +17,16 @@ logger = logging.getLogger(__name__)
 
 
 def _contact_provider_id(contact: dict) -> str:
-    """Extract LinkedIn provider_id (ACoAAA...) from a global contact row."""
-    pj = contact.get("profile_json") or {}
-    if isinstance(pj, str):
-        try:
-            pj = json.loads(pj)
-        except (ValueError, TypeError):
-            pj = {}
-    if isinstance(pj, dict):
-        pid = pj.get("provider_id") or ""
-        if pid:
-            return str(pid)
-    return ""
+    """Extract LinkedIn provider_id (ACoAAA...) from a global contact row.
+
+    Delegates, because a row stores that id in ``profile_json`` or in the
+    ``linkedin_id`` column and this reader used to know only the first. The
+    fallback below skips a contact with no id, so the miss surfaced as "No
+    conversation found" -- the same sentence as a chat that does not exist.
+    """
+    from ..author_identity import contact_provider_id
+
+    return contact_provider_id(contact)
 
 
 def _relative_time(ts: int) -> str:
@@ -545,7 +542,15 @@ async def _read_conversation(
     contact_provider_id = resolved["contact_provider_id"]
 
     # Fetch full message thread
-    messages = await client.get_chat_messages(account_id, chat_id, limit=limit)
+    try:
+        messages = await client.get_chat_messages(account_id, chat_id, limit=limit)
+    except Exception as e:
+        if getattr(getattr(e, "response", None), "status_code", None) == 404:
+            return (
+                f"Chat `{chat_id}` no longer exists on LinkedIn: it was deleted, "
+                "or the person disconnected."
+            )
+        raise
     if not messages:
         return f"No messages found in chat `{chat_id}`."
 

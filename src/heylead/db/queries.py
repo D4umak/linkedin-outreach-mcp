@@ -2096,10 +2096,20 @@ def _unanswered_lead_reason(
     except Exception:
         pass
     from ..formatter import format_wait_age
+    from ..services.meeting_handoff import handoff_in, operator_action
 
+    # A way to meet that only a person can finish is an ACTION, not a wait:
+    # nobody owes them a message. Until 22 Sep 2026 a prospect who sent their
+    # number or their own booking page read as "unanswered", and one waited
+    # 45 days in a list of people expecting a reply.
+    handoff = handoff_in(text or "")
+    if not handoff and calendar_url:
+        # Their page, found earlier and kept on the row: the same fact and the
+        # same action, so it must not read differently for being stored.
+        handoff = {"kind": "link", "value": calendar_url}
+    if handoff:
+        return operator_action(handoff), (calendar_url or handoff.get("value", ""))
     age = format_wait_age(hours)
-    if calendar_url:
-        return f"Booking link, unanswered {age}", calendar_url
     if sentiment in ("positive", "calendar"):
         return f"Meeting intent, unanswered {age}", calendar_url
     if sentiment == "engaged":
@@ -2109,6 +2119,97 @@ def _unanswered_lead_reason(
             return f"Declined, held for you {age}", calendar_url
         return f"Declined, closing reply unsent {age}", calendar_url
     return f"Unanswered reply, {age}", calendar_url
+
+
+# The cloud's reply lane labels every message it writes ``move:<name>``
+# (heylead-api reply_policy.MOVE_PREFIX), and the cloud pull brings the label
+# down in ``sentiment``. This table holds no message_type, so the label is how
+# a message of ours is told from a person's: without one, a person spoke.
+# The backend keys the same rule on message_type (unanswered_leads.
+# LANE_MESSAGE_TYPES), which it holds and this client does not.
+_INBOUND_ROLES = ("prospect", "them", "inbound")
+# Warm rows the lane spoke last on. Generous: the handoff test runs in Python,
+# and a cap that cut a real handoff would repeat the defect.
+_HANDOFF_CANDIDATES_MAX = 500
+
+
+def _pending_handoff(messages: list[dict]) -> dict | None:
+    """The prospect message that handed over a way to meet and still waits on
+    a person, or None. ``messages`` oldest first.
+
+    Twin of heylead-api unanswered_leads._pending_handoff: the lane's own
+    messages are passed over, any other message of ours means a person has
+    spoken, and the first prospect message carrying a number or their own
+    booking page is the action.
+    """
+    from ..constants import MOVE_PREFIX
+    from ..services.meeting_handoff import handoff_in
+
+    for message in reversed(messages):
+        role = str(message.get("role") or "")
+        if role in _INBOUND_ROLES:
+            if handoff_in(str(message.get("text") or "")):
+                return message
+            continue
+        if str(message.get("sentiment") or "").startswith(MOVE_PREFIX):
+            continue
+        return None
+    return None
+
+
+def _acknowledged_handoffs(db: Any) -> list[dict]:
+    """Rows whose prospect handed over a way to meet and whose operator has
+    not acted, although the lane has answered since.
+
+    get_unanswered_leads' own query needs the prospect's message to be the
+    last one, so until 23 Sep 2026 the lane's acknowledgement took "Call
+    <number>" off Needs attention. What ends one here is a person acting: a
+    message of their own, or closing the prospect.
+    """
+    rows = db.execute(
+        """SELECT o.id as outreach_id, o.campaign_id, o.status, o.next_action,
+                  c.name as contact_name, c.title, c.company, c.linkedin_url,
+                  ca.name as campaign_name
+           FROM outreaches o
+           JOIN contacts c ON o.contact_id = c.id
+           JOIN messages m ON m.outreach_id = o.id
+           LEFT JOIN campaigns ca ON ca.id = o.campaign_id
+           WHERE m.id = (
+                 SELECT m2.id FROM messages m2
+                 WHERE m2.outreach_id = o.id
+                 ORDER BY m2.timestamp DESC LIMIT 1
+             )
+             AND m.role = 'sdr'
+             AND COALESCE(m.sentiment, '') LIKE 'move:%'
+             AND o.status IN ('hot_lead', 'replied')
+           ORDER BY m.timestamp ASC
+           LIMIT ?""",
+        (_HANDOFF_CANDIDATES_MAX,),
+    ).fetchall()
+    candidates = [dict(r) for r in rows]
+    if not candidates:
+        return []
+    ids = [str(c["outreach_id"]) for c in candidates]
+    threads: dict[str, list[dict]] = {oid: [] for oid in ids}
+    for raw in db.execute(
+        "SELECT outreach_id, role, text, sentiment, timestamp FROM messages "
+        f"WHERE outreach_id IN ({', '.join('?' for _ in ids)}) ORDER BY timestamp ASC",
+        tuple(ids),
+    ).fetchall():
+        message = dict(raw)
+        threads[str(message["outreach_id"])].append(message)
+    out: list[dict] = []
+    for candidate in candidates:
+        pending = _pending_handoff(threads.get(str(candidate["outreach_id"]), []))
+        if pending is None:
+            continue
+        out.append({
+            **candidate,
+            "last_reply_text": pending.get("text") or "",
+            "last_sentiment": pending.get("sentiment") or "",
+            "last_message_ts": int(pending.get("timestamp") or 0),
+        })
+    return out
 
 
 def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
@@ -2174,11 +2275,15 @@ def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
            LIMIT 50""",
         (cutoff, stale_running),
     ).fetchall()
+    # Replies nobody has answered, and ways to meet the lane acknowledged and
+    # a person has still to act on, oldest first. They cannot be the same
+    # row: one ends with the prospect, the other with the lane.
+    candidates = [dict(raw) for raw in rows] + _acknowledged_handoffs(db)
     db.close()
+    candidates.sort(key=lambda r: int(r.get("last_message_ts") or 0))
 
     leads: list[dict] = []
-    for raw in rows:
-        row = dict(raw)
+    for row in candidates:
         ts = int(row.get("last_message_ts") or 0)
         hours = max(0, (now - ts) // 3600)
         reason, calendar_url = _unanswered_lead_reason(
@@ -6393,19 +6498,26 @@ def save_inbound_signal(
     profile_json: str = "",
     invitation_id: str = "",
     message_id: str = "",
+    sent_at: int | None = None,
 ) -> str:
-    """Save a new inbound signal (invitation, message, or comment). Returns signal ID."""
+    """Save a new inbound signal (invitation, message, or comment). Returns signal ID.
+
+    ``sent_at`` is when the provider says it was SENT -- pass it whenever the
+    provider gives one. ``created_at`` is when we noticed it, and a message
+    stored at that time looks as fresh as the day we read it (timeutil.signal_sent_at).
+    """
     signal_id = str(uuid.uuid4())
     db = get_db()
     db.execute(
         """INSERT INTO inbound_signals
            (id, signal_type, sender_name, sender_id, sender_headline,
             sender_company, sender_url, content, post_id, profile_json,
-            invitation_id, message_id, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            invitation_id, message_id, created_at, sent_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (signal_id, signal_type, sender_name, sender_id, sender_headline,
          sender_company, sender_url, content, post_id, profile_json,
-         invitation_id or None, message_id or None, int(time.time())),
+         invitation_id or None, message_id or None, int(time.time()),
+         int(sent_at) if sent_at else None),
     )
     db.commit()
     db.close()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from dataclasses import replace
 from typing import Any, Literal
 
 from ..ai.agent_loop import AgentBudget, run_agent_loop
@@ -90,6 +91,29 @@ def _sibling_mode(agent: str, config: dict[str, Any]) -> str:
     return "observe"
 
 
+# Siblings whose decisions are about ONE prospect; none of them may ground a
+# campaign hold. Mirrors heylead-api app/services/coordinator.py (23 Sep 2026).
+PROSPECT_SCOPED_AGENTS = frozenset({"reply", "closer", "strategist", "send_fit"})
+PROSPECT_SCOPE_LABEL = "[one prospect]"
+
+
+def campaign_is_live(campaign_id: str) -> bool:
+    """Only an active campaign sends, so only it can be coordinated or held."""
+    if not campaign_id:
+        return True  # account-level runs are observe-only (see _run)
+    camp = get_campaign(campaign_id)
+    return bool(camp) and str(camp.get("status") or "") == "active"
+
+
+def campaign_level_evidence(campaign_id: str, now: int | None = None) -> list[str]:
+    """Live notes with no prospect on them; sibling beats never count."""
+    notes = [
+        n for n in list_live_notes(campaign_id=campaign_id, now=now)
+        if not str(n.get("outreach_id") or "")
+    ]
+    return [f"campaign notes:{len(notes)}"] if notes else []
+
+
 def build_digest_body(campaign_id: str, config: dict[str, Any], now: int | None = None) -> str:
     import time
 
@@ -105,7 +129,8 @@ def build_digest_body(campaign_id: str, config: dict[str, Any], now: int | None 
         age_s = max(0, when - int(beat.get("created_at") or 0))
         stale = beat_is_stale(beat, mode=_sibling_mode(agent, config), now=when)
         flag = " stale" if stale else ""
-        parts.append(f"{agent}:{decision} ({age_s // 60}m){flag}")
+        scope = PROSPECT_SCOPE_LABEL if agent in PROSPECT_SCOPED_AGENTS else ""
+        parts.append(f"{agent}:{decision}{scope} ({age_s // 60}m){flag}")
     parts.append(f"notes:{len(notes)}")
     text = " | ".join(parts) or "(empty)"
     return text[:DIGEST_MAX_CHARS]
@@ -159,6 +184,8 @@ async def _run(
     config: dict[str, Any] | None,
 ) -> None:
     cid = campaign_id or ""
+    if not await run_db(campaign_is_live, cid):
+        return
     cfg = config
     if cfg is None and cid:
         camp = await run_db(get_campaign, cid) or {}
@@ -214,6 +241,12 @@ async def _run(
         call_llm_fn=call_llm_fn,
         valid_decisions=COORDINATOR_VALID_DECISIONS,
     )
+    if result.decision == "hold" and cid and not await run_db(campaign_level_evidence, cid):
+        # The rule lives here, not only in the prompt, because the prompt did not hold.
+        result = replace(
+            result, decision="none",
+            reason=f"hold refused: no campaign-level evidence ({result.reason})",
+        )
     await run_db(
         record_agent_beat,
         agent="coordinator",

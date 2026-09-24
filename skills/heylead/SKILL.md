@@ -96,6 +96,8 @@ In-process agents default to act. Use `edit_campaign(enable_reply_agent="observe
 
 Campaigns are created as drafts and only start when explicitly launched. Every send passes rate limits, working-hours checks, and a 1st-degree connection guard.
 
+On a hosted workspace that has not chosen otherwise, opening DMs and follow-ups wait for a person to approve them (`inspect(action="waiting")`, then `prospect(action="approve_message")` or `discard_message`); the approved text is what is sent. Autopilot sends them unread: `scheduler(action="approval_mode", mode="autopilot")`, or Settings → Sending in the dashboard. Invitations are never held.
+
 ## All 22 Tools
 
 Brand and content, signals, bulk import, CRM sync and the shared network pool are registered only when the client is started with `HEYLEAD_TOOLS=all`, which brings the full set of 47.

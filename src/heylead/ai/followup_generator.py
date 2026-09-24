@@ -42,6 +42,8 @@ from .prompt_loader import (
     load_fragment,
     render_prompt,
 )
+from .voice_block import voice_prompt_block
+from .copywriter import rules_for
 
 logger = logging.getLogger(__name__)
 
@@ -93,10 +95,7 @@ FOLLOWUP_PROMPT_LEGACY = """Generate a LinkedIn follow-up DM.
 Name: {sender_name}
 Title: {sender_title}
 Company: {sender_company}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
-Vocabulary preferences: {voice_vocab}
-No-go (NEVER use these): {voice_nogo}
+{voice_block}
 
 ## PROSPECT (the person receiving this message)
 Name: {prospect_name}
@@ -344,6 +343,7 @@ async def _generate_v63(
             touch="followup",
         )
     ctx = build_context_block(
+        channel="followup",
         sender=sender_profile,
         prospect=prospect,
         campaign_config=campaign_context,
@@ -437,7 +437,7 @@ async def _generate_v63(
                 "draft_message": message,
                 "news_context": news_context,
                 "symbols_limit": str(max_chars),
-                "voice_rules": load_fragment("voice_rules"),
+                "voice_rules": rules_for("followup"),
             }
             enhanced = await llm_client.generate(
                 render_prompt("followup_news", news_ctx),
@@ -527,9 +527,6 @@ async def _generate_legacy(
     logger.info("Using legacy prompts for follow-up #%d (v63 not found)", followup_number)
 
     # Extract voice details
-    voice_vocab = voice_signature.get("vocabulary_preferences", [])
-    if isinstance(voice_vocab, list):
-        voice_vocab = ", ".join(voice_vocab)
 
     prospect_name = first_name(prospect.get("name"), "there")
     prospect_intelligence = _build_intelligence_text(prospect_analysis)
@@ -554,10 +551,7 @@ async def _generate_legacy(
         sender_name=sender_profile.get("name", ""),
         sender_title=sender_profile.get("title", ""),
         sender_company=sender_profile.get("company", ""),
-        voice_tone=voice_signature.get("tone", "Professional, direct"),
-        voice_sentence=voice_signature.get("sentence_length", "Medium"),
-        voice_vocab=voice_vocab or "None specified",
-        voice_nogo=voice_signature.get("no_go", "Generic sales phrases"),
+        voice_block=voice_prompt_block(voice_signature),
         prospect_name=prospect_name,
         prospect_title=prospect.get("title", ""),
         prospect_company=prospect.get("company", ""),

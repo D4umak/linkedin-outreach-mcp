@@ -16,6 +16,8 @@ from typing import Any
 from .length_fixer import shorten_to_limit
 from .llm import LLMClient
 from .prompt_loader import get_prompt_temperature, has_prompt, load_fragment, render_prompt
+from .voice_block import voice_prompt_block
+from .copywriter import channel_for_message_type, rules_for
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +43,7 @@ FIX_PROMPT = """Fix the specific issues in this {message_type} message.
 {issues_text}
 
 ## SENDER'S VOICE
-Tone: {voice_tone}
-Sentence style: {voice_sentence}
-No-go words: {voice_nogo}
+{voice_block}
 
 ## CONSTRAINTS
 - MAXIMUM {max_chars} characters (hard limit)
@@ -110,11 +110,9 @@ async def fix_message(
         "message_type": message_type,
         "message": message,
         "issues_text": issues_text,
-        "voice_tone": voice_signature.get("tone", "Professional, direct"),
-        "voice_sentence": voice_signature.get("sentence_length", "Medium"),
-        "voice_nogo": voice_signature.get("no_go", "Generic sales phrases"),
+        "voice_block": voice_prompt_block(voice_signature),
         "max_chars": str(max_chars),
-        "voice_rules": load_fragment("voice_rules"),
+        "voice_rules": rules_for(channel_for_message_type(message_type)),
     }
 
     # v63 path: use JSON prompt template

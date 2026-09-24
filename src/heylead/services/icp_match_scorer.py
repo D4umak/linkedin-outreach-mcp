@@ -21,6 +21,7 @@ from typing import Any
 from ..db.async_bridge import run_db
 
 from ..textutil import contains_term
+from .profile_signals import role_hit
 from .seniority import (
     DECISION_MAKER_LEVELS,
     infer_seniority_level,
@@ -431,10 +432,11 @@ def _score_title_match(title: str, icp: dict) -> float:
             title_lower = title_lower.replace("product leader", "head of product")
 
     # Exclude check first — disqualify immediately. Whole-word, or an
-    # exclude of "cto" would disqualify every Director on LinkedIn.
-    for term in exclude:
-        if contains_term(title_lower, term):
-            return 0.0
+    # exclude of "cto" would disqualify every Director on LinkedIn. Through
+    # the shared title matcher, so an exclude of "CTO" also excludes the
+    # "Chief Technology Officer" who is the same person.
+    if role_hit(title_lower, exclude):
+        return 0.0
 
     if not include:
         return UNKNOWN_SCORE
@@ -443,9 +445,11 @@ def _score_title_match(title: str, icp: dict) -> float:
     # Substring matching scored "SAP SuccessFactors Employee Central" and
     # "Executive Director for Children and Education" as perfect CTO matches
     # — both contain the letters "cto" — and both cleared the send gate.
-    for term in include:
-        if contains_term(title_lower, term):
-            return 1.0
+    # And through the shared title matcher, not an exact phrase: an ICP that
+    # names "Chief Technology Officer" must meet the "CTO" a headline says
+    # (profile_signals.role_hit, tests/test_one_title_matcher.py).
+    if role_hit(title_lower, include):
+        return 1.0
 
     # Partial word overlap: check individual words from include terms
     title_words = set(title_lower.split())

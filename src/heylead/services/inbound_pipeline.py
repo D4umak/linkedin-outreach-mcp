@@ -24,11 +24,12 @@ from ..ai.inbound_qualifier import (
 )
 from ..ai.reply_pipeline import run_reply_pipeline
 from ..ai.sentiment import classify_fast, classify_sentiment
-from ..timeutil import to_epoch
+from ..timeutil import signal_sent_at, to_epoch
 from ..constants import (
     INBOUND_MAX_DM_ATTEMPTS,
 )
 from ..db.async_bridge import run_db
+from ..linkedin.message_sender import message_is_ours
 from ..db.queries import (
     count_inbound_dms_today,
     enroll_prospect,
@@ -305,6 +306,7 @@ async def _detect_invitations(client: Any, account_id: str) -> int:
             sender_headline=inv.get("headline", ""),
             content=inv.get("message", ""),
             invitation_id=inv_id,
+            sent_at=to_epoch(inv.get("timestamp")),
         )
         saved += 1
 
@@ -341,8 +343,8 @@ async def _detect_messages(client: Any, account_id: str) -> int:
         our_provider_id = profile.get("provider_id", "")
     if not our_provider_id:
         logger.warning(
-            "Inbound detect: no provider_id in profile setting — "
-            "own-message filter disabled, false positives possible"
+            "Inbound detect: no provider_id in profile setting — own messages "
+            "are told by Unipile's is_sender alone"
         )
 
     # Time-based filtering: skip messages older than last scan.
@@ -364,7 +366,7 @@ async def _detect_messages(client: Any, account_id: str) -> int:
             continue
 
         # Skip our own sent messages
-        if our_provider_id and sender_id == our_provider_id:
+        if message_is_ours(msg, our_provider_id):
             skip_own += 1
             continue
 
@@ -453,6 +455,7 @@ async def _detect_messages(client: Any, account_id: str) -> int:
             sender_url=url,
             content=text,
             message_id=message_id,
+            sent_at=msg_ts,
         )
         saved += 1
         from .live_thread_enroll import enrich_and_enroll_live_thread
@@ -1089,7 +1092,7 @@ async def _act_on_messages(client: Any, account_id: str) -> str:
                 headline=signal.get("sender_headline") or existing_contact.get("title") or "",
                 company=signal.get("sender_company") or existing_contact.get("company") or "",
                 message_id=signal.get("message_id") or "",
-                timestamp=to_epoch(signal.get("created_at")),
+                timestamp=signal_sent_at(signal),
             )
             skipped += 1
             continue
@@ -1246,9 +1249,15 @@ async def _send_discovery_dm(
     try:
         inbound_history = await build_inbound_history(
             client, account_id, chat_id, "", content,
-            timestamp=to_epoch(signal.get("created_at")),
+            timestamp=signal_sent_at(signal),
         )
     except Exception as e:
+        if getattr(getattr(e, "response", None), "status_code", None) == 404:
+            # The chat is gone. Generating anyway is what #450 set out to
+            # stop: the reply cannot be delivered into a chat that does not
+            # exist, so stop here, before the contact, the sentiment call and
+            # the generation.
+            return await _dismiss_for_gone_chat(signal, chat_id)
         logger.warning("Inbound history assembly failed: %s", e)
 
     # ── Step 1: Create contact + outreach BEFORE generating reply ──
@@ -1318,9 +1327,11 @@ async def _send_discovery_dm(
                 await run_db(
                     save_message, outreach_id,
                     role="prospect", text=content, sentiment=sentiment,
-                    # When the signal was detected, not when we got round to
-                    # processing it — backlogs can be hours or days old.
-                    timestamp=to_epoch(signal.get("created_at")),
+                    # When they SENT it (the signal's provider time), never
+                    # when we noticed it: a backlog or a backfill is hours
+                    # to years behind, and the sync push carries this stamp
+                    # to the cloud as the message's time.
+                    timestamp=signal_sent_at(signal),
                     external_message_id=signal.get("message_id") or None,
                 )
     except Exception as e:
@@ -1409,9 +1420,9 @@ async def _send_discovery_dm(
                     account_id, chat_id, limit=5,
                 )
                 our_provider_id = (await run_db(get_setting, "profile", {})).get("provider_id", "")
-                if our_provider_id and recent_msgs:
+                if recent_msgs:
                     for rmsg in recent_msgs:
-                        if rmsg.get("sender_id") == our_provider_id:
+                        if message_is_ours(rmsg, our_provider_id):
                             msg_ts = rmsg.get("timestamp", 0)
                             if msg_ts and (int(time.time()) - msg_ts) < 86400:
                                 logger.info(
@@ -1424,7 +1435,13 @@ async def _send_discovery_dm(
                                 )
                                 return "skipped"
             except Exception as e:
-                logger.debug("Pre-send dedup check failed: %s (continuing)", e)
+                if getattr(getattr(e, "response", None), "status_code", None) == 404:
+                    # The chat went away after the history read above found it,
+                    # so no message of ours can be in it: nothing to dedup
+                    # against. The send below reports the gone chat itself.
+                    logger.info("Pre-send dedup: chat %s no longer exists (404)", chat_id)
+                else:
+                    logger.debug("Pre-send dedup check failed: %s (continuing)", e)
 
         can, _current, _cap, _ = await check_daily_cap("dm")
         if not can:
@@ -1503,11 +1520,43 @@ async def _send_discovery_dm(
             return "skipped"
 
     except Exception as e:
+        if getattr(getattr(e, "response", None), "status_code", None) == 404:
+            # A send that raised on a gone chat. "error" leaves the signal
+            # live, and the next pass would write the same reply again.
+            return await _dismiss_for_gone_chat(signal, chat_id)
         logger.warning(
             "Failed to send contextual reply to %s: %s",
             signal.get("sender_name"), e,
         )
         return "error"
+
+
+async def _dismiss_for_gone_chat(signal: dict[str, Any], chat_id: str) -> str:
+    """Stop the inbound lane for a signal whose chat no longer exists.
+
+    Dismissed, not left live: a live signal is offered again on every pass and
+    the chat will not come back. Re-detection treats a dismissed signal as
+    terminal, so a new message from the person still opens a new one.
+    """
+    logger.info(
+        "Inbound reply not written: chat %s for %s no longer exists (404)",
+        chat_id, signal.get("sender_name") or signal.get("sender_id"),
+    )
+    await run_db(
+        update_inbound_signal, signal["id"],
+        status="dismissed", actioned_at=int(time.time()),
+    )
+    await run_db(
+        log_action,
+        "inbound_chat_not_found",
+        result="skipped",
+        details={
+            "signal_id": signal["id"],
+            "sender_id": signal.get("sender_id", ""),
+            "chat_id": chat_id,
+        },
+    )
+    return "skipped"
 
 
 def assemble_inbound_campaign_context(campaign: dict[str, Any] | None) -> dict[str, Any]:
@@ -1592,6 +1641,10 @@ async def build_inbound_history(
                         client, account_id, chat_id, sender_provider_id,
                     )
             except Exception as e:
+                if getattr(getattr(e, "response", None), "status_code", None) == 404:
+                    # A gone chat is not "no history": the caller must not
+                    # answer from the signal alone into a chat that is gone.
+                    raise
                 logger.warning(
                     "Inbound history fetch failed, using the signal alone: %s", e,
                 )

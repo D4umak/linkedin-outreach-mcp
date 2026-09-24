@@ -34,6 +34,7 @@ from .prompt_loader import (
     load_expertise_map,
     render_prompt,
 )
+from .voice_block import voice_prompt_block
 
 logger = logging.getLogger(__name__)
 
@@ -104,10 +105,7 @@ MESSAGE_PROMPT_LEGACY = """Write a LinkedIn connection request message.
 Name: {sender_name}
 Title: {sender_title}
 Company: {sender_company}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
-Vocabulary preferences: {voice_vocab}
-No-go (NEVER use these): {voice_nogo}
+{voice_block}
 
 ## PROSPECT (the person receiving this message)
 Name: {prospect_name}
@@ -272,6 +270,7 @@ async def generate_message(
         expertise_map = await load_expertise_map()
 
         ctx = build_context_block(
+            channel="invite",
             sender=sender_profile,
             prospect=prospect,
             campaign_config=campaign_context,
@@ -323,10 +322,6 @@ async def generate_message(
         # ── Fallback to legacy prompts ──
         logger.debug("Using legacy prompts for invitation message (v63 not found)")
 
-        voice_vocab = voice_signature.get("vocabulary_preferences", [])
-        if isinstance(voice_vocab, list):
-            voice_vocab = ", ".join(voice_vocab)
-
         prospect_name = first_name(prospect.get("name"), "there")
         prospect_intelligence = _build_intelligence_text(prospect_analysis)
 
@@ -334,10 +329,7 @@ async def generate_message(
             sender_name=sender_profile.get("name", ""),
             sender_title=sender_profile.get("title", ""),
             sender_company=sender_profile.get("company", ""),
-            voice_tone=voice_signature.get("tone", "Professional, direct"),
-            voice_sentence=voice_signature.get("sentence_length", "Medium"),
-            voice_vocab=voice_vocab or "None specified",
-            voice_nogo=voice_signature.get("no_go", "Generic sales phrases"),
+            voice_block=voice_prompt_block(voice_signature),
             prospect_name=prospect_name,
             prospect_title=prospect.get("title", ""),
             prospect_company=prospect.get("company", ""),

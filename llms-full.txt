@@ -112,6 +112,8 @@ writes. Each refuses the other's actions and says which tool took them.
 
 ### Review & Approval
 
+A hosted workspace is in one of two modes. `require_approval` (the default for a workspace that never chose) holds every opening DM and follow-up until a person approves it; the approved text, edited or not, is what goes out. `autopilot` sends them without review. Invitations, InMail and replies are never held. Switch in the dashboard (Settings → Sending) or with `scheduler(action="approval_mode", mode="autopilot" | "require_approval")`; read what is waiting on the dashboard Approvals page or with `inspect(action="waiting")`, and decide with `prospect(action="approve_message" | "discard_message", draft_id=...)`.
+
 | Tool | Description |
 |------|-------------|
 | `suggest_next_action` | Suggest the best next action for your outreach. |

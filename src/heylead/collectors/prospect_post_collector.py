@@ -25,6 +25,7 @@ from ..db.signal_queries import (
     signal_exists,
     upsert_signal_account,
 )
+from ..services.post_freshness import post_item_published_at
 
 logger = logging.getLogger(__name__)
 
@@ -139,9 +140,11 @@ async def collect_prospect_posts() -> str:
                         # Skip posts older than lookback window
                         # A date we cannot resolve is treated as too old: an
                         # unreadable timestamp used to pass the window and be
-                        # published as a fresh signal.
-                        post_ts = _parse_post_date(post_date, now)
-                        if post_date and (post_ts is None or post_ts < lookback_cutoff):
+                        # published as a fresh signal. So did an EMPTY one,
+                        # which the old `if post_date and ...` let through.
+                        # The id dates the post when the string cannot.
+                        post_ts = post_item_published_at(post_id, post_date, now)
+                        if post_ts is None or post_ts < lookback_cutoff:
                             continue
 
                         # Deduplicate
@@ -194,6 +197,7 @@ async def collect_prospect_posts() -> str:
                             content=post_text[:2000],
                             post_id=post_id,
                             metadata_json=json.dumps({
+                                "published_at": post_ts,
                                 "post_date": post_date,
                                 "metrics": metrics,
                                 "contact_company": contact.get("company", ""),
@@ -286,29 +290,3 @@ def _update_last_scanned(contact_id: str, timestamp: int) -> None:
     finally:
         db.close()
 
-
-def _parse_post_date(date_str: str, now: int | None = None) -> int | None:
-    """Try to parse a post date string to a Unix timestamp.
-
-    Handles ISO format, epoch seconds and milliseconds, and relative ages
-    ("3mo"). Returns None if parsing fails.
-    """
-    if not date_str:
-        return None
-
-    from ..timeutil import to_epoch
-
-    parsed = to_epoch(date_str, now)
-    if parsed is not None:
-        return parsed
-
-    import datetime
-
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try:
-            dt = datetime.datetime.strptime(date_str, fmt)
-            return int(dt.timestamp())
-        except ValueError:
-            continue
-
-    return None

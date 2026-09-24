@@ -36,6 +36,7 @@ from .prompt_loader import (
     unanswered_prospect_turns,
 )
 from .sentiment import detect_calendar_intent, detect_calendar_url
+from .voice_block import voice_prompt_block
 
 logger = logging.getLogger(__name__)
 
@@ -120,10 +121,7 @@ REPLY_PROMPT_POSITIVE = """Write a LinkedIn DM reply to a prospect who expressed
 Name: {sender_name}
 Title: {sender_title}
 Company: {sender_company}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
-Vocabulary preferences: {voice_vocab}
-No-go (NEVER use these): {voice_nogo}
+{voice_block}
 
 ## PROSPECT
 Name: {prospect_name}
@@ -180,10 +178,7 @@ REPLY_PROMPT_QUESTION = """Write a LinkedIn DM reply to a prospect who asked a Q
 Name: {sender_name}
 Title: {sender_title}
 Company: {sender_company}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
-Vocabulary preferences: {voice_vocab}
-No-go (NEVER use these): {voice_nogo}
+{voice_block}
 
 ## PROSPECT
 Name: {prospect_name}
@@ -237,10 +232,7 @@ REPLY_PROMPT_WRONG_PERSON = """Write a short LinkedIn DM apology — we messaged
 Name: {sender_name}
 Title: {sender_title}
 Company: {sender_company}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
-Vocabulary preferences: {voice_vocab}
-No-go (NEVER use these): {voice_nogo}
+{voice_block}
 
 ## PROSPECT
 Name: {prospect_name}
@@ -281,10 +273,7 @@ REPLY_PROMPT_CONFIRM_FIT = """Write a LinkedIn DM confirming we meant to write t
 Name: {sender_name}
 Title: {sender_title}
 Company: {sender_company}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
-Vocabulary preferences: {voice_vocab}
-No-go (NEVER use these): {voice_nogo}
+{voice_block}
 
 ## PROSPECT
 Name: {prospect_name}
@@ -331,10 +320,7 @@ REPLY_PROMPT_NEGATIVE = """Write a LinkedIn DM reply to a prospect who said they
 Name: {sender_name}
 Title: {sender_title}
 Company: {sender_company}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
-Vocabulary preferences: {voice_vocab}
-No-go (NEVER use these): {voice_nogo}
+{voice_block}
 
 ## PROSPECT
 Name: {prospect_name}
@@ -377,10 +363,7 @@ REPLY_PROMPT_ENGAGED = """Write a LinkedIn DM reply to a prospect who is ENGAGED
 Name: {sender_name}
 Title: {sender_title}
 Company: {sender_company}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
-Vocabulary preferences: {voice_vocab}
-No-go (NEVER use these): {voice_nogo}
+{voice_block}
 
 ## PROSPECT
 Name: {prospect_name}
@@ -435,10 +418,7 @@ REPLY_PROMPT_NEUTRAL = """Write a LinkedIn DM reply to a prospect who gave a NEU
 Name: {sender_name}
 Title: {sender_title}
 Company: {sender_company}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
-Vocabulary preferences: {voice_vocab}
-No-go (NEVER use these): {voice_nogo}
+{voice_block}
 
 ## PROSPECT
 Name: {prospect_name}
@@ -491,8 +471,7 @@ REPLY_PROMPT_SCHEDULING_LOOP = """Write a LinkedIn DM reply that ends a scheduli
 
 ## SENDER (you are writing AS this person)
 Name: {sender_name}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
+{voice_block}
 
 ## CONVERSATION HISTORY (oldest first)
 {conversation_history}
@@ -530,8 +509,7 @@ REPLY_PROMPT_CALENDAR = """Write a LinkedIn DM reply to a prospect who shared th
 
 ## SENDER (you are writing AS this person)
 Name: {sender_name}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
+{voice_block}
 
 ## CONVERSATION HISTORY (oldest first)
 {conversation_history}
@@ -720,6 +698,7 @@ async def generate_reply(
         touch="reply",
     )
     ctx = build_context_block(
+        channel="reply",
         sender=sender_profile,
         prospect=prospect,
         campaign_config={
@@ -755,9 +734,6 @@ async def generate_reply(
         logger.debug("Using legacy %s reply prompt", sentiment)
 
         # Extract voice details
-        voice_vocab = voice_signature.get("vocabulary_preferences", [])
-        if isinstance(voice_vocab, list):
-            voice_vocab = ", ".join(voice_vocab)
 
         prospect_name = first_name(prospect.get("name"), "there")
         prospect_intelligence = _build_intelligence_text(prospect_analysis)
@@ -774,10 +750,7 @@ async def generate_reply(
             "sender_name": sender_profile.get("name", ""),
             "sender_title": sender_profile.get("title", ""),
             "sender_company": sender_profile.get("company", ""),
-            "voice_tone": voice_signature.get("tone", "Professional, direct"),
-            "voice_sentence": voice_signature.get("sentence_length", "Medium"),
-            "voice_vocab": voice_vocab or "None specified",
-            "voice_nogo": voice_signature.get("no_go", "Generic sales phrases"),
+            "voice_block": voice_prompt_block(voice_signature),
             "prospect_name": prospect_name,
             "reply_text": reply_text,
             "max_chars": max_chars,

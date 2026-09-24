@@ -11,9 +11,7 @@
     "symbols_limit",
     "campaign_rules_section",
     "message_brief",
-    "voice_rules",
-    "voice_tone",
-    "voice_nogo"
+    "voice_rules"
   ],
   "temperature": 0.7
 }

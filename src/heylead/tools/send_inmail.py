@@ -424,6 +424,7 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
         prompt_name = select_prompt("outreach_inmail", campaign_intent)
         system_name = select_prompt("outreach_system", campaign_intent)
         ctx = build_context_block(
+            channel="inmail",
             sender=sender_profile,
             prospect=prospect_data,
             campaign_config=campaign_context,

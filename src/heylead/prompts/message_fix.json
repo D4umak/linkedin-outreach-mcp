@@ -2,16 +2,14 @@
   "name": "message_fix",
   "description": "Surgically fix specific validation issues while preserving message intent and voice",
   "version": "v63",
-  "content": "Fix the specific issues in this {message_type} message.\n\n## ORIGINAL MESSAGE\n{message}\n\n## ISSUES TO FIX\n{issues_text}\n\n## SENDER'S VOICE\nTone: {voice_tone}\nSentence style: {voice_sentence}\nNo-go words: {voice_nogo}\n{voice_rules}\n\n## CONSTRAINTS\n- MAXIMUM {max_chars} characters (hard limit)\n- Fix ONLY the listed issues\n- Preserve everything else — same prospect details, same CTA, same tone\n- Must still sound like the sender wrote it\n\n## OUTPUT\nWrite ONLY the fixed message text. Nothing else.",
+  "content": "Fix the specific issues in this {message_type} message.\n\n## ORIGINAL MESSAGE\n{message}\n\n## ISSUES TO FIX\n{issues_text}\n\n## SENDER'S VOICE\n{voice_block}\n{voice_rules}\n\n## CONSTRAINTS\n- MAXIMUM {max_chars} characters (hard limit)\n- Fix ONLY the listed issues\n- Preserve everything else — same prospect details, same CTA, same tone\n- Must still sound like the sender wrote it\n\n## OUTPUT\nWrite ONLY the fixed message text. Nothing else.",
   "variables": [
     "message_type",
     "message",
     "issues_text",
-    "voice_tone",
-    "voice_sentence",
-    "voice_nogo",
     "max_chars",
-    "voice_rules"
+    "voice_rules",
+    "voice_block"
   ],
   "temperature": 0.3,
   "response_limit": 500

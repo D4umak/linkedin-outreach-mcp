@@ -13,7 +13,7 @@ from typing import Any
 
 from ..ai.icp_generator_v2 import generate_icp_v2
 from ..ai.icp_schemas import IcpResult, SingleIcp, icp_result_from_dict, icp_result_to_json
-from ..config import get_tier, is_backend_mode
+from ..config import apply_free_monthly_caps, is_backend_mode
 from ..constants import (
     FREE_MAX_ICP_V2_GENERATIONS,
     TIER_PRO,
@@ -178,8 +178,9 @@ async def run_generate_icp(
         )
 
     # ── Step 1: Free tier limits ──
-    tier = get_tier()
-    if tier != TIER_PRO:
+    # Hosted billing lives on the host. A leftover local `tier: free` must
+    # not cap a signed-in account (21 Sep 2026: it did, at 3 ICPs a month).
+    if apply_free_monthly_caps():
         usage = await run_db(get_monthly_usage)
         if usage.get("icps_generated", 0) >= FREE_MAX_ICP_V2_GENERATIONS:
             return (

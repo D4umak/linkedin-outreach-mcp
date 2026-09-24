@@ -55,6 +55,7 @@ from ..db.signal_queries import (
     update_watchlist,
     upsert_signal_account,
 )
+from .post_freshness import post_id_published_at
 
 logger = logging.getLogger(__name__)
 
@@ -380,6 +381,7 @@ async def detect_viral_posts() -> str:
             content=post.get("text", "")[:500],
             post_id=post_id,
             metadata_json=json.dumps({
+                "published_at": post_id_published_at(post_id, now),
                 "growth_rate": candidate["growth_rate"],
                 "early_engagement": candidate["early_engagement"],
                 "late_engagement": candidate["late_engagement"],

@@ -60,11 +60,11 @@ def _profile_dict(profile_json: str = "") -> dict[str, Any]:
 
 
 def _incoming_provider_id(linkedin_id: str, profile_json: str = "") -> str:
-    pid = (_profile_dict(profile_json).get("provider_id") or "").strip()
-    if pid:
-        return pid
-    raw = (linkedin_id or "").strip()
-    return raw if raw.startswith("ACoAA") else ""
+    # One definition, in author_identity: it is pure and stdlib-only, so the
+    # async callers that also need it are not reaching into the db layer.
+    from ..author_identity import provider_id_from
+
+    return provider_id_from(linkedin_id, profile_json)
 
 
 def _incoming_public_id(linkedin_id: str, profile_json: str = "") -> str:

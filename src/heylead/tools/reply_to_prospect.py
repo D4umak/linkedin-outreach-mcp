@@ -26,7 +26,7 @@ from ..ai.targeting_recheck import (
     recheck_campaign_fit,
     targeting_reply_directive,
 )
-from ..config import get_tier, is_backend_mode
+from ..config import apply_free_monthly_caps, get_tier, is_backend_mode
 from ..constants import (
     FREE_MONTHLY_MESSAGES,
     TIER_PRO,
@@ -304,8 +304,7 @@ async def run_reply_to_prospect(
     # ── Step 2: Check tier limits ──
     # Hosted accounts are not capped by the local free row (the cloud sender
     # never enforces it); same rule as create_campaign and generate_send.
-    tier = get_tier()
-    if (not is_backend_mode()) and tier != TIER_PRO:
+    if apply_free_monthly_caps():
         usage = await run_db(get_monthly_usage)
         if usage.get("messages_sent", 0) >= FREE_MONTHLY_MESSAGES:
             await client.close()
@@ -414,7 +413,12 @@ async def run_reply_to_prospect(
                     f"in this LinkedIn chat (possibly from another campaign) — skipping."
                 )
     except Exception as e:
-        logger.debug("Chat-scoped dedup check failed: %s (continuing)", e)
+        if getattr(getattr(e, "response", None), "status_code", None) == 404:
+            # A gone chat holds no reply of ours to dedup against. Carry on:
+            # Step 4 reads the same chat and stops with chat_not_found.
+            logger.info("Chat-scoped dedup: chat %s no longer exists (404)", chat_id)
+        else:
+            logger.debug("Chat-scoped dedup check failed: %s (continuing)", e)
 
     # ── Step 4: Load conversation history (enriched with LinkedIn) ──
     sender_provider_id = (await run_db(get_setting, "profile", {})).get("provider_id", "")
@@ -425,6 +429,17 @@ async def run_reply_to_prospect(
                 client, account_id, chat_id, outreach_id, sender_provider_id,
             )
         except Exception as e:
+            if getattr(getattr(e, "response", None), "status_code", None) == 404:
+                await client.close()
+                # find_chat_for_user hands back the stored id unread, and a
+                # stored id also 404s after a reconnect mints a new seat.
+                # Forget it, so the next attempt scans for the current chat.
+                await run_db(update_outreach, outreach_id, chat_id=None)
+                await run_db(
+                    log_action, "chat_not_found", outreach_id=outreach_id,
+                    result="skipped", details={"prospect": candidate.get("name", "Unknown")}
+                )
+                return f"Chat not found for {candidate.get('name', 'Unknown')}. Chat may have been deleted."
             logger.warning("Conversation enrichment failed, using local-only: %s", e)
             messages = await run_db(get_messages_for_outreach, outreach_id)
     else:

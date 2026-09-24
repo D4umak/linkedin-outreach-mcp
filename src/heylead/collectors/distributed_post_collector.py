@@ -30,6 +30,7 @@ from ..db.post_queries import upsert_post, update_post_analysis
 from ..db.signal_queries import save_signal, signal_exists, upsert_signal_account
 from ..linkedin.circuit_breaker import CircuitBreakerOpen, CollectorCircuitBreaker
 from ..linkedin.unipile import detect_reshare
+from ..services.post_freshness import post_item_published_at
 
 logger = logging.getLogger(__name__)
 
@@ -257,9 +258,14 @@ async def _scan_batch(
                     if not post_text or not post_id:
                         continue
 
-                    # Skip posts older than lookback window
-                    post_ts = _parse_post_date(post_date)
-                    if post_ts and post_ts < lookback_cutoff:
+                    # Skip posts older than the lookback window, and posts
+                    # with no knowable publication time. The second used to
+                    # pass as fresh: this module's own date parser read "3mo"
+                    # (Unipile's usual `date`) as None, and None cleared an
+                    # `if post_ts and post_ts < cutoff` test. The id dates the
+                    # post exactly when the string cannot.
+                    post_ts = post_item_published_at(post_id, post_date, now)
+                    if post_ts is None or post_ts < lookback_cutoff:
                         continue
 
                     # Deduplicate
@@ -316,6 +322,7 @@ async def _scan_batch(
                         content=post_text[:2000],
                         post_id=post_id,
                         metadata_json=json.dumps({
+                            "published_at": post_ts,
                             "post_date": post_date,
                             "metrics": metrics,
                             "contact_company": contact.get("company", ""),
@@ -527,30 +534,3 @@ def _save_collection_metrics(
     finally:
         db.close()
 
-
-def _parse_post_date(date_str: str) -> int | None:
-    """Parse a post date string to Unix timestamp."""
-    if not date_str:
-        return None
-    try:
-        ts = int(date_str)
-        if ts > 1_000_000_000:
-            return ts
-    except (ValueError, TypeError):
-        pass
-
-    import datetime
-    for fmt in (
-        "%Y-%m-%dT%H:%M:%S.%fZ",
-        "%Y-%m-%dT%H:%M:%SZ",
-        "%Y-%m-%dT%H:%M:%S%z",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d",
-    ):
-        try:
-            dt = datetime.datetime.strptime(date_str, fmt)
-            return int(dt.timestamp())
-        except ValueError:
-            continue
-    return None

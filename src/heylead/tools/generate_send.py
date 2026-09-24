@@ -1115,6 +1115,16 @@ async def run_generate_and_send(
         # released below and the row keeps its status, so the scheduler brings
         # it back when the API is answering again.
         conv_lookup_failed = str(e) or e.__class__.__name__
+        if getattr(getattr(e, "response", None), "status_code", None) == 404:
+            # The chat found above is gone. Defer like any other failure, and
+            # forget it: find_chat_for_user returns a stored chat id without
+            # scanning, so a dead one kept here would defer this row on every
+            # pass. The next pass scans for the chat the person has now.
+            conv_lookup_failed = "the LinkedIn chat we had on file no longer exists (404)"
+            try:
+                await adb.update_outreach(outreach_id, chat_id=None)
+            except Exception as clear_err:
+                logger.debug("Could not forget the gone chat id: %s", clear_err)
         logger.warning(
             "Pre-outreach chat lookup failed for %s — deferring rather than "
             "assuming no conversation: %s", prospect.get("name", "Unknown"), e,

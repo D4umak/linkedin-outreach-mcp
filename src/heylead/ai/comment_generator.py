@@ -27,6 +27,7 @@ from .prompt_loader import (
     load_expertise_map,
     render_prompt,
 )
+from .voice_block import voice_prompt_block
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +60,7 @@ COMMENT_PROMPT = """Write a LinkedIn comment on this post.
 Name: {sender_name}
 Title: {sender_title}
 Company: {sender_company}
-Voice: {voice_tone}
-Sentence style: {voice_sentence}
-Vocabulary preferences: {voice_vocab}
-No-go (NEVER use these): {voice_nogo}
+{voice_block}
 
 ## POST AUTHOR (the person whose post you're commenting on)
 Name: {prospect_name}
@@ -201,6 +199,7 @@ async def generate_comment(
     if use_v63:
         logger.debug("Using v63 comment prompt")
         ctx = build_context_block(
+            channel="comment",
             sender=sender_profile,
             prospect=prospect,
             campaign_config={},
@@ -230,9 +229,6 @@ async def generate_comment(
         logger.debug("Using legacy comment prompt (v63 not found)")
 
         # Extract voice details
-        voice_vocab = voice_signature.get("vocabulary_preferences", [])
-        if isinstance(voice_vocab, list):
-            voice_vocab = ", ".join(voice_vocab)
 
         # Get prospect's first name
         prospect_name = first_name(prospect.get("name"), "there")
@@ -244,10 +240,7 @@ async def generate_comment(
             sender_name=sender_profile.get("name", ""),
             sender_title=sender_profile.get("title", ""),
             sender_company=sender_profile.get("company", ""),
-            voice_tone=voice_signature.get("tone", "Professional, direct"),
-            voice_sentence=voice_signature.get("sentence_length", "Medium"),
-            voice_vocab=voice_vocab or "None specified",
-            voice_nogo=voice_signature.get("no_go", "Generic sales phrases"),
+            voice_block=voice_prompt_block(voice_signature),
             prospect_name=prospect_name,
             prospect_title=prospect.get("title", ""),
             prospect_company=prospect.get("company", ""),
@@ -267,6 +260,12 @@ async def generate_comment(
 
     # Clean up
     comment = comment.strip().strip('"').strip("'").strip()
+
+    # The rules in the prompt are advice the model may ignore; the read-back
+    # is the guarantee, and it costs nothing when the draft is clean.
+    from .copywriter.polish import read_back
+
+    comment = await read_back(comment, channel="comment", max_chars=max_chars)
 
     # Enforce character limit (LLM-based shortening with retry)
     comment = await shorten_to_limit(comment, max_chars)

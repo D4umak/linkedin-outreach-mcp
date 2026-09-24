@@ -23,7 +23,7 @@ import random
 import time
 from typing import Any
 
-from ..config import get_scheduler_mode, get_tier, is_backend_mode
+from ..config import apply_free_monthly_caps, get_scheduler_mode, get_tier, is_backend_mode
 from ..db.async_bridge import run_db
 from ..flags import flag_enabled
 from ..constants import (
@@ -43,6 +43,7 @@ from ..constants import (
     DM_DELAY_MAX,
     DM_DELAY_MIN,
     JOB_ACCEPT_INBOUND,
+    JOB_AUTO_REPLY,
     JOB_CHECK_POST_COMMENTS,
     JOB_EMAIL_INVITE,
     JOB_ENDORSE,
@@ -173,6 +174,23 @@ def _create_gated_job(
                 job_type,
             )
             return ""
+
+        # A coordinator hold: _execute_auto_reply skips the campaign's reply
+        # while one is live, the engine closes that skip as completed, and
+        # get_auto_reply_candidates offers a completed row again 30 minutes
+        # later -- a reply queued and refused every half hour for as long as
+        # the hold stands. The cloud did the same once a pass: 375 auto_reply
+        # jobs in 24 hours (heylead-api #957, 23 Sep 2026). Planned actions
+        # ask the hold before they get here (execute_planned_actions).
+        if job_type == JOB_AUTO_REPLY and campaign_id:
+            from ..services.coordinator import coordinator_blocks_send
+
+            if coordinator_blocks_send(campaign_id):
+                logger.debug(
+                    "Not scheduling auto_reply for campaign %s — coordinator hold",
+                    campaign_id[:8],
+                )
+                return ""
     from .enqueue_gate import GAP_JOB_TYPES, message_gap_blocks
 
     if job_type in GAP_JOB_TYPES and outreach_id:
@@ -939,7 +957,7 @@ async def _monthly_free_engagement_cap_blocks() -> bool:
     Hosted billing lives on the host — leftover local ``tier: free`` must not
     stop comments there. Pro never takes this branch.
     """
-    if is_backend_mode() or get_tier() == TIER_PRO:
+    if not apply_free_monthly_caps():
         return False
     usage = await run_db(get_monthly_usage)
     return int((usage or {}).get("engagements_sent", 0) or 0) >= FREE_MAX_ENGAGEMENTS
@@ -951,7 +969,7 @@ async def _monthly_free_invite_cap_blocks() -> bool:
     Hosted leftover ``tier: free`` and Pro use the LinkedIn daily seat cap
     (premium 50 / confirmed-free 15), not the 50/month product wall.
     """
-    if is_backend_mode() or get_tier() == TIER_PRO:
+    if not apply_free_monthly_caps():
         return False
     usage = await run_db(get_monthly_usage)
     return int((usage or {}).get("invitations_sent", 0) or 0) >= FREE_MONTHLY_INVITATIONS
@@ -1331,6 +1349,14 @@ async def plan_auto_replies(campaign_id: str) -> None:
         await _log_skip(campaign_id, "auto_reply", "pending_jobs_full", {"pending": pending})
         return
 
+    # The gate refuses every reply here while the coordinator holds the
+    # campaign; asked once up front so the skip is logged with its reason.
+    from ..services.coordinator import coordinator_blocks_send
+
+    if await run_db(coordinator_blocks_send, campaign_id):
+        await _log_skip(campaign_id, "auto_reply", "coordinator_hold")
+        return
+
     # Find candidates with minimum age filter (ensures delay has elapsed)
     candidates = await run_db(get_auto_reply_candidates, campaign_id, AUTO_REPLY_DELAY_MIN)
     if not auto_replies_on:
@@ -1368,13 +1394,19 @@ async def plan_auto_replies(campaign_id: str) -> None:
         delay = random.randint(0, remaining_max) + (scheduled * random.randint(120, 300))
         scheduled_at = now + delay
 
-        await run_db(
+        job_id = await run_db(
             _create_gated_job,
             campaign_id=campaign_id,
             job_type=JOB_AUTO_REPLY,
             scheduled_at=scheduled_at,
             outreach_id=outreach_id,
         )
+        if not job_id:
+            # The gate refused it, and none of its refusals of an auto_reply
+            # (mode, cloud ownership, the hold) depends on the row: the next
+            # candidate would be refused too, and each refusal writes a log
+            # row. Stop, as the DM and invite planners do.
+            break
         logger.info(
             "Scheduled auto-reply for outreach %s in %d min (sentiment=%s)",
             outreach_id[:8],

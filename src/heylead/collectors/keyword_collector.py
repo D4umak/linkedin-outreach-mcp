@@ -164,6 +164,7 @@ async def collect_keyword_signals() -> str:
     )
     from ..linkedin import UnipileError, get_account_id, get_linkedin_client
     from ..linkedin.search_traffic import search_scope
+    from ..services.post_freshness import post_item_published_at
 
     account_id = await run_db(get_account_id)
     if not account_id:
@@ -395,6 +396,9 @@ async def collect_keyword_signals() -> str:
                     "impressions_count": impressions,
                     "reposts_count": reposts,
                     "timestamp": post.get("timestamp", ""),
+                    "published_at": post_item_published_at(
+                        post_id, post.get("timestamp"), now,
+                    ),
                     "account_id": acct_id[:8],
                     "media_type": post.get("media_type", "text"),
                     "is_repost": bool(post.get("is_repost")),

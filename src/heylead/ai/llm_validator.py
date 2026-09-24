@@ -28,6 +28,7 @@ from . import schemas
 from .llm import LLMClient
 from .message_validator import ValidationResult
 from .prompt_loader import get_prompt_temperature, has_prompt, load_fragment, render_prompt
+from .copywriter import channel_for_message_type, rules_for
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ async def llm_validate(
                 "history": _format_history_for_validation(history),
                 "company": company,
                 "calendar_link": calendar_link or "Not configured",
-                "voice_rules": load_fragment("voice_rules"),
+                "voice_rules": rules_for(channel_for_message_type(message_type)),
             }
 
         prompt = render_prompt(prompt_name, ctx)
