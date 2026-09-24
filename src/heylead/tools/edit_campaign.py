@@ -82,6 +82,8 @@ async def run_edit_campaign(
     campaign_intent: str = "",
     # Prompt family: outbound (default) or job_search
     campaign_type: str = "",
+    # What the campaign is for (#1153); rewrites campaign_type and campaign_intent
+    goal: str = "",
     # In-process agents (act is the default when unset)
     enable_reply_agent: str = "",
     enable_strategist_replan_agent: str = "",
@@ -147,6 +149,9 @@ async def run_edit_campaign(
             by this switch. Empty keeps the current value.
             job_search replaces the intent-specific first touch; campaign_intent
             still selects the system prompt.
+        goal: What the campaign is for: "sell", "job_search", "hire",
+            "partner", "buy" or "research". Rewrites campaign_type and
+            campaign_intent to match. Empty keeps the current value.
         enable_reply_agent: Reply exception agent: "on" (act), "off", or
             "observe". Empty keeps the current value. Unset defaults to act.
         enable_strategist_replan_agent: Strategist replan agent: "on", "off",
@@ -199,7 +204,7 @@ async def run_edit_campaign(
         or has_context_fields or has_voice_settings or open_to_work_mode
         or has_toggle_settings or has_engagement_settings
         or has_followup_settings or has_invite_settings or has_inmail_settings
-        or has_timing_settings or campaign_intent or wanted_type
+        or has_timing_settings or campaign_intent or wanted_type or goal.strip()
         or has_agent_settings or competitor_companies or has_target
     )
 
@@ -214,6 +219,7 @@ async def run_edit_campaign(
             "  product / go_live / volume / must_confirm: optional project facts\n"
             "  campaign_intent: sell, buy, partner, or recruit\n"
             "  campaign_type: outbound or job_search\n"
+            "  goal: sell, job_search, hire, partner, buy, or research\n"
             "  voice_mode: text_only, voice_only, mixed, or ab_test\n"
             "  voice_noise: office, cafe, street, quiet, none, auto\n"
             "  voice_humanize: on or off\n"
@@ -620,7 +626,11 @@ async def run_edit_campaign(
             new_str = ",".join(day_names[d] for d in parsed_active_days)
             change_descriptions.append(f"Active days: {old_str} -> {new_str}")
 
-    # ── Campaign intent (message stance: sell | buy | partner | recruit) ──
+    # Snapshot before the old-key edits, so the goal block below can tell
+    # whether they changed anything (#1153).
+    config_before_old_keys = json.dumps(config, sort_keys=True)
+
+    # ── Campaign intent (message stance: sell | buy | partner | recruit | research) ──
     if campaign_intent:
         from ..ai.intent import VALID_INTENTS
         wanted = campaign_intent.strip().lower()
@@ -645,6 +655,30 @@ async def run_edit_campaign(
         if wanted_type != old_type:
             config["campaign_type"] = wanted_type
             change_descriptions.append(f"Campaign type: {old_type} -> {wanted_type}")
+
+    # ── Goal (#1153): writes campaign_goal and the two derived keys ──
+    from .. import goals as _goals
+
+    wanted_goal: str | None = None
+    if goal.strip():
+        wanted_goal = _goals.normalize_goal(goal)
+        if wanted_goal is None:
+            return f"❌ Unknown goal '{goal}'. Valid values: {', '.join(_goals.VALID_GOALS)}."
+        old_goal = _goals.goal_from_config(config)
+        if wanted_goal != old_goal or config.get("campaign_goal") != wanted_goal:
+            config.update(_goals.derived_keys(wanted_goal))
+            if wanted_goal != old_goal:
+                change_descriptions.append(f"Goal: {old_goal} -> {wanted_goal}")
+    elif (campaign_intent or wanted_type) and (
+        "campaign_goal" in config
+        or json.dumps(config, sort_keys=True) != config_before_old_keys
+    ):
+        # An old-key edit that changed something leaves a consistent row: the
+        # goal follows the keys. A no-op re-issue (the cloud-repair path)
+        # stays a no-op locally.
+        config["campaign_goal"] = _goals.goal_from_config(
+            {k: v for k, v in config.items() if k != "campaign_goal"}
+        )
 
     # Commit config_json changes if any
     config_updated = json.dumps(config)
@@ -801,6 +835,9 @@ async def run_edit_campaign(
     if wanted_type:
         # Already validated and normalised above.
         sync_settings["campaign_type"] = wanted_type
+    if wanted_goal:
+        # The backend derives campaign_type and campaign_intent from it.
+        sync_settings["campaign_goal"] = wanted_goal
     if booking_link:
         # Same key the dashboard Calendar Link field and reply prompts use.
         # Without this push a hosted campaign never learns the URL.

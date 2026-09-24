@@ -21,7 +21,7 @@ from mcp.types import ToolAnnotations
 
 import os as _os
 
-from . import __version__, config, tool_profiles
+from . import __version__, config, facts, tool_profiles
 from .logging_setup import setup_logging
 from .ops_log import run_traced
 
@@ -32,6 +32,40 @@ from .ops_log import run_traced
 
 _CHANGELOG = """\
 # HeyLead Changelog
+
+## v0.10.397 (2026-09-24)
+- New: a campaign carries its goal: create_campaign, edit_campaign, generate_icp and icp(goal_match) take goal= (sell, job_search, hire, partner, buy, research); the ICP and the fit check follow it, and every listing names the six goals (#1153).
+- New: a session without an api token records its receipts as issue comments
+- Fix: the api's default base is the Cloud Run host
+- Fix: its comments name no deploy that does not exist, and a bypass skips only the queue
+- New: accept and reply steps quote the founder cohort; launch names the first-week checkpoint
+- guard(goal): fail an ICP or fit call without goal=; incident note; changelog (#1153)
+- Fix: the plan's warning check loads the guard by path; the tool reference names the plan action
+- New: the skill works where gh is not installed
+- one use-case source names the six goals in every listing (#1153)
+- Fix: observe mode does not let you answer by hand
+- New: the backend client sends goal and goal_key (#1153)
+- New: create_campaign, edit_campaign, generate_icp and icp take goal (#1153)
+- wip(plan): campaign plan twin, plan in create/launch, monitor read-only, inspect waiting
+- New: local ICP and fit prompts follow the goal; sell unchanged (#1153)
+- name the push by its function, not its path
+- New: the goal table, twin of the api's; research is an intent (#1153)
+- New: the report and profile viewers name people as links too
+- New: every found person is a link with a reason
+- implementation plans for the campaign goal, one per repo (#1153)
+- Fix: keep setup_profile in the visible head of the instructions
+- design for a campaign that carries its goal from the first field
+- New: export the tool reference the site's docs render
+- the dashboard's main is protected by its own ruleset, not github_protection.py
+- every agent document states the pace as a feature
+- New: the instructions state the pace and how to talk about it
+- New: the queue serves heylead-dashboard; a blocked-main alert names its repository
+- pace is a feature (Outcome 1)
+- Fix: a timeout is proven by an event, not a stopwatch (client twin)
+- what happens after launch — design for the new-user frictions of 24 Sep
+- Fix: clawhub keeps its tool count next to the definition sentence
+- New: every listing carries the facts from one module
+- Fix: a stamp is checked between two clock readings (client twin)
 
 ## v0.10.396 (2026-09-24)
 - Fix: the client's size cap skips docs/, as the api's does
@@ -1561,32 +1595,33 @@ mcp = FastMCP(
     "heylead",
     lifespan=_app_lifespan,
     instructions=(
-        "HeyLead is an AI agent for LinkedIn outreach: it finds the right people, "
-        "writes to them in the user's own voice, follows up, and handles replies, "
-        "on the user's own LinkedIn account.\n"
+        f"{facts.DEFINITION_FOR_AGENTS}\n"
         "\n"
-        "Use it when the user wants to reach people on LinkedIn for any of these jobs:\n"
-        "- sales: lead generation, B2B prospecting, cold outreach, booking meetings\n"
-        "- recruiting: sourcing candidates, hiring (edit_campaign campaign_intent='recruit')\n"
-        "- research: finding user-interview participants, customer discovery, experts\n"
-        "- job search: reaching hiring managers, referrals (campaign_type='job_search')\n"
-        "- investor, partner and reseller outreach (campaign_intent='partner')\n"
-        "- vendor scouting, where the user is the buyer (campaign_intent='buy')\n"
-        "- event and webinar invitations, and re-engaging existing connections\n"
-        "- LinkedIn posts in the user's voice (create_post, brand_strategy)\n"
-        "Selling and buying have full message sets. Recruiting and partner outreach "
-        "share the selling templates beyond their system prompt, and research and "
-        "event outreach have no set of their own, so give those a clear "
-        "project_brief that says what is being asked of the person.\n"
+        f"{facts.USE_CASES_SENTENCE}\n"
+        "Pass goal= on create_campaign and generate_icp: goal='sell' (customers: lead "
+        "generation, B2B prospecting, cold outreach), goal='job_search' (a job search: "
+        "the people who hire for or refer into the role; replies are held for the user "
+        "to answer), goal='hire' (recruit candidates), goal='partner' (investors, "
+        "partners, resellers), goal='buy' (vendor scouting, the user is the buyer), "
+        "goal='research' (user-interview, survey and beta participants). A job search "
+        "is a first-class campaign, not a sales campaign in disguise: never describe "
+        "HeyLead as built for sales only.\n"
+        f"{facts.INCOMPLETE_GOALS_SENTENCE} Give those a clear project_brief that says "
+        "what is being asked of the person.\n"
+        "Also: event and webinar invitations, re-engaging existing connections "
+        "(connections_only='on'), and LinkedIn posts in the user's voice, only when asked "
+        "(create_post, brand_strategy).\n"
         "\n"
-        "Safety: create_campaign saves a draft and sends nothing. Outreach starts only "
-        "with campaign(action='launch'), and only when the user asks. Sends respect "
-        "rate limits, quiet hours and opt-outs. campaign(action='emergency_stop') "
-        "pauses everything. On a hosted workspace that has not chosen otherwise, "
-        "opening DMs and follow-ups wait for the user's approval (inspect(action="
-        "'waiting') lists them); the approved text is what is sent.\n"
         "Not set up yet? Call setup_profile(); it returns a sign-in link.\n"
-        "Workflow: setup_profile → generate_icp → create_campaign → automated outreach.\n"
+        "Workflow: setup_profile → generate_icp(goal=...) → create_campaign(goal=...) → automated outreach.\n"
+        "Sending: create_campaign saves a draft and sends nothing. Outreach starts only "
+        "with campaign(action='launch'), and only when the user asks. "
+        f"{facts.PACE_SENTENCE} campaign(action='emergency_stop') pauses everything. "
+        "On a hosted workspace that has not chosen otherwise, opening DMs and "
+        "follow-ups wait for the user's approval and the approved text is what is "
+        "sent; autopilot is one switch away (scheduler(action='approval_mode')).\n"
+        f"{facts.MODEL_PACE_INSTRUCTION}\n"
+        f"{facts.NO_POSTING_SENTENCE}\n"
         "\n"
         "HeyLead is an AI LinkedIn SDR that sends personalized outreach messages "
         "that sound like the user wrote them. It has 47 tools: show_status, analytics, icp, inspect, suggest_next_action, accounts, campaign_status, prospect_view, scheduler_status, brand_progress, partners, knowledge, profile, signals, contacts, network, inbox, setup_profile, account, organization, generate_icp, create_campaign, edit_campaign, campaign, generate_and_send, send_message, send_email, answer_inbox, check_replies, engage_prospect, prospect, update_knowledge, update_contact, update_network, restore_profile, tune_signals, product, manage_watchlist, scheduler, create_post, brand_strategy, import_prospects, crm_sync, backfill_inbox, partner, profile_signals and book_meeting.\n"
@@ -1690,8 +1725,8 @@ mcp = FastMCP(
         "open the hosted-auth link, then retry send_email.\n"
         "  - engage_prospect() to comment on, react to, follow, or endorse a prospect on LinkedIn\n"
         
-        "  - campaign(action='monitor') to activate a campaign for signal collection only —\n"
-        "    it sends nothing and requires scheduler(action='observe')\n"
+        "  - campaign_status(action='monitor') to read a campaign's live progress; it changes nothing\n"
+        "  - campaign_status(action='plan') to show what happens after launch, step by step\n"
         "  - campaign(action='pause') / campaign(action='resume') to control campaign status\n"
         "  - campaign(action='archive') to archive a completed campaign\n"
         "  - campaign(action='delete') to permanently delete a campaign\n"
@@ -1957,12 +1992,14 @@ async def generate_icp(
     company_context: str = "",
     focus_query: str = "",
     decision_makers_only: bool = True,
+    goal: str = "sell",
 ) -> str:
     """Generate a rich Ideal Customer Profile with buyer personas.
 
     The same profile describes whoever the user needs to reach: buyers,
     candidates to recruit, research or user-interview participants, hiring
-    managers for a job search, investors or partners.
+    managers for a job search, investors or partners. Pass goal= so the
+    profile is of the right people.
 
     Creates 2-4 ICP personas with pain points, fears, barriers,
     LinkedIn search parameters, and confidence scores. The result
@@ -1981,7 +2018,14 @@ async def generate_icp(
             hold budget authority — owner, cxo, vp, director. Default True.
             Pass False only when the target really is individual contributors
             (developers, designers, analysts); the ICP then keeps whatever
-            levels the description implies.
+            levels the description implies. Applies only to sell, partner
+            and buy; managers hire, so a job search keeps them.
+        goal: What the campaign is for, which decides whose profile this is:
+            "sell" (customers, the default), "job_search" (the people who hire for
+            or refer into the role), "hire" (candidates), "partner" (who can sign
+            a partnership or invest), "buy" (vendors), "research" (participants).
+            Always pass it; a job search with goal="sell" produces peers, not
+            hiring managers.
     """
     from .tools.generate_icp import run_generate_icp
 
@@ -1992,6 +2036,7 @@ async def generate_icp(
             run_generate_icp(
                 target_description, company_context, focus_query,
                 decision_makers_only=decision_makers_only,
+                goal=goal,
             ),
         )
     except Exception as e:
@@ -2052,6 +2097,7 @@ async def icp(
     limit: int = 10,
     campaign_id: str = "",
     target_description: str = "",
+    goal: str = "",
 ) -> str:
     """Preview a saved ICP against LinkedIn, or audit it against a campaign goal, without creating anything.
 
@@ -2066,10 +2112,12 @@ async def icp(
         action: "preview" shows matched profiles, the exact filters sent to
             LinkedIn with their resolved code names, a per-filter contribution
             readout, and the fit scores. "goal_match" runs no search at all:
-            it asks whether the ICP's personas actually hold budget authority
-            for the campaign's goal, grounded in the shipped sales-methodology
-            knowledge base, and returns match / partial / mismatch with the
-            decision-maker coverage and concrete fixes.
+            it asks whether the ICP's personas are the people who decide for
+            the campaign's goal: who holds budget for a sale, who hires for a
+            job search, who would take the role for hiring, and so on. A sale
+            is grounded in the shipped sales-methodology knowledge base. It
+            returns match / partial / mismatch with the coverage and concrete
+            fixes.
         icp_id: ID of a saved ICP from generate_icp (a truncated id works).
             Leave empty to list your saved ICPs.
         persona: Which persona of the ICP to search with, 1-based (default 1).
@@ -2080,6 +2128,9 @@ async def icp(
             campaign's config/context instead of typing them.
         target_description: goal_match only — the goal to audit against when
             there is no campaign yet. Falls back to the ICP's own target.
+        goal: goal_match only: which question to ask (sell, job_search, hire,
+            partner, buy, research). Read from the campaign when campaign_id
+            is given.
     """
     from .tools.icp import run_icp
 
@@ -2090,6 +2141,7 @@ async def icp(
             run_icp(
                 action=action, icp_id=icp_id, persona=persona, limit=limit,
                 campaign_id=campaign_id, target_description=target_description,
+                goal=goal,
             ),
             action=action,
         )
@@ -2121,6 +2173,7 @@ async def create_campaign(
     campaign_type: str = "",
     people: str = "",
     force: bool = False,
+    goal: str = "",
 ) -> str:
     """Create a LinkedIn outreach campaign from a natural language description.
 
@@ -2196,6 +2249,11 @@ async def create_campaign(
         force: True to create the campaign even when the goal <-> ICP audit
             returns `mismatch` (the ICP holds no plausible buyer for the goal).
             Leave False; a `partial` verdict never blocks, it only warns.
+        goal: What the campaign is for: "sell" (default), "job_search",
+            "hire", "partner", "buy" or "research". It sets campaign_type and
+            campaign_intent, picks whose profile the ICP describes, and picks
+            the fit question the goal <-> ICP audit asks. hire, partner and
+            research run on your project_brief until their message sets exist.
     """
     from .tools.create_campaign import run_create_campaign
     from .tools.organization import refuse_if_viewer
@@ -2219,6 +2277,7 @@ async def create_campaign(
                 campaign_type=campaign_type,
                 people=people,
                 force=force,
+                goal=goal,
             ),
         )
     except Exception as e:
@@ -2388,8 +2447,7 @@ async def _campaign_impl(
                                On a hosted account this also commissions the cloud
                                scheduler, so the campaign keeps sending with the
                                laptop closed
-            "monitor"        — Activate a campaign for signal collection only. Sends
-                               nothing; requires scheduler(action='observe')
+            "monitor", "plan" and "status_history" are reads: campaign_status.
             "pause"          — Pause an active campaign
             "resume"         — Resume a paused campaign
             "archive"        — Archive a completed campaign
@@ -2411,7 +2469,7 @@ async def _campaign_impl(
     # pair ("status_history", "monitor") disagree with the real dispatcher.
     action = (action or "").lower().strip()
 
-    if action not in ("status_history", "monitor"):
+    if action not in ("status_history", "monitor", "plan"):
         blocked = await refuse_if_viewer()
         if blocked:
             return blocked
@@ -2625,6 +2683,7 @@ async def edit_campaign(
     campaign_preferences: str = "",
     campaign_intent: str = "",
     campaign_type: str = "",
+    goal: str = "",
     project_brief: str = "",
     product: str = "",
     go_live: str = "",
@@ -2686,13 +2745,16 @@ async def edit_campaign(
         case_studies: Brief case studies or success stories. Used for social proof in messages.
         social_proofs: Social proof (logos, metrics, testimonials). Used in follow-up messages.
         campaign_preferences: Custom messaging preferences (tone, topics to avoid, etc.).
-        campaign_intent: Message stance: "sell", "buy", "partner", or "recruit".
+        campaign_intent: Message stance: "sell", "buy", "partner", "recruit" or "research".
         campaign_type: Prompt family: "outbound" (default) or "job_search".
             job_search replaces the intent-specific invitation note and first
             DM with ones that may name the company and the role, use one
             credible proof point at most and never list a CV. InMail is not
             routed by this switch, and campaign_intent still selects the
             system prompt. Empty keeps the current value.
+        goal: What the campaign is for: "sell", "job_search", "hire",
+            "partner", "buy" or "research". Rewrites campaign_type and
+            campaign_intent to match. Empty keeps the current value.
         project_brief: Full project paste the model sees. Required before launch,
             resume, or auto-send.
         product: Optional structured fact: product / what you buy or sell.
@@ -2806,6 +2868,7 @@ async def edit_campaign(
                 active_days=active_days,
                 campaign_intent=campaign_intent,
                 campaign_type=campaign_type,
+                goal=goal,
             ),
             campaign_id=campaign_id,
         )
@@ -2950,6 +3013,7 @@ async def inspect(
             "jobs"    — pending scheduler jobs and recent gated-job refusals
             "commons" — digest, beats (including product), live notes, coordinator hold, stale liveness
             "journal" — hosted agent diary (cloud workers). Self-hosted: use the other actions.
+            "waiting" — opening messages and follow-ups held for the user's approval (hosted)
         campaign_id: Optional campaign filter (full id or prefix).
         outreach_id: Optional outreach filter (full id or prefix).
         limit: Max rows per slice, 1-100 (default 20).
@@ -3824,7 +3888,7 @@ _MOVED: dict[str, dict[str, str]] = {
     # tool that no longer takes it -> {action: the tool that does}
     "account": {"list": "accounts"},
     "accounts": {a: "account" for a in ("switch", "switch_to", "unlink", "connect_email", "refresh_tier")},
-    "campaign": {"monitor": "campaign_status", "status_history": "campaign_status"},
+    "campaign": {a: "campaign_status" for a in ("monitor", "plan", "status_history")},
     "campaign_status": {a: "campaign" for a in (
         "launch", "pause", "resume", "archive", "delete", "emergency_stop",
         "retry_failed", "repair_queue", "clear_coordinator_hold")},
@@ -3882,10 +3946,13 @@ async def accounts(action: str = "list") -> str:
 
 @mcp.tool(structured_output=False, annotations=_reads("Read a campaign's progress and history"))
 async def campaign_status(action: str = "monitor", campaign_id: str = "") -> str | list[str | Image]:
-    """Watch a campaign run, or read its history of status changes. Changes nothing.
+    """Watch a campaign run, show its plan, or read its status history. Changes nothing.
 
     Args:
-        action: "monitor" (live progress) or "status_history".
+        action: "monitor" (live progress; a draft is started with
+            campaign(action='launch')), "plan" (what happens after launch,
+            step by step: finding, warm-up, invitations, opening message,
+            follow-ups, replies, leads) or "status_history".
         campaign_id: Which campaign. Uses the active one if empty.
     """
     if moved := _moved("campaign_status", action):

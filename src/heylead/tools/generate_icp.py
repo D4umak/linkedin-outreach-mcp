@@ -66,11 +66,17 @@ async def generate_icp_result_for_campaign(
     focus_query: str = "",
     user_context: dict[str, Any] | None = None,
     decision_makers_only: bool = True,
+    goal: str = "sell",
 ) -> IcpResult:
     """Generate an ICP (IcpResult) for use in campaign creation. No persist, no formatting.
 
     Shared logic for run_generate_icp and create_campaign when generating ICP inline.
+    `goal` (heylead.goals.VALID_GOALS) decides whose profile this is, whether
+    the seniority floor applies and which question the fit judge asks (#1153).
     """
+    from .. import goals
+
+    goal = goals.normalize_goal(goal) or goals.DEFAULT_GOAL
     ctx = user_context or {}
     use_pipeline = bool(
         company_context
@@ -88,6 +94,7 @@ async def generate_icp_result_for_campaign(
                 company_context=company_context,
                 focus_query=focus_query,
                 user_context=ctx,
+                goal=goal,
             )
             result = icp_result_from_dict(raw)
             # Enrich with LinkedIn codes (backend RAG may not have enriched)
@@ -99,6 +106,7 @@ async def generate_icp_result_for_campaign(
                 company_context=company_context,
                 focus_query=focus_query,
                 user_profile=ctx,
+                goal=goal,
             )
     elif use_pipeline:
         from ..ai.icp_pipeline import run_icp_pipeline
@@ -107,6 +115,7 @@ async def generate_icp_result_for_campaign(
             company_context=company_context,
             focus_query=focus_query,
             user_profile=ctx,
+            goal=goal,
         )
     else:
         result = await generate_icp_v2(
@@ -114,6 +123,7 @@ async def generate_icp_result_for_campaign(
             company_context=company_context,
             focus_query=focus_query,
             user_profile=ctx,
+            goal=goal,
         )
     # Whatever route produced the personas — backend RAG, the local pipeline
     # or generate_icp_v2 — the stored seniority is canonical, and by default
@@ -121,7 +131,9 @@ async def generate_icp_result_for_campaign(
     # is the guarantee (9 Sep 2026).
     from ..services.seniority import apply_seniority_policy
 
-    apply_seniority_policy(result, decision_makers_only=decision_makers_only)
+    apply_seniority_policy(
+        result, decision_makers_only=decision_makers_only and goals.seniority_floor_applies(goal),
+    )
     attach_signals_to_icp_result(result, target_description)
 
     # Goal <-> ICP audit (9 Sep 2026: campaign be5f78ff targeted an
@@ -133,6 +145,7 @@ async def generate_icp_result_for_campaign(
 
     verdict = await judge_goal_match(
         target_description, company_context or "", icp_result_to_dict(result),
+        goal_key=goal,
     )
     result.source_info = {**(result.source_info or {}), "goal_match": verdict.to_dict()}
     try:
@@ -153,6 +166,7 @@ async def run_generate_icp(
     company_context: str = "",
     focus_query: str = "",
     decision_makers_only: bool = True,
+    goal: str = "sell",
 ) -> str:
     """Generate a rich ICP and persist it.
 
@@ -165,6 +179,11 @@ async def run_generate_icp(
     6. Research persona 1 (observe/act; no outreach)
     7. Format output
     """
+    from .. import goals
+
+    goal_key = goals.normalize_goal(goal)
+    if goal_key is None:
+        return f"❌ Unknown goal '{goal}'. Valid values: {', '.join(goals.VALID_GOALS)}."
 
     # ── Step 0: Check setup ──
     setup_done = await run_db(get_setting, "setup_complete", False)
@@ -204,6 +223,7 @@ async def run_generate_icp(
             focus_query=focus_query,
             user_context=user_context,
             decision_makers_only=decision_makers_only,
+            goal=goal_key,
         )
     except Exception as e:
         logger.error(f"ICP generation failed: {e}", exc_info=True)

@@ -19,6 +19,7 @@ from ..formatter import (
     funnel_bar,
     outcome_icon,
     outcome_label,
+    person_line,
     progress_bar,
     sparkline,
     stars,
@@ -26,6 +27,16 @@ from ..formatter import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _person(row: dict) -> str:
+    """A won, lost or stale lead as `[Name](url) — title at company`."""
+    return person_line(
+        row.get("name") or "Unknown",
+        row.get("linkedin_url") or "",
+        title=row.get("title") or "",
+        company=row.get("company") or "",
+    )
 
 
 async def run_campaign_report(
@@ -185,11 +196,8 @@ async def run_campaign_report(
         for i, deal in enumerate(won_deals):
             is_last = i == len(won_deals) - 1
             prefix = "\u2514\u2500\u2500" if is_last else "\u251c\u2500\u2500"
-            role = deal.get("title", "")
-            if deal.get("company"):
-                role += f" at {deal['company']}" if role else deal["company"]
             reason_str = f" ({deal['reason']})" if deal.get("reason") else ""
-            output.append(f"{prefix} {deal['name']} \u2014 {role}{reason_str}")
+            output.append(f"{prefix} " + _person(deal) + reason_str)
             # Per-deal timeline
             tl = deal_timelines.get(deal["name"])
             if tl:
@@ -211,11 +219,8 @@ async def run_campaign_report(
         for i, deal in enumerate(lost_deals):
             is_last = i == len(lost_deals) - 1
             prefix = "\u2514\u2500\u2500" if is_last else "\u251c\u2500\u2500"
-            role = deal.get("title", "")
-            if deal.get("company"):
-                role += f" at {deal['company']}" if role else deal["company"]
             reason_str = f" ({deal['reason']})" if deal.get("reason") else ""
-            output.append(f"{prefix} {deal['name']} \u2014 {role}{reason_str}")
+            output.append(f"{prefix} " + _person(deal) + reason_str)
         # Aggregate loss reasons
         loss_reasons: dict[str, int] = {}
         for deal in lost_deals:
@@ -238,13 +243,10 @@ async def run_campaign_report(
         for i, s in enumerate(stale[:5]):
             is_last = i == min(4, len(stale) - 1)
             prefix = "\u2514\u2500\u2500" if is_last else "\u251c\u2500\u2500"
-            role = s.get("title", "")
-            if s.get("company"):
-                role += f" at {s['company']}" if role else s["company"]
             src = s.get("source", "search")
             src_label = SOURCE_LABELS.get(src, "")
             src_tag = f", {src_label}" if src_label and src not in ("search", "linkedin_search") else ""
-            output.append(f"{prefix} {s['name']} \u2014 {role} (last activity: {s['days_stale']}d ago{src_tag})")
+            output.append(f"{prefix} " + _person(s) + f" (last activity: {s['days_stale']}d ago{src_tag})")
         if len(stale) > 5:
             output.append(f"    ... and {len(stale) - 5} more")
         output.append('   \u2192 Use prospect(action="close") to resolve or send_message(action="followup") to re-engage')

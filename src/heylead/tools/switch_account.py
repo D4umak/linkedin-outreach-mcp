@@ -336,7 +336,7 @@ async def run_switch_account_to(account_id: str) -> str:
         output = format_voice_signature(voice, expertise)
 
         header = (
-            f"✅ Switched to: **{profile['name']}**"
+            f"✅ Switched to: **{profile['name']}**"  # nosemgrep: person-line-without-link -- the user's own profile, not a found person
             + (f" — {profile['title']}" if profile.get("title") else "")
             + (f" at {profile['company']}" if profile.get("company") else "")
             + "\n"

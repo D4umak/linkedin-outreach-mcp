@@ -3,7 +3,20 @@
 
 **Your AI sales rep. One command to fill your pipeline.**
 
-HeyLead is an MCP-native autonomous LinkedIn SDR that runs inside Cursor, Claude Code, or any MCP-compatible editor. Sign in on the web, then talk to your AI and say "find me leads."
+HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. Sign in on the web, then talk to your AI and say "find me leads."
+
+## Use cases
+
+A campaign has one of six goals, and the ICP, the fit check and the messages follow it: Sell a product or service, Find a job, Hire people, Find partners or investors, Find a vendor and Research interviews.
+
+- **Sell a product or service**: Reach the people who buy what you built.
+- **Find a job**: Reach the people who hire for the role you want.
+- **Hire people**: Reach candidates for a role you are filling. Works with a custom brief.
+- **Find partners or investors**: Reach the people who can sign a partnership or an investment. Works with a custom brief.
+- **Find a vendor**: You are the buyer. Reach the people who sell what you need.
+- **Research interviews**: Reach people to interview, survey or test with. Works with a custom brief.
+
+Hire people, Find partners or investors and Research interviews run on a custom brief until their message sets exist.
 
 ---
 
@@ -83,9 +96,9 @@ You'll get a LinkedIn authentication link. Open it, connect LinkedIn, then say
 6. **Handle replies** — Detects sentiment, advances positive leads toward meetings, answers questions
 7. **Track outcomes** — Won/lost/opted-out tracking with conversion analytics
 
-**Safety model:** campaigns are created as drafts and only start when you
+**Sending model:** campaigns are created as drafts and only start when you
 explicitly launch them. Every send passes rate limits, working-hours checks,
-and a 1st-degree connection guard before it goes out. Launching is also what
+and a 1st-degree connection guard before it goes out. HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time. Launching is also what
 commissions 24/7 cloud sending — in `observe` mode nothing is commissioned and
 nothing is sent, from either machine.
 
@@ -176,11 +189,11 @@ HeyLead gives your AI 22 tools:
 
 **ICP Generation** — RAG-powered pipeline that crawls company context, generates buyer personas with pain points, fears, barriers, and maps them to LinkedIn search parameters.
 
-**Autonomous Scheduler** — Runs in the background, respects working hours and rate limits. On a hosted account, cloud is the default sender for every campaign. Launching commissions the cloud, so outreach continues 24/7 with your laptop closed: invitations, opening DMs, first-touch InMail, follow-ups, engagements, follows, endorsements, email fallbacks, prospect top-ups, brand posts, auto-replies, inbound, warmup, signal collectors, and post-intel. This machine does not start a local scheduler engine for that work. Move the whole account here with `scheduler(action='send_from', host='local')`, which turns the cloud scheduler off. Observe still means nobody sends. Direct / self-hosted installs send from this machine only.
+**Autonomous Scheduler** — Runs in the background, respects working hours and rate limits. On a hosted account, cloud is the default sender for every campaign. Launching commissions the cloud, so outreach continues 24/7 with your laptop closed: invitations, opening DMs, first-touch InMail, follow-ups, engagements, follows, endorsements, email fallbacks, prospect top-ups, auto-replies, inbound, warmup, signal collectors, and post-intel. This machine does not start a local scheduler engine for that work. Move the whole account here with `scheduler(action='send_from', host='local')`, which turns the cloud scheduler off. Observe still means nobody sends. Direct / self-hosted installs send from this machine only.
 
 **Engagement Warm-ups** — Automatically engages with prospect posts before sending connection requests, building familiarity.
 
-**Adaptive Rate Limiting** — Starts conservative, ramps up when acceptance rate is high, pulls back when it drops. Respects LinkedIn safety limits.
+**Pace** — HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
 
 **Outcome Tracking** — Mark deals as won/lost, track conversion rates, identify stale leads, measure engagement ROI.
 
@@ -194,7 +207,7 @@ HeyLead gives your AI 22 tools:
 | **Pro** | $29 per connected LinkedIn account per month | Up to 5 follow-ups per prospect |
 
 Invitation limits follow the LinkedIn account (free, Premium or Sales Navigator), not the HeyLead plan.
-Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign.
+Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign, 3 ICP generations.
 
 ---
 

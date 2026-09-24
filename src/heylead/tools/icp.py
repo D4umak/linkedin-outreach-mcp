@@ -26,7 +26,7 @@ from ..ai.icp_schemas import IcpResult, SingleIcp, icp_result_from_dict
 from ..constants import HOSTED_MIN_FIT_SCORE, MIN_FIT_SCORE_THRESHOLD
 from ..db.async_bridge import run_db
 from ..db.queries import get_setting, list_icps
-from ..formatter import stars
+from ..formatter import person_line
 from ..linkedin import (
     UnipileAuthError,
     UnipileError,
@@ -72,6 +72,7 @@ async def run_icp(
     limit: int = 10,
     campaign_id: str = "",
     target_description: str = "",
+    goal: str = "",
 ) -> str:
     """Dispatch an icp() action."""
     action = (action or "preview").strip().lower()
@@ -88,6 +89,7 @@ async def run_icp(
             icp_id=icp_id,
             campaign_id=campaign_id,
             target_description=target_description,
+            goal=goal,
         )
     return await _preview(icp_id=icp_id, persona=persona, limit=limit)
 
@@ -97,7 +99,7 @@ async def run_icp(
 # ──────────────────────────────────────────────
 
 async def _goal_match(
-    icp_id: str, campaign_id: str, target_description: str,
+    icp_id: str, campaign_id: str, target_description: str, goal: str = "",
 ) -> str:
     """Audit a saved ICP against a campaign goal.
 
@@ -105,8 +107,16 @@ async def _goal_match(
     nationality. Nothing asked whether that audience could buy what the
     campaign sold until replies started coming back wrong. Read-only — no
     campaign, no contact, no outreach.
+
+    The question asked follows the campaign's goal (#1153): read from the
+    campaign when campaign_id is given, else the `goal` argument (sell).
     """
+    from .. import goals
     from ..ai.goal_match import format_verdict, judge_goal_match
+
+    goal_key = goals.normalize_goal(goal)
+    if goal_key is None:
+        return f"❌ Unknown goal '{goal}'. Valid values: {', '.join(goals.VALID_GOALS)}."
 
     if not icp_id:
         return (
@@ -132,7 +142,7 @@ async def _goal_match(
     except (TypeError, ValueError) as e:
         return f"Saved ICP `{record['id'][:8]}` could not be parsed: {e}"
 
-    goal = (target_description or "").strip()
+    goal_text = (target_description or "").strip()
     offer = ""
     campaign_note = ""
     if campaign_id:
@@ -146,7 +156,8 @@ async def _goal_match(
             config = json.loads(campaign.get("config_json") or "{}")
         except (TypeError, ValueError):
             config = {}
-        goal = goal or str(config.get("target_description") or "")
+        goal_text = goal_text or str(config.get("target_description") or "")
+        goal_key = goals.goal_from_config(config)
         ctx = parse_campaign_context(campaign)
         offer_bits: list[str] = []
         for key in ("product", "project_brief"):
@@ -160,19 +171,19 @@ async def _goal_match(
         offer = "\n".join(offer_bits)
         campaign_note = f"Campaign: {campaign.get('name') or campaign_id[:8]}\n"
 
-    if not goal:
-        goal = str(record.get("target_desc") or "")
-    if not goal:
+    if not goal_text:
+        goal_text = str(record.get("target_desc") or "")
+    if not goal_text:
         return (
             "No campaign goal to audit against.\n\n"
             "Pass campaign_id=… or target_description='…'."
         )
 
-    verdict = await judge_goal_match(goal, offer, icp_json)
+    verdict = await judge_goal_match(goal_text, offer, icp_json, goal_key=goal_key)
     header = (
         f"ICP `{record['id'][:8]}` — {record.get('name') or 'unnamed'}\n"
         f"{campaign_note}"
-        f"Goal: {goal[:200]}\n\n"
+        f"Goal: {goal_text[:200]}\n\n"
     )
     tail = ""
     if verdict.blocks_campaign:
@@ -385,12 +396,17 @@ async def _preview(icp_id: str, persona: int, limit: int) -> str:
     # ── Score against this persona with create_campaign's scorer ──
     from ..services.icp_match_scorer import compute_icp_match
 
+    from ..services.enrolment_why import enrolment_why
+
     scoring_icp = {"segments": [segment]}
     breakdowns: list[dict[str, float]] = []
+    segment_name = str(segment.get("name") or "")
     for p in profiles:
         scored = compute_icp_match(p, scoring_icp)
         p["fit_score"] = scored["icp_match_score"]
-        breakdowns.append(scored.get("breakdown") or {})
+        breakdown = scored.get("breakdown") or {}
+        breakdowns.append(breakdown)
+        p["why"] = enrolment_why(p, breakdown, segment_name)
     profiles.sort(key=lambda p: p.get("fit_score", 0.0), reverse=True)
 
     lines.append(_fit_block(profiles, breakdowns, persona_idx))
@@ -747,18 +763,13 @@ def _profile_list(profiles: list[dict], limit: int, marks: dict[str, str]) -> st
     shown = profiles[:limit]
     lines = [f"── Profiles ({len(shown)} of {len(profiles)}, best fit first) ──"]
     for i, p in enumerate(shown, 1):
-        name = p.get("name") or "Unknown"
-        title = p.get("title") or p.get("headline") or ""
-        company = p.get("company") or ""
-        role = title
-        if company:
-            role = f"{role} at {company}" if role else company
+        title = p.get("title") or p.get("headline") or "(no title in search row)"
         key = _identity_key(p)
         mark = f"  [{marks[key]}]" if key and marks.get(key) else ""
-        lines.append(
-            f"  {i}. {name} — {role or '(no title in search row)'} "
-            f"(fit {stars(p.get('fit_score', 0.0))} {p.get('fit_score', 0.0):.2f}){mark}"
-        )
+        lines.append(f"  {i}. " + person_line(
+            p.get("name") or "Unknown", p.get("linkedin_url") or "",
+            title=title, company=p.get("company") or "", why=p.get("why"),
+        ) + mark)
     return "\n".join(lines)
 
 

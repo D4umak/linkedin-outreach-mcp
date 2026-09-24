@@ -6,9 +6,20 @@ Queue labels never replace the user's separate merge/release authorization.
 
 ## What HeyLead Does
 
-HeyLead is an autonomous LinkedIn SDR (Sales Development Representative) that runs entirely via MCP tools. It finds prospects, sends personalized outreach, follows up, tracks replies, and closes deals — all through natural language commands.
+HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. Every action is an MCP tool call.
 
-**Use cases:** LinkedIn lead generation, cold outreach automation, B2B prospecting, SDR automation, campaign management, ICP (Ideal Customer Profile) generation, multi-touch drip sequences, engagement warm-ups, and outreach analytics.
+**Use cases:** A campaign has one of six goals, and the ICP, the fit check and the messages follow it: Sell a product or service, Find a job, Hire people, Find partners or investors, Find a vendor and Research interviews.
+
+- **Sell a product or service**: Reach the people who buy what you built.
+- **Find a job**: Reach the people who hire for the role you want.
+- **Hire people**: Reach candidates for a role you are filling. Works with a custom brief.
+- **Find partners or investors**: Reach the people who can sign a partnership or an investment. Works with a custom brief.
+- **Find a vendor**: You are the buyer. Reach the people who sell what you need.
+- **Research interviews**: Reach people to interview, survey or test with. Works with a custom brief.
+
+Hire people, Find partners or investors and Research interviews run on a custom brief until their message sets exist.
+
+Also known as: LinkedIn lead generation, cold outreach automation, B2B prospecting, SDR automation, campaign management, ICP (Ideal Customer Profile) generation, multi-touch drip sequences, engagement warm-ups, and outreach analytics.
 
 ## Capabilities
 
@@ -20,7 +31,7 @@ HeyLead is an autonomous LinkedIn SDR (Sales Development Representative) that ru
 | **Reply Handling** | Sentiment classification (positive/negative/question/neutral), auto-responses, meeting scheduling |
 | **Intent Signals** | Company news, page engagement, website visitors, profile viewers — compounded into outreach angles |
 | **Analytics** | Funnel reports, conversion rates, stale lead detection, engagement ROI |
-| **Autonomous Scheduling** | Cloud is the default sender for hosted accounts (existing and new campaigns). Launching commissions the cloud: invitations, opening DMs, first-touch InMail, follow-ups, engagements, follows, endorsements, email fallbacks, campaign top-ups, brand posts, auto-replies, inbound, warmup, signal collectors, post-intel, and housekeeping. This machine stays silent for that work unless the user runs `scheduler(action='send_from', host='local')`, which turns the cloud scheduler off. The local engine does not start on a hosted cloud account. Observe still means nobody sends, including the cloud. Direct / self-hosted installs send from this machine only. |
+| **Autonomous Scheduling** | Cloud is the default sender for hosted accounts (existing and new campaigns). Launching commissions the cloud: invitations, opening DMs, first-touch InMail, follow-ups, engagements, follows, endorsements, email fallbacks, campaign top-ups, auto-replies, inbound, warmup, signal collectors, post-intel, and housekeeping. This machine stays silent for that work unless the user runs `scheduler(action='send_from', host='local')`, which turns the cloud scheduler off. The local engine does not start on a hosted cloud account. Observe still means nobody sends, including the cloud. Direct / self-hosted installs send from this machine only. |
 
 ## Typical Workflow
 
@@ -44,6 +55,12 @@ A hold: `prospect(action="conversation", outreach_id="...")` then `send_message(
 Never paste model-authored text as the LinkedIn message. The send tools generate it.
 
 Never launch a draft unless the user asked.
+
+HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
+
+When the user asks what happens after launch, give them the campaign's plan from the create_campaign or launch result. Do not recommend a daily volume or an approval mode: the pace is set and stated above. If asked about LinkedIn's terms, point to https://heylead.dev/terms.
+
+HeyLead reads the user's LinkedIn posts only to learn their voice. It never publishes on their profile unless they ask for a post.
 
 In-process agents default to act. Use `edit_campaign(enable_reply_agent="observe")`, `edit_campaign(enable_strategist_replan_agent="observe")`, `edit_campaign(enable_hot_lead_closer="observe")`, or `edit_campaign(enable_coordinator_agent="observe")` to return to logging-only, `"off"` to disable. `product(action='tick')` can patch this git checkout and open a PR — never from the send path; cloud workers and `uvx` installs without `.git` refuse.
 

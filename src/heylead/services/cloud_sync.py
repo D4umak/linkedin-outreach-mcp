@@ -1430,6 +1430,17 @@ def _warn_sync_chunk_hourly(n: int, total: int, status: int, detail: str) -> Non
     )
 
 
+def _parse_why_json(raw: Any) -> dict[str, Any] | None:
+    """`contacts.why_json` as a dict, or None when blank or not an object."""
+    if not isinstance(raw, str) or raw.strip() in _BLANK_JSON:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) and parsed else None
+
+
 async def sync_to_cloud(
     include_all: bool = False,
     campaign_id: str = "",
@@ -1625,6 +1636,13 @@ async def sync_to_cloud(
                     contact_row[field] = value
             if contact.get("fit_score"):
                 contact_row["fit_score"] = contact["fit_score"]
+            # Why this person is in the campaign, as one JSON object
+            # (`contacts[i].why`): the api stores it in why_json and the
+            # dashboard's "Why this prospect" panel reads it. Omitted when
+            # nothing was recorded, so the backend's own record survives.
+            why = _parse_why_json(contact.get("why_json"))
+            if why:
+                contact_row["why"] = why
             sync_contacts.append(contact_row)
 
         # Outreaches

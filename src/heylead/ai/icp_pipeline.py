@@ -40,6 +40,8 @@ class PipelineState:
     focus_query: str = ""
     user_profile: dict[str, Any] = field(default_factory=dict)
     confidence_threshold: float = 0.4
+    # One of heylead.goals.VALID_GOALS: whose profile this is (#1153).
+    goal: str = "sell"
 
     # Intermediate results
     icp_id: str = ""                # DB record; created by _step_synthesize
@@ -62,6 +64,7 @@ async def run_icp_pipeline(
     focus_query: str = "",
     user_profile: dict[str, Any] | None = None,
     confidence_threshold: float = 0.4,
+    goal: str = "sell",
 ) -> IcpResult:
     """Execute the full ICP generation pipeline.
 
@@ -71,6 +74,7 @@ async def run_icp_pipeline(
         focus_query: Optional focus (e.g., "enterprise segment only")
         user_profile: Sender's profile + expertise
         confidence_threshold: Min confidence to include an ICP
+        goal: One of heylead.goals.VALID_GOALS; passed to the generator (#1153)
 
     Returns:
         IcpResult with 2-4 evidence-grounded ICPs.
@@ -82,6 +86,7 @@ async def run_icp_pipeline(
         focus_query=focus_query,
         user_profile=user_profile or {},
         confidence_threshold=confidence_threshold,
+        goal=goal,
     )
 
     try:
@@ -363,6 +368,7 @@ async def _step_synthesize(state: PipelineState) -> None:
         user_profile=state.user_profile,
         confidence_threshold=state.confidence_threshold,
         kb_evidence=[c.text for c in state.kb_chunks],
+        goal=state.goal,
     )
 
     # Store source info

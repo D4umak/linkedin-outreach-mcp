@@ -680,14 +680,20 @@ async def run_launch_campaign(campaign_id: str = "") -> str:
     except Exception:
         logger.warning("Launch planning failed for %s", campaign_id, exc_info=True)
 
+    # One line of confirmation, then the computed plan (the api's for a hosted
+    # account, the local twin otherwise). The hand-written list it replaced
+    # promised timings no scheduler kept (Outcome api#1138). Then the day the
+    # first week shows something, so the quiet days before it read as the plan
+    # working (Outcome api#1140).
+    from ..services.campaign_plan import plan_and_checkpoint_for
+
+    plan_text, checkpoint = await plan_and_checkpoint_for(campaign_id, campaign)
     lines = [
         f"🚀 Campaign '{campaign['name']}' is now live.",
         "",
-        "The first connection request is queued now:",
-        "├── 🤝 Invite anyone who clears the send line",
-        "├── 💬 Warm-up continues between invites",
-        "├── 📩 Follow-up DMs once connections are accepted",
-        "└── 📬 Replies checked every 5 minutes",
+        plan_text,
+        "",
+        checkpoint,
     ]
     if scheduler_was_off:
         lines.append("")
@@ -720,80 +726,72 @@ async def run_launch_campaign(campaign_id: str = "") -> str:
 
 
 async def run_monitor_campaign(campaign_id: str = "") -> str:
-    """Activate a campaign for read-only signal collection.
+    """Show a campaign's live progress. Changes nothing.
 
-    'active' is the only status the planner collects from, so watching a
-    campaign without sending from it used to need a raw SQL UPDATE — which
-    skipped the actions_log audit row that campaign(action='status_history')
-    reads. This does the same activation through the normal path, and touches
-    nothing else: no scheduler config write, no cloud resume.
-
-    Only observe mode can honour that promise, so this refuses in any other
-    mode rather than activating a campaign that would immediately send.
+    campaign_status is the read half of the campaign tools, and until
+    24 Sep 2026 its default action activated a draft in observe mode: a read
+    that changed state. Activating for collection is campaign(action='launch'),
+    which in observe mode already activates without sending. This shows the
+    status and names that command for a draft or paused campaign.
     """
+    from .show_status import run_show_status
 
-    mode = get_scheduler_mode()
+    lines: list[str] = []
+    if campaign_id:
+        campaign = await run_db(get_campaign, campaign_id)
+        if not campaign:
+            return f"Campaign not found: {campaign_id}"
+        status = str(campaign.get("status") or "")
+        if status == STATUS_DRAFT:
+            lines.append(
+                f"Campaign '{campaign['name']}' is a draft: nothing has been sent. "
+                f"campaign(action='launch', campaign_id='{campaign_id}') starts it "
+                "(in observe mode it only collects)."
+            )
+        elif status == "paused":
+            lines.append(
+                f"Campaign '{campaign['name']}' is paused. "
+                f"campaign(action='resume', campaign_id='{campaign_id}') starts it again."
+            )
+    else:
+        drafts = await run_db(list_campaigns, status=STATUS_DRAFT)
+        if drafts:
+            lines.append(
+                f"{len(drafts)} draft campaign(s) have sent nothing yet; "
+                "campaign(action='launch', campaign_id='...') starts one."
+            )
+    body = await run_show_status(campaign_id)
+    if lines:
+        return "\n".join(lines) + "\n\n" + body
+    return body
 
-    campaign, campaign_id, error = await _select_campaign_to_start(campaign_id, "monitor")
-    if error:
-        return error
-    assert campaign is not None  # guaranteed when error is empty
 
-    if mode != "observe":
-        return (
-            f"Campaign '{campaign['name']}' was not activated — the scheduler "
-            f"is in '{mode}' mode.\n\n"
-            "monitor promises collection without sending, and only observe mode "
-            "delivers that. In 'full' the planner sends from any active "
-            "campaign; in 'off' a linked cloud account is still handed active "
-            "campaigns by the 15-minute push and sends from them.\n\n"
-            "├── scheduler(action='observe') — switch to observe, then run this again\n"
-            "└── campaign(action='launch') — activate and send from this campaign"
-        )
+async def run_campaign_plan(campaign_id: str = "") -> str:
+    """What happens after launch for one campaign. Read-only."""
+    from ..services.campaign_plan import plan_text_for
 
-    status = campaign.get("status", "")
-    await run_db(update_campaign, campaign_id, status=STATUS_ACTIVE,
-                 config_json=_config_without_cloud_stop(
-                     campaign, pending_cloud_resume=config.is_backend_mode(),
-                 ))
-
-    await run_db(
-        log_action, "campaign_status_change",
-        result=STATUS_ACTIVE,
-        details={
-            "campaign_id": campaign_id,
-            "campaign_name": campaign["name"],
-            "old_status": status,
-            "new_status": STATUS_ACTIVE,
-            "changed_by": "user",
-            "reason": "manual_monitor (observe mode — collection only)",
-            "scheduler_mode": mode,
-        },
-    )
-
-    logger.info(
-        "Monitoring campaign %s: %s (observe mode, scheduler untouched, "
-        "no cloud resume)",
-        campaign_id, campaign["name"],
-    )
-
-    return "\n".join([
-        f"👀 Campaign '{campaign['name']}' is now collecting.",
-        "",
-        "The scheduler is in observe mode, so this campaign is only read from:",
-        "├── 🔎 Its prospects' posts scanned for signals",
-        "├── 🧠 Signals classified and scored",
-        "└── 📬 Replies checked",
-        "",
-        "Nothing was sent and nothing will be: no invitation, DM or engagement "
-        "goes out while the mode is observe. The scheduler mode was not changed "
-        "and no cloud resume was issued.",
-        "",
-        "├── signals(action='show') — what has been collected",
-        "├── scheduler(action='toggle', enabled=True) — leave observe and start sending",
-        "└── campaign(action='pause') — stop collecting from this campaign",
-        *status_footer("campaign", campaign_id, fresh=True),
-    ])
+    campaign = None
+    if campaign_id:
+        campaign = await run_db(get_campaign, campaign_id)
+    else:
+        for status in (STATUS_ACTIVE, STATUS_DRAFT):
+            rows = await run_db(list_campaigns, status=status)
+            if len(rows) > 1:
+                names = "\n".join(
+                    f"  {c['name']}: campaign_status(action='plan', campaign_id='{c['id']}')"
+                    for c in rows
+                )
+                return f"{len(rows)} {status} campaigns. Which one?\n\n{names}"
+            if rows:
+                campaign = rows[0]
+                break
+        if campaign is None:
+            return "No campaign yet. create_campaign() builds a draft and shows its plan."
+        campaign_id = str(campaign["id"])
+    if campaign is None and not config.is_backend_mode():
+        return f"Campaign not found: {campaign_id}"
+    name = str((campaign or {}).get("name") or campaign_id)
+    return f"Campaign '{name}'\n\n" + await plan_text_for(campaign_id, campaign)
 
 
 async def run_resume_campaign(campaign_id: str = "") -> str:

@@ -45,9 +45,8 @@ You output structured JSON only. No markdown, no explanation."""
 # User prompt template
 # ──────────────────────────────────────────────
 
-ICP_V2_PROMPT = """\
-Create 2-4 Ideal Customer Profiles (ICPs) targeting different but \
-FITTING market segments as customers for the sender's business.
+ICP_V2_PROMPT_TEMPLATE = """\
+{goal_opening}
 
 ## TARGET DESCRIPTION
 "{target_description}"
@@ -87,10 +86,10 @@ For each ICP, provide:
 - **name**: Short segment name (e.g., "Enterprise Fintech CTOs")
 - **description**: 2-3 sentence description of this target segment
 
-### Buyer Psychology
-- **pain_points**: 2-4 specific pain points this persona faces
-- **fears**: 2-3 underlying fears driving buying decisions
-- **barriers**: 2-3 obstacles preventing them from buying
+### {moves_heading}
+- **pain_points**: {moves_0}
+- **fears**: {moves_1}
+- **barriers**: {moves_2}
 
 ### LinkedIn Search Parameters
 Use include/exclude pattern for precise targeting:
@@ -106,9 +105,7 @@ public_company, privately_held, non_profit, educational_institution, partnership
 - **tenure**: {{"min": 1, "max": 5}} (valid mins: 0,1,3,6,10; valid maxes: 1,2,5,10)
 - **seniority**: {{"include": ["cxo", "vp", "director"], "exclude": ["manager", "senior", "entry"]}} \
 (use these exact keys and no others: owner, cxo, vp, director, manager, senior, entry. \
-Only owner, cxo, vp and director hold budget authority, so a persona must name one of \
-those in "include" unless the target description explicitly asks for individual \
-contributors — put the levels you are not targeting in "exclude".)
+{seniority_rule})
 - **keywords**: list of LinkedIn search keywords
 - **spotlight_filters**: {{"changed_jobs": true, "posted_recently": true}} or null
   (Sales Navigator only — target people who recently changed jobs or posted on LinkedIn.
@@ -133,7 +130,7 @@ Rate your confidence in this ICP (0.0-1.0):
 ## RESPONSE FORMAT
 Return ONLY valid JSON:
 {{
-    "summary": "One-line description of the ideal customer",
+    "summary": "One-line description of the ideal {noun}",
     "campaign_name": "Short campaign name (3-5 words)",
     "relevance_hook": "Why the sender is credible reaching out to this audience",
     "icps": [
@@ -163,6 +160,63 @@ Return ONLY valid JSON:
         }}
     ]
 }}"""
+
+_SELL_OPENING = (
+    "Create 2-4 Ideal Customer Profiles (ICPs) targeting different but "
+    "FITTING market segments as customers for the sender's business."
+)
+_SELL_SENIORITY_RULE = (
+    "Only owner, cxo, vp and director hold budget authority, so a persona must name one of "
+    "those in \"include\" unless the target description explicitly asks for individual "
+    "contributors — put the levels you are not targeting in \"exclude\"."
+)
+_NO_FLOOR_SENIORITY_RULE = {
+    "job_search": "Managers and heads of the function hire, so manager is a valid level; "
+                  "name the levels that hire for or refer into this role.",
+    "hire": "Take the level from the role described; name the levels a candidate for it holds.",
+    "research": "Take the level from the experience described; seniority is not a filter on its own.",
+}
+
+
+def icp_prompt_for(goal: str) -> str:
+    """The ICP prompt with the goal's frame filled in, ready for the target fields.
+
+    Twin of heylead-api's `llm.icp_prompt_for` (#1153): the ICP step used to
+    assume a sale, so a job seeker got customers. `sell` renders
+    byte-identical to the prompt before #1153
+    (tests/fixtures/icp_v2_prompt_sell.txt).
+    """
+    from .. import goals
+
+    g = goals.GOALS[goals.normalize_goal(goal) or goals.DEFAULT_GOAL]
+    if g.key == goals.SELL:
+        opening, heading, rule = _SELL_OPENING, "Buyer Psychology", _SELL_SENIORITY_RULE
+    else:
+        opening = (
+            f"Create 2-4 personas of people who {g.persona}, for a sender whose goal is: "
+            f"{g.label}. Not customers: the sender is not selling to them."
+        )
+        heading = "What moves them"
+        rule = (
+            _SELL_SENIORITY_RULE if goals.seniority_floor_applies(g.key)
+            else _NO_FLOOR_SENIORITY_RULE[g.key]
+        )
+    # .replace rather than .format so the JSON braces stay doubled for the
+    # later .format() with the target fields.
+    return (
+        ICP_V2_PROMPT_TEMPLATE
+        .replace("{goal_opening}", opening)
+        .replace("{moves_heading}", heading)
+        .replace("{moves_0}", g.moves[0])
+        .replace("{moves_1}", g.moves[1])
+        .replace("{moves_2}", g.moves[2])
+        .replace("{seniority_rule}", rule)
+        .replace("{noun}", g.noun)
+    )
+
+
+# The sell prompt under its old name, for callers and tests that read it.
+ICP_V2_PROMPT = icp_prompt_for(goal="sell")
 
 
 # ──────────────────────────────────────────────
@@ -213,6 +267,7 @@ async def generate_icp_v2(
     confidence_threshold: float = 0.4,
     kb_evidence: list[str] | None = None,
     decision_makers_only: bool = True,
+    goal: str = "sell",
 ) -> IcpResult:
     """Generate a rich multi-persona ICP with LinkedIn enrichment.
 
@@ -232,21 +287,30 @@ async def generate_icp_v2(
             grounded too (9 Sep 2026).
         decision_makers_only: Constrain every persona's seniority.include to
             owner / cxo / vp / director. Default True — 9 Sep 2026:
-            the product targets people who hold budget authority.
+            the product targets people who hold budget authority. Applies
+            only to the selling-shaped goals (goals.seniority_floor_applies).
+        goal: One of heylead.goals.VALID_GOALS; decides whose profile this
+            is (customers for sell, hiring managers for job_search, ...) and
+            whether the sales KB grounds it (#1153).
 
     Returns:
         IcpResult with 2-4 SingleIcp personas, enriched with LinkedIn codes.
     """
+    from .. import goals
+
     start_time = time.time()
+    goal_key = goals.normalize_goal(goal) or goals.DEFAULT_GOAL
+    floor = decision_makers_only and goals.seniority_floor_applies(goal_key)
 
     # Route through backend if in backend mode and no local LLM key
     from ..config import has_local_llm_key, is_backend_mode
     if is_backend_mode() and not has_local_llm_key():
         result = await _generate_via_backend(
             target_description, company_context, focus_query, user_profile,
+            goal=goal_key,
         )
         result.processing_time = time.time() - start_time
-        apply_seniority_policy(result, decision_makers_only=decision_makers_only)
+        apply_seniority_policy(result, decision_makers_only=floor)
         # Enrich with LinkedIn codes
         await _enrich_result(result)
         return result
@@ -275,7 +339,7 @@ async def generate_icp_v2(
     if focus_query:
         focus_section = f"\n## FOCUS\n{focus_query}\n"
 
-    prompt = ICP_V2_PROMPT.format(
+    prompt = icp_prompt_for(goal=goal_key).format(
         target_description=target_description,
         user_name=user_name or "Unknown",
         user_title=user_title or "Founder",
@@ -283,8 +347,9 @@ async def generate_icp_v2(
         user_expertise=user_expertise or "Not specified",
         company_context_section=company_context_section,
         focus_section=focus_section,
-        kb_evidence_section=build_kb_evidence_section(
-            kb_evidence, target_description=target_description,
+        kb_evidence_section=(
+            build_kb_evidence_section(kb_evidence, target_description=target_description)
+            if goals.uses_sales_kb(goal_key) else ""
         ),
     )
 
@@ -311,7 +376,7 @@ async def generate_icp_v2(
             best = max(all_icps, key=lambda x: x.overall_confidence)
             result.icps = [best]
 
-    apply_seniority_policy(result, decision_makers_only=decision_makers_only)
+    apply_seniority_policy(result, decision_makers_only=floor)
 
     # Enrich with LinkedIn codes
     await _enrich_result(result)
@@ -324,6 +389,8 @@ async def _generate_via_backend(
     company_context: str,
     focus_query: str,
     user_profile: dict[str, Any] | None,
+    *,
+    goal: str = "sell",
 ) -> IcpResult:
     """Generate ICP via the backend proxy.
 
@@ -335,7 +402,7 @@ async def _generate_via_backend(
     client = get_linkedin_client()
     try:
         icp_data = await client.generate_icp(
-            target_description, user_profile or {},
+            target_description, user_profile or {}, goal=goal,
         )
     finally:
         await client.close()

@@ -24,7 +24,7 @@ import logging
 from typing import Any
 
 from ..linkedin import NetworkPoolNotMemberError, get_linkedin_client
-from ..formatter import table
+from ..formatter import person_line, table
 
 logger = logging.getLogger(__name__)
 
@@ -359,7 +359,11 @@ async def _handle_enrich(client: Any, linkedin_id: str, force_refresh: bool) -> 
     source = data.get("source", "?")
 
     lines = [f"## Enriched Profile ({source})\n"]
-    lines.append(f"**{profile.get('name', '?')}** — {profile.get('headline', '')}")
+    lines.append("**" + person_line(
+        profile.get("name", "?"),
+        profile.get("linkedin_url") or profile.get("profile_url") or "",
+        title=profile.get("headline", ""),
+    ) + "**")
     lines.append(f"Location: {profile.get('location', '—')}")
     lines.append(f"Industry: {profile.get('industry', '—')}")
     lines.append(f"Network degree: **{degree}** (1=direct connection)")

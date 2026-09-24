@@ -3819,10 +3819,17 @@ class BackendClient:
 
     async def generate_icp(
         self, target_description: str, user_context: dict[str, Any],
+        goal: str = "sell",
     ) -> dict[str, Any]:
-        """Generate ICP via the backend LLM proxy."""
+        """Generate ICP via the backend LLM proxy.
+
+        `goal` (heylead.goals.VALID_GOALS) decides whose profile it is (#1153).
+        """
         url = f"{self.base_url}/api/v1/llm/generate-icp"
-        payload = {"target_description": target_description, "user_context": user_context}
+        payload = {
+            "target_description": target_description, "user_context": user_context,
+            "goal": goal,
+        }
         try:
             resp = await self._post(url, json=payload, headers=self._headers())
         except (httpx.ConnectError, httpx.TimeoutException) as e:
@@ -3841,6 +3848,7 @@ class BackendClient:
         company_context: str = "",
         focus_query: str = "",
         user_context: dict[str, Any] | None = None,
+        goal: str = "sell",
     ) -> dict[str, Any]:
         """Generate ICP via the backend RAG pipeline (ingest → embed → retrieve → summarize → ICP)."""
         url = f"{self.base_url}/api/v1/llm/generate-icp-rag"
@@ -3849,6 +3857,7 @@ class BackendClient:
             "company_context": company_context,
             "focus_query": focus_query,
             "user_context": user_context or {},
+            "goal": goal,
         }
         try:
             resp = await self._post(url, json=payload, headers=self._headers())
@@ -3867,14 +3876,17 @@ class BackendClient:
         goal: str,
         offer: str = "",
         icp: dict[str, Any] | None = None,
+        goal_key: str = "sell",
     ) -> dict[str, Any]:
-        """Ask the backend whether an ICP holds buyers who can deliver a goal.
+        """Ask the backend whether an ICP holds the people who decide for a goal.
 
-        Returns the judge payload: verdict / decision_maker_coverage /
-        persona_alignment / warnings / suggestions / reason / kb_cards_used.
+        `goal` is free text; `goal_key` (heylead.goals.VALID_GOALS) picks the
+        question asked (#1153). Returns the judge payload: verdict /
+        decision_maker_coverage / persona_alignment / warnings / suggestions /
+        reason / kb_cards_used, and goal_key / copy from a backend that knows them.
         """
         url = f"{self.base_url}/api/v1/llm/icp-goal-match"
-        payload = {"goal": goal, "offer": offer, "icp": icp or {}}
+        payload = {"goal": goal, "offer": offer, "icp": icp or {}, "goal_key": goal_key}
         try:
             resp = await self._post(url, json=payload, headers=self._headers())
         except (httpx.ConnectError, httpx.TimeoutException) as e:

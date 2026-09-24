@@ -35,7 +35,7 @@ _DB_RETRY_BACKOFF = 0.1  # seconds, doubles each attempt
 #    dedup read it as "already in a campaign" and never let the person back in.
 # 7: outreaches.chat_id (and headline A/B columns) — a v6 stamp skipped the
 #    ALTER, so planning died with `no such column: o.chat_id`.
-SCHEMA_VERSION = 13  # 13: inbound_signals.sent_at (the provider's send time); 12: connections.connected_at/removed_at; 11: outreach_tombstones; 10: agent_commons (beats + notes); 9: contacts.timezone (per-prospect planning windows); 8: versioned outreach sync
+SCHEMA_VERSION = 14  # 14: contacts.why_json (the fit breakdown kept at enrolment); 13: inbound_signals.sent_at (the provider's send time); 12: connections.connected_at/removed_at; 11: outreach_tombstones; 10: agent_commons (beats + notes); 9: contacts.timezone (per-prospect planning windows); 8: versioned outreach sync
 
 # Singleton connection — avoids opening multiple connections per process
 # which causes "database is locked" errors with WAL mode.
@@ -1664,6 +1664,17 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE contacts ADD COLUMN updated_at INTEGER")
         conn.commit()
         logger.info("Migration: added updated_at to contacts")
+    except sqlite3.OperationalError as e:
+        _reraise_if_migration_interrupted(e)
+        pass  # Column already exists
+
+    # Why this person is in the campaign: the fit breakdown snapshotted at
+    # enrolment (services.enrolment_why), the same record the api keeps in
+    # scheduler_contacts.why_json. Pushed as `why` on every contact.
+    try:
+        conn.execute("ALTER TABLE contacts ADD COLUMN why_json TEXT")
+        conn.commit()
+        logger.info("Migration: added why_json to contacts")
     except sqlite3.OperationalError as e:
         _reraise_if_migration_interrupted(e)
         pass  # Column already exists

@@ -735,7 +735,7 @@ async def _fetch_and_analyze(
     header = (
         workspace_line
         + seat_line
-        + f"👤 {profile['name']}"
+        + f"👤 {profile['name']}"  # nosemgrep: person-line-without-link -- the user's own profile, not a found person
         + (f" — {profile['title']}" if profile.get("title") else "")
         + (f" at {profile['company']}" if profile.get("company") else "")
         + "\n"

@@ -20,8 +20,8 @@ async def run_campaign(
 
     Actions:
       launch         — Start outreach for a draft campaign
-      monitor        — Activate a campaign for signal collection only, without
-                       sending (observe mode)
+      monitor        — Show a campaign's live progress (read-only)
+      plan           — What happens after launch, step by step (read-only)
       pause          — Pause an active campaign
       resume         — Resume a paused campaign
       archive        — Archive a completed campaign
@@ -32,7 +32,7 @@ async def run_campaign(
       clear_coordinator_hold — Release a campaign-wide coordinator hold
 
     Args:
-        action: What to do: 'launch', 'monitor', 'pause', 'resume', 'archive',
+        action: What to do: 'launch', 'monitor', 'plan', 'pause', 'resume', 'archive',
             'delete', 'emergency_stop', 'retry_failed', 'repair_queue',
             'clear_coordinator_hold'.
         campaign_id: Which campaign to act on. Required for
@@ -48,10 +48,14 @@ async def run_campaign(
 
     # Deliberately not aliased to 'observe': scheduler(action='observe') sets
     # the mode, and one word meaning two things across two tools is how the
-    # wrong one gets called.
+    # wrong one gets called. A read: activating is launch.
     if action == "monitor":
         from .campaign_control import run_monitor_campaign
         return await run_monitor_campaign(campaign_id)
+
+    if action == "plan":
+        from .campaign_control import run_campaign_plan
+        return await run_campaign_plan(campaign_id)
 
     if action == "pause":
         from .campaign_control import run_pause_campaign
@@ -91,7 +95,8 @@ async def run_campaign(
     return (
         f"Unknown action: '{action}'. Available actions:\n"
         "  'launch'         — Start outreach for a draft campaign\n"
-        "  'monitor'        — Activate for signal collection only (observe mode)\n"
+        "  'monitor'        — Show a campaign's live progress (read-only)\n"
+        "  'plan'           — What happens after launch, step by step (read-only)\n"
         "  'pause'          — Pause an active campaign\n"
         "  'resume'         — Resume a paused campaign\n"
         "  'archive'        — Archive a completed campaign\n"

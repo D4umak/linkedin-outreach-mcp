@@ -126,6 +126,16 @@ HOSTED_DAILY_INVITE_CAP_PAID = 168
 # Settings key: the last ceilings a pull carried, for the views that render
 # from the local mirror and have no payload in hand.
 HOSTED_INVITE_CAPS_SETTING = "hosted_invite_caps"
+
+# What the campaign plan (services/campaign_plan.py) quotes and this client has
+# no constant of its own for. Each mirrors the heylead-api constant named next
+# to it; the api computes the plan hosted accounts see, and this twin renders
+# the same steps for self-hosted installs and when the api cannot be reached.
+PLAN_DAILY_ADD_BUDGET = 100          # heylead-api scheduler.DAILY_ADD_BUDGET: people found a day
+NOT_NOW_WAIT_DAYS = 30               # heylead-api not_now.DEFAULT_WAIT_DAYS: check-in after "not now"
+# heylead-api working_hours.DEFAULT_SENDING_WINDOW: weekdays 08:00-22:00 in the
+# owner's zone, London when nothing says where the seat lives.
+DEFAULT_SENDING_WINDOW = {"start": 8, "end": 22, "days": [0, 1, 2, 3, 4], "timezone": "Europe/London"}
 DAILY_CAP_FOLLOWS = 15               # Halved — reduce visible footprint
 DAILY_CAP_PROFILE_VIEWS = 35         # Halved — high volume = detectable pattern
 DAILY_CAP_PROFILE_VIEWS_SALES_NAV = 50  # SN accounts absorb more views; tier.caps_for picks

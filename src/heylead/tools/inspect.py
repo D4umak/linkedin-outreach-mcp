@@ -14,6 +14,7 @@ from typing import Any
 from ..config import get_scheduler_mode, get_sending_host
 from ..db.async_bridge import run_db
 from ..db.schema import get_db
+from ..formatter import prospect_link
 from ..services.agent_commons import (
     beat_is_stale,
     get_digest,
@@ -32,7 +33,10 @@ from ..db.queries import get_campaign, get_setting
 
 logger = logging.getLogger(__name__)
 
-VALID_ACTIONS = ("agents", "holds", "replans", "closer", "skips", "jobs", "commons", "journal", "review")
+VALID_ACTIONS = (
+    "agents", "holds", "replans", "closer", "skips", "jobs", "commons", "journal", "review",
+    "waiting",
+)
 
 _PLAN_SKIP_REASONS = frozenset({
     "gated_create_refused",
@@ -89,6 +93,83 @@ async def _review_from_host(campaign_id: str, limit: int) -> str:
     return str(data.get("text") or "Campaign review · last 24h · 0 stalls")
 
 
+_KIND_LABELS = {"dm": "opening message", "followup": "follow-up"}
+
+
+def _waiting_line(i: int, draft: dict[str, Any]) -> list[str]:
+    """One held message: who, what kind, which campaign, and the text."""
+    from ..formatter import person_line
+
+    slug = str(draft.get("linkedin_id") or "").strip()
+    # A provider id (ACo..., AEm...) is not a profile slug; only a slug links.
+    url = f"https://www.linkedin.com/in/{slug}" if slug and not slug.startswith(("ACo", "AEm")) else ""
+    kind = _KIND_LABELS.get(str(draft.get("kind") or ""), str(draft.get("kind") or "message"))
+    n = int(draft.get("followup_number") or 0)
+    if draft.get("kind") == "followup" and n:
+        kind = f"follow-up {n}"
+    who = person_line(str(draft.get("name") or "Unknown"), url,
+                      title=str(draft.get("title") or ""), company=str(draft.get("company") or ""))
+    campaign = str(draft.get("campaign_id") or "")[:8]
+    text = " ".join(str(draft.get("text") or "").split())
+    return [f"{i}. {who} · {kind} · campaign {campaign}", f"   {text}"]
+
+
+async def _waiting_from_host(campaign_id: str, limit: int) -> str:
+    """Opening messages and follow-ups held for approval (hosted).
+
+    The same list the dashboard's Approvals page reads
+    (GET /api/v1/scheduler/outreach-drafts). The server's instructions
+    advertised inspect(action='waiting') before it existed (24 Sep 2026).
+    """
+    from ..config import is_backend_mode
+    from ..services.cloud_sync import BackendAuthError, get_hosted_json
+
+    if not is_backend_mode():
+        return (
+            "Nothing waits for approval on a self-hosted install: messages are "
+            "sent as written. inspect(action='holds') lists people held for you."
+        )
+    try:
+        cap = int(limit or _DEFAULT_LIMIT)
+    except (TypeError, ValueError):
+        cap = _DEFAULT_LIMIT
+    cap = max(1, min(cap, _MAX_LIMIT))
+    try:
+        data = await get_hosted_json(
+            "/api/v1/scheduler/outreach-drafts", params={"limit": _MAX_LIMIT},
+        )
+    except BackendAuthError:
+        return (
+            "Hosted inspect needs a valid HeyLead token. "
+            "Paste the token message and call setup_profile(backend_jwt='...')."
+        )
+    except Exception as exc:
+        return f"Inspect waiting failed: {exc}"
+    drafts = [d for d in (data.get("drafts") or []) if isinstance(d, dict)]
+    cid = (campaign_id or "").strip()
+    if cid:
+        drafts = [d for d in drafts if str(d.get("campaign_id") or "").startswith(cid)]
+    mode = str(data.get("mode") or "")
+    try:
+        from ..dashboard_links import dashboard_url
+
+        where = f"Approve, edit or discard them on the Approvals page: {dashboard_url('approvals')}"
+    except Exception:
+        where = "Approve, edit or discard them on the dashboard's Approvals page."
+    if not drafts:
+        if mode == "autopilot":
+            return ("Nothing is waiting: this workspace is on autopilot, so opening "
+                    "messages and follow-ups are sent inside your window without review.")
+        return "Nothing is waiting for your approval."
+    lines = [f"Waiting for your approval: {len(drafts)}"]
+    for i, draft in enumerate(drafts[:cap], start=1):
+        lines.extend(_waiting_line(i, draft))
+    if len(drafts) > cap:
+        lines.append(f"... and {len(drafts) - cap} more")
+    lines.extend(["", "Nothing here has been sent. " + where])
+    return "\n".join(lines)
+
+
 async def _journal_from_host(
     campaign_id: str, outreach_id: str, limit: int,
 ) -> str:
@@ -136,6 +217,8 @@ async def run_inspect(
         return await _journal_from_host(campaign_id, outreach_id, limit)
     if action == "review":
         return await _review_from_host(campaign_id, limit)
+    if action == "waiting":
+        return await _waiting_from_host(campaign_id, limit)
     if action not in VALID_ACTIONS:
         return (
             f"Unknown inspect action: '{action}'.\n\n"
@@ -186,7 +269,9 @@ def _details(raw: Any) -> dict[str, Any]:
 
 
 def _name_of(row: dict[str, Any]) -> str:
-    return (row.get("name") or "Unknown").strip() or "Unknown"
+    """The person as a LinkedIn link when the row carries the URL."""
+    name = (row.get("name") or "Unknown").strip() or "Unknown"
+    return prospect_link(name, (row.get("linkedin_url") or "").strip())
 
 
 def _campaign_of(row: dict[str, Any]) -> str:
@@ -214,7 +299,7 @@ def _list_holds(campaign_id: str, outreach_id: str, limit: int) -> list[dict[str
     scope = _scope_sql("o.campaign_id", "o.id", campaign_id, outreach_id, params)
     rows = db.execute(
         f"""SELECT o.id AS outreach_id, o.campaign_id, o.next_action, o.updated_at,
-                   c.name, ca.name AS campaign_name,
+                   c.name, c.linkedin_url, ca.name AS campaign_name,
                    COALESCE((
                        SELECT MAX(m.timestamp) FROM messages m
                        WHERE m.outreach_id = o.id AND m.role = 'prospect'
@@ -268,7 +353,7 @@ def _list_log_rows(
     rows = db.execute(
         f"""SELECT al.timestamp, al.action_type, al.result, al.details_json,
                    al.outreach_id, al.campaign_id,
-                   c.name, ca.name AS campaign_name
+                   c.name, c.linkedin_url, ca.name AS campaign_name
             FROM actions_log al
             LEFT JOIN outreaches o ON o.id = al.outreach_id
             LEFT JOIN contacts c ON c.id = o.contact_id
@@ -337,7 +422,7 @@ def _list_pending_jobs(campaign_id: str, outreach_id: str, limit: int) -> list[d
     rows = db.execute(
         f"""SELECT sj.id, sj.job_type, sj.status, sj.scheduled_at,
                    sj.outreach_id, sj.campaign_id,
-                   c.name, ca.name AS campaign_name
+                   c.name, c.linkedin_url, ca.name AS campaign_name
             FROM scheduler_jobs sj
             LEFT JOIN outreaches o ON o.id = sj.outreach_id
             LEFT JOIN contacts c ON c.id = o.contact_id
@@ -366,7 +451,7 @@ def _list_skip_log(campaign_id: str, outreach_id: str, limit: int) -> list[dict[
     rows = db.execute(
         f"""SELECT al.timestamp, al.action_type, al.result, al.details_json,
                    al.outreach_id, al.campaign_id,
-                   c.name, ca.name AS campaign_name
+                   c.name, c.linkedin_url, ca.name AS campaign_name
             FROM actions_log al
             LEFT JOIN outreaches o ON o.id = al.outreach_id
             LEFT JOIN contacts c ON c.id = o.contact_id
@@ -389,7 +474,7 @@ def _list_plan_skips(campaign_id: str, outreach_id: str, limit: int) -> list[dic
     scope = _scope_sql("p.campaign_id", "p.outreach_id", campaign_id, outreach_id, params)
     rows = db.execute(
         f"""SELECT p.outreach_id, p.campaign_id, p.executed_actions,
-                   c.name, ca.name AS campaign_name
+                   c.name, c.linkedin_url, ca.name AS campaign_name
             FROM prospect_daily_plans p
             LEFT JOIN outreaches o ON o.id = p.outreach_id
             LEFT JOIN contacts c ON c.id = o.contact_id
@@ -723,8 +808,8 @@ def _format_coordinator_holds(rows: list[dict[str, Any]]) -> list[str]:
         reason = (row.get("reason") or row.get("body") or "").strip() or "needs a human"
         cid = str(row.get("campaign_id") or "")
         camp = get_campaign(cid) if cid else None
-        name = ((camp or {}).get("name") or "").strip() or (cid[:8] if cid else "campaign")
-        lines.append(f"• **{name}** — {reason}")
+        campaign_label = ((camp or {}).get("name") or "").strip() or (cid[:8] if cid else "campaign")
+        lines.append(f"• **{campaign_label}** — {reason}")
         if cid:
             lines.append(f"  campaign `{cid[:8]}`")
         lines.append("")

@@ -20,6 +20,7 @@ from ..ai.sentiment import (
     detect_meeting_agreement,
 )
 from ..db.async_bridge import run_db
+from ..formatter import person_line, prospect_link
 from ..author_identity import contact_provider_id
 from ..db.queries import (
     get_inbound_signal_by_sender,
@@ -263,6 +264,24 @@ async def _append_inbound_invitations(
             output.append(f"     \"{inv_msg[:100]}\"")
     if len(invitations) > limit:
         output.append(f"   ... and {len(invitations) - limit} more")
+
+
+def _profile_viewer_lines(viewers: list[dict[str, Any]], limit: int) -> list[str]:
+    """One `• [Name](url) — title at company` line per profile viewer.
+
+    A viewer row carries the profile as `url` (LinkedIn's navigationUrl); an
+    anonymous viewer ("Someone at ...") carries none and stays plain text.
+    """
+    lines: list[str] = []
+    for v in viewers[:limit]:
+        url = str(v.get("url") or "").strip()
+        lines.append("   • " + person_line(
+            v.get("name") or "Anonymous",
+            url if url.startswith("http") else "",
+            title=v.get("title") or "",
+            company=v.get("company") or "",
+        ))
+    return lines
 
 
 async def _sync_silent_connections(client: Any, account_id: str) -> list[dict]:
@@ -776,14 +795,7 @@ async def run_check_replies() -> str:
             if extra_output:
                 extra_output.append("")
             extra_output.append(f"👀 Profile Viewers ({len(profile_viewers)}):")
-            for v in profile_viewers[:10]:
-                name = v.get("name", "Anonymous")
-                title = v.get("title", "")
-                company = v.get("company", "")
-                role = title
-                if company:
-                    role += f" at {company}" if role else company
-                extra_output.append(f"   • {name}" + (f" — {role}" if role else ""))
+            extra_output.extend(_profile_viewer_lines(profile_viewers, limit=10))
             if len(profile_viewers) > 10:
                 extra_output.append(f"   ... and {len(profile_viewers) - 10} more")
             extra_output.append("   💡 These people checked out your profile — consider reaching out!")
@@ -1370,6 +1382,7 @@ async def run_check_replies() -> str:
                         )
                         auto_booked.append({
                             "name": contact.get("name", "Unknown"),
+                            "linkedin_url": contact.get("linkedin_url", "") or "",
                             "result": result,
                             "outreach_id": contact.get("outreach_id", ""),
                         })
@@ -1503,6 +1516,7 @@ async def run_check_replies() -> str:
                                     if result.get("success"):
                                         calendar_events_created.append({
                                             "name": prospect_name,
+                                            "linkedin_url": contact.get("linkedin_url", "") or "",
                                             "date": m_date,
                                             "time": m_time,
                                             "event_link": result.get("event_link", ""),
@@ -1682,11 +1696,11 @@ async def run_check_replies() -> str:
                         time_str = dt.strftime("%a %b %d, %I:%M %p")
                     except (ValueError, TypeError):
                         time_str = booked_time
-                    output.append(f"   {b['name']} — {time_str} ({provider.title()})")
+                    output.append(f"   {prospect_link(b['name'], b.get('linkedin_url', ''))} — {time_str} ({provider.title()})")
             if booked_fail:
                 for b in booked_fail:
                     cal_url = b["result"].get("url", "")
-                    output.append(f"   {b['name']} — auto-book failed, book manually: {cal_url}")
+                    output.append(f"   {prospect_link(b['name'], b.get('linkedin_url', ''))} — auto-book failed, book manually: {cal_url}")
         else:
             cal_urls = [r["prospect_calendar_url"] for r in matched_replies if r.get("prospect_calendar_url")]
             if cal_urls:
@@ -1699,7 +1713,7 @@ async def run_check_replies() -> str:
     if calendar_events_created:
         output.append(f"\n📅 Auto-created {len(calendar_events_created)} Google Calendar event{'s' if len(calendar_events_created) > 1 else ''}:")
         for evt in calendar_events_created:
-            output.append(f"   {evt['name']} — {evt['date']} at {evt['time']}")
+            output.append(f"   {prospect_link(evt['name'], evt.get('linkedin_url', ''))} — {evt['date']} at {evt['time']}")
             if evt.get("event_link"):
                 output.append(f"      {evt['event_link']}")
 
@@ -1743,14 +1757,7 @@ async def run_check_replies() -> str:
     if profile_viewers:
         output.append("")
         output.append(f"👀 Profile Viewers ({len(profile_viewers)}):")
-        for v in profile_viewers[:5]:
-            name = v.get("name", "Anonymous")
-            title = v.get("title", "")
-            company = v.get("company", "")
-            role = title
-            if company:
-                role += f" at {company}" if role else company
-            output.append(f"   • {name}" + (f" — {role}" if role else ""))
+        output.extend(_profile_viewer_lines(profile_viewers, limit=5))
         if len(profile_viewers) > 5:
             output.append(f"   ... and {len(profile_viewers) - 5} more")
         output.append("   💡 These people checked your profile — warm leads!")

@@ -29,7 +29,10 @@ from ..db import aio as db
 from ..db.async_bridge import run_db
 from ..constants import SOURCE_LABELS
 from ..dashboard_links import dashboard_url
-from ..formatter import conversion_rate_display, format_duration, progress_bar, prospect_link, stars
+from ..formatter import (
+    conversion_rate_display, format_duration, person_line, progress_bar,
+    prospect_link, stars,
+)
 from ..services.health_score import compute_health_score, format_health_score
 from ..services.dashboard_snapshot import status_footer
 from ..services.unipile_email import mailbox_disconnect_banner
@@ -1333,10 +1336,10 @@ async def _show_overview_from_backend(data: dict) -> str:
         for i, lead in enumerate(hot_leads):
             is_last = i == len(hot_leads) - 1
             prefix = "└──" if is_last else "├──"
-            role = lead.get("title", "")
-            if lead.get("company"):
-                role += f" at {lead['company']}" if role else lead["company"]
-            output.append(f"{prefix} {lead.get('name', 'Unknown')} — {role}")
+            output.append(f"{prefix} " + person_line(
+                lead.get("name", "Unknown"), lead.get("linkedin_url", ""),
+                title=lead.get("title", ""), company=lead.get("company", ""),
+            ))
         output.append("")
 
     # ── Engagement stats ──
@@ -1487,6 +1490,55 @@ def _business_hours_line(config: dict) -> str | None:
     if value is False or str(value).strip().lower() in ("off", "false", "0", "no"):
         return "🕐 Business hours: off (sends at any hour and on weekends)"
     return None
+
+
+_TOP_PROSPECT_STATUS_ICONS = {
+    "pending": "⏳",
+    "invited": "📤",
+    "connected": "🤝",
+    "messaged": "💬",
+    "replied": "📩",
+    "hot_lead": "🔥",
+    "review_pending": "👀",
+    "skipped": "⏭️",
+    "opted_out": "🚫",
+    "closed_happy": "✅",
+    "closed_unhappy": "❌",
+    "error": "⚠️",
+}
+
+
+def _top_prospect_lines(rows: list[dict]) -> list[str]:
+    """"Top Prospects:" and one linked line per row, with status and why.
+
+    Rows carry name, title, company, fit_score, status, linkedin_url and
+    why_json (the query above selects them). The fit stars come out of the
+    stored `why`; a contact enrolled before why_json existed falls back to
+    its fit_score so it still shows a rating.
+    """
+    lines = ["Top Prospects:"]
+    for i, c in enumerate(rows):
+        prefix = "└──" if i == len(rows) - 1 else "├──"
+        icon = _TOP_PROSPECT_STATUS_ICONS.get(c.get("status", ""), "⚪")
+        why = _why_of(c)
+        lines.append(f"{prefix} {icon} " + person_line(
+            c.get("name") or "Unknown", c.get("linkedin_url") or "",
+            title=c.get("title") or "", company=c.get("company") or "", why=why,
+        ))
+    return lines
+
+
+def _why_of(contact: dict) -> dict:
+    raw = contact.get("why_json")
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+        if isinstance(parsed, dict) and parsed:
+            return parsed
+    score = contact.get("fit_score")
+    return {"fit_score": score} if isinstance(score, (int, float)) and score > 0 else {}
 
 
 async def _show_campaign_detail(campaign_id: str) -> str:
@@ -1681,7 +1733,8 @@ async def _show_campaign_detail(campaign_id: str) -> str:
         from ..db.schema import get_db as _get_db
         _db = _get_db()
         rows = _db.execute(
-            """SELECT c.name, c.title, c.company, c.fit_score, o.status
+            """SELECT c.name, c.title, c.company, c.fit_score, o.status,
+                      c.linkedin_url, c.why_json
                FROM contacts c
                JOIN outreaches o ON o.contact_id = c.id
                WHERE c.campaign_id = ?
@@ -1694,30 +1747,7 @@ async def _show_campaign_detail(campaign_id: str) -> str:
     top_contacts = await run_db(_query_top_contacts)
 
     if top_contacts:
-        output.append("Top Prospects:")
-        status_icons = {
-            "pending": "⏳",
-            "invited": "📤",
-            "connected": "🤝",
-            "messaged": "💬",
-            "replied": "📩",
-            "hot_lead": "🔥",
-            "review_pending": "👀",
-            "skipped": "⏭️",
-            "opted_out": "🚫",
-            "closed_happy": "✅",
-            "closed_unhappy": "❌",
-            "error": "⚠️",
-        }
-        for i, contact in enumerate(top_contacts):
-            c = dict(contact)
-            is_last = i == len(top_contacts) - 1
-            prefix = "└──" if is_last else "├──"
-            icon = status_icons.get(c.get("status", ""), "⚪")
-            role = c.get("title", "")
-            if c.get("company"):
-                role += f" at {c['company']}" if role else c["company"]
-            output.append(f"{prefix} {icon} {c['name']} — {role} ({stars(c.get('fit_score', 0))})")
+        output.extend(_top_prospect_lines([dict(c) for c in top_contacts]))
         output.append("")
 
     output.extend(status_footer("campaign", campaign_id))

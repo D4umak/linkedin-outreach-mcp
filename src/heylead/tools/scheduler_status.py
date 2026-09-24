@@ -702,7 +702,7 @@ async def run_set_observe_mode() -> str:
         "`analytics()` read it directly. Leaving observe pushes them again.\n\n"
         "Inbound messages are still received and replies still checked \u2014 "
         "observation is the point of this mode.\n\n"
-        "- `campaign(action='monitor')` \u2014 activate a draft campaign for collection only\n"
+        "- `campaign(action='launch')` \u2014 activate a draft campaign; in observe it only collects\n"
         "- `scheduler(action='status')` \u2014 what is being collected\n"
         "- `scheduler(action='toggle', enabled=True)` \u2014 leave observe and start sending\n"
         "- `scheduler(action='toggle', enabled=False)` \u2014 stop collecting too"

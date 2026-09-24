@@ -194,6 +194,96 @@ def prospect_link(name: str, linkedin_url: str = "") -> str:
     return name
 
 
+# Labels for the seniority keys `services.seniority.SENIORITY_ORDER` uses.
+_SENIORITY_LABELS: dict[str, str] = {
+    "owner": "owner or founder",
+    "cxo": "C-level",
+    "vp": "VP",
+    "director": "director",
+    "manager": "manager",
+    "senior": "senior",
+    "entry": "entry level",
+}
+
+# A dimension at or above this counts as a reason. compute_icp_match returns
+# 0.30 (0.50 for location) for "nothing to compare", so the bar sits well
+# above the no-signal values.
+_WHY_DIMENSION_MATCH = 0.7
+
+
+def why_line(why: dict | None) -> str:
+    """One short reason a person is in the list, from the stored `why`.
+
+    Reads the enrolment record `services.enrolment_why.enrolment_why` writes
+    (and the api's `_enrolment_why`): the fit breakdown per dimension,
+    seniority and title family, and the evidence hits. Names what matched
+    and leaves out what did not; no bare scores, because "industry 0.30"
+    means "nothing to compare", not "poor match".
+    """
+    if not isinstance(why, dict) or not why:
+        return ""
+    breakdown = why.get("breakdown") if isinstance(why.get("breakdown"), dict) else {}
+
+    def _hit(key: str) -> bool:
+        value = breakdown.get(key)
+        return isinstance(value, (int, float)) and value >= _WHY_DIMENSION_MATCH
+
+    reasons: list[str] = []
+    family = str(why.get("title_family") or "").strip()
+    if _hit("title"):
+        reasons.append(f"{family} title match" if family else "title match")
+    seniority = str(why.get("seniority") or "").strip()
+    if seniority and _hit("seniority"):
+        reasons.append(_SENIORITY_LABELS.get(seniority, seniority))
+    if _hit("industry"):
+        reasons.append("industry fit")
+    if _hit("company_size"):
+        reasons.append("company size fit")
+    if _hit("location"):
+        reasons.append("location fit")
+    if _hit("keywords"):
+        reasons.append("keyword overlap")
+    hits = why.get("evidence_hits")
+    if isinstance(hits, list) and hits:
+        n = len(hits)
+        reasons.append(f"{n} evidence hit{'s' if n != 1 else ''}")
+    if not reasons:
+        segment = str(why.get("segment") or "").strip()
+        if segment:
+            reasons.append(f"segment {segment}")
+    text = ", ".join(reasons)
+    score = why.get("fit_score")
+    if isinstance(score, (int, float)) and score > 0:
+        text = f"fit {stars(float(score))}" + (f", {text}" if text else "")
+    return text
+
+
+def person_line(
+    name: str,
+    url: str = "",
+    title: str | None = None,
+    company: str | None = None,
+    why: dict | None = None,
+) -> str:
+    """`[Name](url) — title at company · why: {one line}`.
+
+    The one way a tool result names a found person. The name is a link
+    whenever the URL is known, the role follows when there is one, and the
+    reason follows when `why` says anything. A list of names with no link
+    and no reason is what a new user could not act on (24 Sep 2026).
+    """
+    line = prospect_link(name or "Unknown", url or "")
+    role = (title or "").strip()
+    if (company or "").strip():
+        role = f"{role} at {company.strip()}" if role else company.strip()
+    if role:
+        line += f" — {role}"
+    reason = why_line(why)
+    if reason:
+        line += f" · why: {reason}"
+    return line
+
+
 def format_voice_signature(voice: dict, expertise: dict) -> str:
     """Format voice signature + expertise for display (the killer feature)."""
     lines = [

@@ -87,7 +87,7 @@ async def generate_icp(
         from ..linkedin import get_linkedin_client
         client = get_linkedin_client()
         try:
-            return await client.generate_icp(target_description, user_profile or {})
+            return await client.generate_icp(target_description, user_profile or {}, goal="sell")
         finally:
             await client.close()
 

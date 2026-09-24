@@ -553,6 +553,7 @@ def save_contact(
     source_detail: str = "",
     email: str = "",
     contact_id: str = "",
+    why_json: str = "",
 ) -> str:
     """Save a contact. If duplicate (campaign_id + linkedin_id), return existing ID.
 
@@ -644,11 +645,11 @@ def save_contact(
             """INSERT INTO contacts
                (id, campaign_id, global_contact_id, name, title, company,
                 linkedin_url, linkedin_id, profile_json, fit_score,
-                source, source_detail, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                source, source_detail, created_at, why_json)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (contact_id, campaign_id, global_contact_id, name, title, company,
              linkedin_url, linkedin_id, profile_json, fit_score,
-             source, source_detail, now),
+             source, source_detail, now, why_json or ""),
         )
         db.commit()
     except sqlite3.IntegrityError:
@@ -934,6 +935,17 @@ def _is_sn_mask_name(name: str) -> bool:
     return False
 
 
+def _why_json_of(prospect: dict) -> str:
+    """The enrolment `why` (services.enrolment_why) as stored JSON, or ""."""
+    why = prospect.get("why")
+    if not isinstance(why, dict) or not why:
+        return ""
+    try:
+        return json.dumps(why)
+    except (TypeError, ValueError):
+        return ""
+
+
 def enroll_prospect(
     campaign_id: str,
     prospect: dict,
@@ -997,6 +1009,7 @@ def enroll_prospect(
         source=source,
         source_detail=source_detail,
         email=prospect.get("email") or "",
+        why_json=_why_json_of(prospect),
     )
     existing = _campaign_outreach_for_contact_or_identity(
         campaign_id, contact_id, prospect,
@@ -3997,7 +4010,7 @@ def get_campaign_outcomes(campaign_id: str) -> dict:
     # Individual outcome details with contact info
     rows = db.execute(
         """SELECT o.id as outreach_id, o.status, o.outcome_json, o.updated_at,
-                  c.name, c.title, c.company, c.fit_score
+                  c.name, c.title, c.company, c.fit_score, c.linkedin_url
            FROM outreaches o
            JOIN contacts c ON o.contact_id = c.id
            WHERE o.campaign_id = ?
@@ -4022,6 +4035,7 @@ def get_campaign_outcomes(campaign_id: str) -> dict:
             "name": r.get("name", "Unknown"),
             "title": r.get("title", ""),
             "company": r.get("company", ""),
+            "linkedin_url": r.get("linkedin_url") or "",
             "fit_score": r.get("fit_score", 0),
             "reason": outcome_data.get("reason", ""),
             "meeting_link": outcome_data.get("meeting_link") or outcome_data.get("booking_link", ""),
@@ -4078,7 +4092,7 @@ def get_stale_outreaches(campaign_id: str, stale_days: int = 14) -> list[dict]:
     rows = db.execute(
         f"""SELECT o.id as outreach_id, o.status,
                   {_LAST_ACTIVITY_SQL} AS last_activity_at,
-                  c.name, c.title, c.company, c.fit_score, c.source
+                  c.name, c.title, c.company, c.fit_score, c.source, c.linkedin_url
            FROM outreaches o
            JOIN contacts c ON o.contact_id = c.id
            WHERE o.campaign_id = ?
@@ -4099,6 +4113,7 @@ def get_stale_outreaches(campaign_id: str, stale_days: int = 14) -> list[dict]:
             "name": r.get("name", "Unknown"),
             "title": r.get("title", ""),
             "company": r.get("company", ""),
+            "linkedin_url": r.get("linkedin_url") or "",
             "fit_score": r.get("fit_score", 0),
             "days_stale": days_stale,
             # The last real activity, not the row's mtime. Kept under the old

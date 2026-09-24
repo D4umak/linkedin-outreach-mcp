@@ -3,11 +3,11 @@ name: heylead
 description: LinkedIn outreach through the HeyLead MCP server. Use when the user wants to find and message people on LinkedIn - sales prospecting and lead generation, recruiting and candidate sourcing, user-interview or research participants, job-search networking with hiring managers, investor or partner outreach, vendor scouting, event invitations - or to check replies, campaign status and analytics, or publish LinkedIn posts in their own voice. Campaigns are saved as drafts and nothing is sent until the user launches them. Not for scraping profiles in bulk or for posting to company pages.
 ---
 
-# HeyLead — Autonomous LinkedIn SDR
+# HeyLead — AI agent for LinkedIn outreach
 
 Your AI sales rep. One command to fill your pipeline.
 
-HeyLead is an MCP-native autonomous LinkedIn SDR that gives your OpenClaw agent the ability to do LinkedIn outreach — find prospects, send personalized messages, follow up, and close deals.
+HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. This skill connects it to your OpenClaw agent.
 
 ## What This Skill Does
 
@@ -20,6 +20,19 @@ This skill connects HeyLead as an MCP server in your OpenClaw agent, giving it 2
 - **Reply Handling** — Sentiment classification, auto-responses, meeting scheduling
 - **Analytics** — Funnel reports, conversion rates, stale lead detection, engagement ROI
 - **Autonomous Scheduling** — Cloud is the default sender; move to this machine with `scheduler(action='send_from', host='local')`
+
+## Use cases
+
+A campaign has one of six goals, and the ICP, the fit check and the messages follow it: Sell a product or service, Find a job, Hire people, Find partners or investors, Find a vendor and Research interviews.
+
+- **Sell a product or service**: Reach the people who buy what you built.
+- **Find a job**: Reach the people who hire for the role you want.
+- **Hire people**: Reach candidates for a role you are filling. Works with a custom brief.
+- **Find partners or investors**: Reach the people who can sign a partnership or an investment. Works with a custom brief.
+- **Find a vendor**: You are the buyer. Reach the people who sell what you need.
+- **Research interviews**: Reach people to interview, survey or test with. Works with a custom brief.
+
+Hire people, Find partners or investors and Research interviews run on a custom brief until their message sets exist.
 
 ## Setup
 
@@ -92,9 +105,9 @@ Never launch a draft unless the user asked.
 
 In-process agents default to act. Use `edit_campaign(enable_reply_agent="observe")`, `edit_campaign(enable_strategist_replan_agent="observe")`, `edit_campaign(enable_hot_lead_closer="observe")`, or `edit_campaign(enable_coordinator_agent="observe")` to return to logging-only, `"off"` to disable. `product(action='tick')` can patch this git checkout and open a PR — never from the send path; cloud workers and `uvx` installs without `.git` refuse.
 
-## Safety Model
+## Sending model
 
-Campaigns are created as drafts and only start when explicitly launched. Every send passes rate limits, working-hours checks, and a 1st-degree connection guard.
+Campaigns are created as drafts and only start when explicitly launched. Every send passes rate limits, working-hours checks, and a 1st-degree connection guard. HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
 
 On a hosted workspace that has not chosen otherwise, opening DMs and follow-ups wait for a person to approve them (`inspect(action="waiting")`, then `prospect(action="approve_message")` or `discard_message`); the approved text is what is sent. Autopilot sends them unread: `scheduler(action="approval_mode", mode="autopilot")`, or Settings → Sending in the dashboard. Invitations are never held.
 

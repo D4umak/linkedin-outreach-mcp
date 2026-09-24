@@ -144,7 +144,7 @@ async def run_crm_sync(
 
             is_won = outreach.get("status", "") == "closed_happy" if "status" in outreach else bool(outcome)
             if is_won or outcome.get("reason"):
-                deal_name = f"{name} — {campaign_name}"
+                deal_name = f"{name} — {campaign_name}"  # nosemgrep: person-line-without-link -- a HubSpot deal title (person + campaign), not a chat line
                 hs_deal_id = await hs.create_deal(
                     deal_name=deal_name,
                     stage="closedwon" if is_won else "qualifiedtobuy",

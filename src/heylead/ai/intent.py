@@ -10,7 +10,7 @@ campaigns shipped meaningless founder small talk because no layer knew
 the campaign's purpose.
 
 Intent is declared per campaign in config_json.campaign_intent
-(sell | buy | partner | recruit, default sell) and selects prompt
+(sell | buy | partner | recruit | research, default sell) and selects prompt
 variants by suffix: select_prompt("outreach_invitation", "buy") →
 "outreach_invitation_buy" when that template exists, falling back to the
 base template otherwise, so sell campaigns are byte-identical to before
@@ -27,7 +27,7 @@ from .prompt_loader import has_prompt
 
 logger = logging.getLogger(__name__)
 
-VALID_INTENTS = ("sell", "buy", "partner", "recruit")
+VALID_INTENTS = ("sell", "buy", "partner", "recruit", "research")
 DEFAULT_INTENT = "sell"
 
 
@@ -89,5 +89,11 @@ def intent_frame(intent: str) -> str:
         return (
             "STANCE: The sender is recruiting the prospect. Keep mentions of "
             "the role and the prospect's experience."
+        )
+    if intent == "research":
+        return (
+            "STANCE: The sender is asking for the prospect's time for research, "
+            "not selling. Say what is being asked, how long it takes and what "
+            "they get. Never pitch."
         )
     return ""

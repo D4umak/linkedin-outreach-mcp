@@ -45,7 +45,7 @@ from ..db.queries import (
     save_setting,
     update_campaign,
 )
-from ..formatter import stars, table
+from ..formatter import person_line, table
 from ..linkedin import (
     UnipileAuthError,
     UnipileError,
@@ -116,6 +116,7 @@ def build_campaign_config(
     campaign_type: str,
     search_account_id: str,
     competitor_companies: str = "",
+    goal: str = "",
 ) -> dict:
     """The config_json a new campaign starts with.
 
@@ -123,7 +124,17 @@ def build_campaign_config(
     LinkedIn search. campaign_type picks the first-touch prompt family;
     message_generator.select_outreach_prompt reads it. The caller validates
     campaign_type; blank means the default.
+
+    `goal` (heylead.goals.VALID_GOALS) writes campaign_goal and derives
+    campaign_type and campaign_intent from it (#1153). Without one, the goal
+    is read back from campaign_type, so every new row carries all three keys.
     """
+    from .. import goals as _goals
+
+    goal_key = (
+        _goals.normalize_goal(goal) if goal
+        else _goals.goal_from_config({"campaign_type": campaign_type or DEFAULT_CAMPAIGN_TYPE})
+    ) or _goals.DEFAULT_GOAL
     return {
         "target_description": target_description,
         "prospect_count": prospect_count,
@@ -158,8 +169,10 @@ def build_campaign_config(
         # until research or the operator names the companies.
         "exclude_competitors": True,
         "competitor_companies": competitor_companies,
-        # Prompt family: outbound (default) or job_search
-        "campaign_type": campaign_type or DEFAULT_CAMPAIGN_TYPE,
+        # The goal, and the two keys every older reader understands:
+        # campaign_type (prompt family: outbound or job_search) and
+        # campaign_intent (sell, buy, partner, recruit, research). #1153.
+        **_goals.derived_keys(goal_key),
         # Engagement settings
         "engagement_mode": "auto",
         # Follow-up settings. New campaigns start from the backend's single
@@ -196,6 +209,7 @@ async def run_create_campaign(
     people: str = "",
     force: bool = False,
     _internal_source: str = "",
+    goal: str = "",
 ) -> str:
     """Create a new outreach campaign.
 
@@ -222,6 +236,11 @@ async def run_create_campaign(
             at most, and never lists a CV. InMail is not routed by this
             switch. Stored in config_json and pushed to the cloud alongside
             the campaign's other settings.
+        goal: What the campaign is for: "sell" (default), "job_search",
+            "hire", "partner", "buy" or "research". It sets campaign_type and
+            campaign_intent, picks whose profile the ICP describes, and picks
+            the fit question the goal <-> ICP audit asks. hire, partner and
+            research run on your project_brief until their message sets exist.
 
     Flow:
     1. Check setup is complete + free tier limits
@@ -252,6 +271,23 @@ async def run_create_campaign(
             f"Valid values: {', '.join(VALID_CAMPAIGN_TYPES)}."
         )
     campaign_type = wanted_type
+
+    # Validate goal (#1153), also before any I/O. The goal decides
+    # campaign_type; a contradicting pair is refused rather than guessed.
+    from .. import goals as _goals
+
+    wanted_goal = _goals.normalize_goal(goal) if goal else None
+    if goal and wanted_goal is None:
+        return f"❌ Unknown goal '{goal}'. Valid values: {', '.join(_goals.VALID_GOALS)}."
+    if wanted_goal and campaign_type and _goals.derived_keys(wanted_goal)["campaign_type"] != campaign_type:
+        return (
+            f"❌ goal='{wanted_goal}' implies campaign_type="
+            f"'{_goals.derived_keys(wanted_goal)['campaign_type']}', but campaign_type='{campaign_type}' was passed. "
+            "Pass goal alone; campaign_type follows from it."
+        )
+    if not wanted_goal:
+        wanted_goal = _goals.goal_from_config({"campaign_type": campaign_type})
+    campaign_type = _goals.derived_keys(wanted_goal)["campaign_type"]
 
     # ── Step 0: Check setup ──
     # Mutually exclusive by construction: connections_only sources the campaign
@@ -414,6 +450,7 @@ async def run_create_campaign(
                 company_context=company_context or "",
                 focus_query="",
                 user_context=user_context,
+                goal=wanted_goal,
             )
             if not result.icps:
                 return (
@@ -443,6 +480,7 @@ async def run_create_campaign(
         icp_json=judged_icp,
         precomputed=precomputed_verdict,
         force=force,
+        goal=wanted_goal,
     )
     if refusal:
         return refusal
@@ -959,10 +997,11 @@ async def run_create_campaign(
         except Exception as e:
             logger.warning("Connection enrichment failed (non-critical): %s", e)
 
-    # Full ICP score (with enriched data for connections-only top candidates)
-    for prospect in unique_prospects:
-        result = compute_icp_match(prospect, icp_json_for_scoring)
-        prospect["fit_score"] = result["icp_match_score"]
+    # Full ICP score (with enriched data for connections-only top candidates).
+    # The per-dimension breakdown is kept as `why` on each prospect: it is
+    # stored on the contact, pushed to the cloud, and rendered next to the
+    # name (24 Sep 2026: a user could not tell why anyone was on the list).
+    attach_fit_and_why(unique_prospects, icp_json_for_scoring)
 
     # Sort by score, highest first
     unique_prospects.sort(key=lambda p: p.get("fit_score", 0), reverse=True)
@@ -1035,6 +1074,7 @@ async def run_create_campaign(
             exclude_connections, connections_only=connections_only,
         ),
         campaign_type=campaign_type,
+        goal=wanted_goal,
         search_account_id=search_acct_id if search_acct_id != account_id else "",
         competitor_companies=format_competitor_companies(competitor_names),
     )
@@ -1222,27 +1262,27 @@ async def run_create_campaign(
             output_lines.append(line)
     output_lines.append("")
 
-    # Show top 5 prospects
+    # Show the top prospects: every one a link with a reason.
     output_lines.append(f"Top prospects (of {len(prospects_to_save)}):")
-    for i, p in enumerate(prospects_to_save[:5]):
-        is_last = i == min(4, len(prospects_to_save) - 1)
-        prefix = "└──" if is_last else "├──"
-        name = p.get("name", "Unknown")
-        title = p.get("title", "")
-        company = p.get("company", "")
-        score = p.get("fit_score", 0)
-        star_rating = stars(score)
+    shown = prospects_to_save[:TOP_PROSPECTS_SHOWN]
+    for i, p in enumerate(shown):
+        prefix = "└──" if i == len(shown) - 1 else "├──"
+        output_lines.append(f"{prefix} {i+1}. " + person_line(
+            p.get("name", "Unknown"), p.get("linkedin_url", ""),
+            title=p.get("title", ""), company=p.get("company", ""),
+            why=p.get("why"),
+        ))
 
-        role = f"{title}" if title else ""
-        if company:
-            role += f" at {company}" if role else company
-
-        output_lines.append(f"{prefix} {i+1}. {name} — {role} (fit: {star_rating})")
-
-    if len(prospects_to_save) > 5:
-        output_lines.append(f"    ... and {len(prospects_to_save) - 5} more")
+    if len(prospects_to_save) > len(shown):
+        output_lines.append(f"    ... and {len(prospects_to_save) - len(shown)} more")
 
     # Nothing has been sent yet — the campaign is a draft until it is launched.
+    # The plan is computed (the api's for a hosted account, the local twin
+    # otherwise), never hand-written: the block it replaced quoted warm-up
+    # gaps and follow-up days no scheduler used (Outcome api#1138).
+    from ..services.campaign_plan import plan_text_for
+
+    plan_text = await plan_text_for(campaign_id)
     output_lines.extend([
         "",
         "📝 **Nothing has been sent yet.** The campaign is saved as a draft.",
@@ -1250,13 +1290,7 @@ async def run_create_campaign(
         "Review the prospects above, then start outreach with:",
         f"   campaign(action='launch', campaign_id='{campaign_id}')",
         "",
-        "Once launched:",
-        "├── 💬 Warm-up — engaging with prospect posts (25-40 min intervals)",
-        "├── 🤝 Invitations — personalized connection requests after warm-up (20-40 min)",
-        "├── 📩 Follow-ups — automatic DMs on days 1, 3, 7, 14",
-        "└── 📬 Reply detection — checked every 5 min, hot leads surfaced",
-        "",
-        "All messages pass a 5-stage validation pipeline and respect LinkedIn rate limits.",
+        plan_text,
         "",
         "Before launching you can still:",
         "├── edit_campaign() — adjust targeting, messaging, or follow-up settings",
@@ -1268,7 +1302,8 @@ async def run_create_campaign(
         voice_label = {"mixed": "Mixed (alternating text & voice)", "voice_only": "Voice only", "ab_test": "A/B testing text vs voice"}.get(voice_mode, voice_mode)
         output_lines.extend(["", f"🎤 **Voice memos: {voice_label}** — edit_campaign(voice_mode='text_only') to disable"])
 
-    # Campaign type info
+    # Goal and campaign type info
+    output_lines.extend(["", f"🎯 Goal: {_goals.GOALS[config['campaign_goal']].label}"])
     if config["campaign_type"] == CAMPAIGN_TYPE_JOB_SEARCH:
         output_lines.extend(["", "🎯 Campaign type: job_search (first touch may name the recipient's company and the role; one proof point, no CV listing)"])
 
@@ -1316,9 +1351,53 @@ async def run_create_campaign(
 
     output_lines.extend(status_footer(
         "campaign", campaign_id, snapshot=False,
-        label="Review prospects in the dashboard",
+        label=f"Open all {len(prospects_to_save)} in the dashboard",
     ))
     return "\n".join(output_lines)
+
+
+# How many found people the create_campaign result names; the rest are one
+# link away ("Open all N in the dashboard").
+TOP_PROSPECTS_SHOWN = 10
+
+
+def attach_fit_and_why(
+    prospects: list[dict], icp_json: str | dict | None,
+) -> None:
+    """Score every prospect and keep the breakdown as `why`, in place.
+
+    `compute_icp_match` returns the score and a per-dimension breakdown;
+    until 24 Sep 2026 only the score survived, so no surface could say why
+    a person was on the list and the dashboard's "Why this prospect" panel
+    was empty for every MCP-created prospect. The record has the keys the
+    api's `_enrolment_why` writes (services.enrolment_why).
+    """
+    from ..services.enrolment_why import enrolment_why
+    from ..services.icp_match_scorer import compute_icp_match
+
+    segment_name = _first_segment_name(icp_json)
+    for prospect in prospects:
+        result = compute_icp_match(prospect, icp_json)
+        prospect["fit_score"] = result["icp_match_score"]
+        prospect["why"] = enrolment_why(
+            prospect, result.get("breakdown") or {}, segment_name,
+        )
+
+
+def _first_segment_name(icp_json: str | dict | None) -> str:
+    """The persona compute_icp_match scores against (persona 1), by name."""
+    data: object = icp_json
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    if not isinstance(data, dict):
+        return ""
+    segments = data.get("segments")
+    if isinstance(segments, list) and segments and isinstance(segments[0], dict):
+        return str(segments[0].get("name") or "").strip()
+    return str(data.get("name") or "").strip()
 
 
 async def _goal_match_gate(
@@ -1328,6 +1407,7 @@ async def _goal_match_gate(
     icp_json: dict,
     precomputed: dict | None,
     force: bool,
+    goal: str = "sell",
 ) -> tuple[str | None, list[str]]:
     """Audit the campaign goal against its ICP. Returns (refusal, notes).
 
@@ -1341,10 +1421,10 @@ async def _goal_match_gate(
 
     if precomputed:
         verdict = coerce_verdict(
-            precomputed, source=str(precomputed.get("source") or "backend"),
+            precomputed, source=str(precomputed.get("source") or "backend"), goal=goal,
         )
     else:
-        verdict = await judge_goal_match(target_description, offer, icp_json)
+        verdict = await judge_goal_match(target_description, offer, icp_json, goal_key=goal)
 
     if verdict.verdict == "match":
         return None, []
