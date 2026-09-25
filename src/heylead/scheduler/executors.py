@@ -338,6 +338,25 @@ def _classify_422(error_msg: str) -> str:
     return "unknown_422"
 
 
+_UNREACHABLE_CHAT_REASONS = ("chat_of_another_seat", "chat_not_found")
+
+
+def unreachable_chat_in(result: str | None) -> str:
+    """The unreachable-chat reason a send tool's text carries, or ''.
+
+    The Unipile client leads the error with the reason
+    (linkedin.unipile.unreachable_chat_reason) and every send tool repeats
+    the error to its caller ("Reply failed for X: chat_of_another_seat: …"),
+    so the marker survives to here. A named reason is a terminal skip for
+    that message, never a failure to retry. Twin of heylead-api #1262.
+    """
+    lower = (result or "").lower()
+    for reason in _UNREACHABLE_CHAT_REASONS:
+        if reason in lower:
+            return reason
+    return ""
+
+
 def categorize_error(error_msg: str) -> str:
     """Classify an error message into a category for filtering and analysis.
 
@@ -869,6 +888,9 @@ async def _execute_send_dm(job: dict[str, Any]) -> str | JobResult:
     )
 
     if result and ("❌" in result or "failed" in result.lower()):
+        unreachable = unreachable_chat_in(result)
+        if unreachable:
+            return JobResult("skipped", f"{unreachable}: {result[:160]}")
         # Permanent failures (not connected, premium required, unreachable)
         # should NOT be retried — the outreach is already marked as error
         # by run_generate_and_send.  Return instead of raising to skip
@@ -1120,7 +1142,7 @@ async def _execute_inmail(job: dict[str, Any]) -> JobResult:
     raise RuntimeError(f"InMail failed: {text[:200]}")
 
 
-async def _execute_followup(job: dict[str, Any]) -> str:
+async def _execute_followup(job: dict[str, Any]) -> str | JobResult:
     """Execute a follow-up message job.
 
     Calls run_send_followup() for a specific outreach.
@@ -1194,6 +1216,10 @@ async def _execute_followup(job: dict[str, Any]) -> str:
     )
 
     if result and ("❌" in result or "failed" in result.lower()):
+        unreachable = unreachable_chat_in(result)
+        if unreachable:
+            await _track_plan_execution(job, "followup", result or "", outcome="skipped")
+            return JobResult("skipped", f"{unreachable}: {result[:160]}")
         raise RuntimeError(f"Follow-up failed: {result[:200]}")
 
     if _is_paused_result(result) or _is_gap_deferred_result(result):
@@ -1473,7 +1499,7 @@ async def _execute_check_replies(job: dict[str, Any]) -> str:
     return result or "No new replies"
 
 
-async def _execute_auto_reply(job: dict[str, Any]) -> str:
+async def _execute_auto_reply(job: dict[str, Any]) -> str | JobResult:
     """Execute an auto-reply job. Always sends immediately (autopilot)."""
     # Daily cap check
     from ..linkedin.rate_limiter import check_daily_cap
@@ -1545,6 +1571,17 @@ async def _execute_auto_reply(job: dict[str, Any]) -> str:
         autonomous=True,
     )
     from ..services.job_search_guard import JOB_SEARCH_HELD_MESSAGE
+
+    unreachable = unreachable_chat_in(result)
+    if unreachable:
+        # A chat this seat can never write to: skipped, and said so. Before
+        # this, "Reply failed for X: Permission denied by LinkedIn." matched
+        # neither the skip nor the error phrases below and read as success.
+        await db.log_action(
+            action_type="auto_reply_sent", outreach_id=outreach_id,
+            result="skipped", details={"reason": unreachable, "scheduler": True},
+        )
+        return JobResult("skipped", f"{unreachable}: {(result or '')[:160]}")
 
     # Separate intentional skips (correct behavior) from real failures.
     # Skips are things like opt-outs, sentiment blocks, dedup — the system

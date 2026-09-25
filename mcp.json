@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "uvx",
       "args": [
-        "heylead@0.10.398"
+        "heylead@0.10.399"
       ]
     }
   }

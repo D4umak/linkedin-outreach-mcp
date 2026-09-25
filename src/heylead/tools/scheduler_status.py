@@ -797,6 +797,7 @@ async def run_scheduler_logs(
     hours: int = 24,
     event_type: str = "",
     campaign_id: str = "",
+    cloud: bool = False,
 ) -> str:
     """Show scheduler event log with metrics and recent failures.
 
@@ -804,7 +805,22 @@ async def run_scheduler_logs(
         hours: Lookback window in hours (default 24).
         event_type: Filter by event type (e.g. 'job_failed').
         campaign_id: Filter by campaign ID.
+        cloud: Read the hosted scheduler's log even from a local workspace.
+
+    A hosted workspace's events are written by the cloud, not this machine:
+    until 24 Sep 2026 this read the local SQLite log only and answered "No
+    events recorded" against 20,000 hosted events, while its siblings
+    (activity, diagnostics) already asked the backend. Same rule here.
     """
+    from ..config import is_backend_mode
+    if cloud or is_backend_mode():
+        try:
+            return await _run_logs_from_backend(hours, event_type, campaign_id)
+        except Exception as e:
+            if cloud:
+                return f"Could not read the cloud scheduler's log: {e}"
+            logger.debug("Backend event log failed, falling back to local: %s", e)
+
     summary = await db.get_scheduler_event_summary(hours)
     metrics = await db.get_job_metrics(hours)
     failures = await db.get_recent_scheduler_events(
@@ -909,6 +925,72 @@ async def run_scheduler_logs(
     lines.append("- `scheduler(action='diagnostics')` — full system diagnostics")
     lines.append("- `campaign(action='retry_failed')` — retry failed outreaches")
 
+    return "\n".join(lines)
+
+
+async def _run_logs_from_backend(hours: int, event_type: str, campaign_id: str) -> str:
+    """Fetch the hosted event log (GET /scheduler/events) and format it."""
+    import httpx
+    from ..services.cloud_sync import _base_url, _headers
+
+    base = _base_url()
+    params: dict = {"hours": hours, "limit": 200}
+    if event_type:
+        params["event_type"] = event_type
+    if campaign_id:
+        params["campaign_id"] = campaign_id
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+        resp = await client.get(
+            f"{base}/api/v1/scheduler/events", params=params, headers=_headers(),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    return _format_backend_logs(data, hours, event_type=event_type, campaign_id=campaign_id)
+
+
+def _format_backend_logs(
+    data: dict, hours: int, *, event_type: str, campaign_id: str,
+) -> str:
+    """The cloud's log in the local log's shape, headed so the reader knows
+    whose log it is."""
+    summary = data.get("summary") or {}
+    events = data.get("events") or []
+    scope = f", campaign {campaign_id[:8]}" if campaign_id else ""
+    lines = [f"# Scheduler Events ({hours}h, cloud{scope})", ""]
+    if not summary and not events:
+        lines.append("No events recorded in this window by the cloud scheduler.")
+        return "\n".join(lines)
+    if summary:
+        ordered = sorted(summary.items(), key=lambda kv: -int(kv[1] or 0))
+        lines.append(" | ".join(f"{etype}: **{cnt}**" for etype, cnt in ordered))
+        lines.append("")
+    failures = [e for e in events if e.get("event_type") == "job_failed"]
+    if failures:
+        lines.append("## Recent Failures")
+        lines.append("")
+        for evt in failures[:10]:
+            ts = evt.get("created_at", 0)
+            t = datetime.fromtimestamp(ts).strftime("%d %b %H:%M") if ts else "?"
+            ctx = evt.get("context") or {}
+            if isinstance(ctx, str):
+                try:
+                    ctx = json.loads(ctx)
+                except Exception:
+                    ctx = {}
+            jtype = evt.get("job_type") or ctx.get("job_type", "?")
+            cat = ctx.get("error_category", "")
+            err = str(evt.get("error") or ctx.get("error", ""))[:80]
+            cat_tag = f" [{cat}]" if cat else ""
+            job_id = (evt.get("job_id") or "")[:8]
+            lines.append(f"- [{t}] {jtype} {job_id}{cat_tag}: {err}")
+        lines.append("")
+    if data.get("has_more"):
+        lines.append(f"_More events than shown; narrow with event_type or campaign_id._")
+        lines.append("")
+    lines.append("## Quick Actions")
+    lines.append("- `scheduler(action='logs', hours=48)` — wider window")
+    lines.append("- `scheduler(action='diagnostics')` — full system diagnostics")
+    lines.append("- `scheduler(action='activity')` — what actually happened on LinkedIn")
     return "\n".join(lines)
 
 

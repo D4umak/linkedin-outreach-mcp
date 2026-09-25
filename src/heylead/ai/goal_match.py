@@ -104,6 +104,12 @@ def goal_match_system_for(goal: str) -> str:
             f'- "partial" when the personas are adjacent but the {deciding} is missing, '
             "or when fewer than half the titles qualify.\n"
             f'- "match" only when at least one persona is a {deciding}.'
+            + (
+                '\n- "peer" for a persona whose titles are the role the sender wants; '
+                'an ICP whose personas are all "peer" is "mismatch": they hold the role, '
+                "they do not hire for it."
+                if g.key == goals.JOB_SEARCH else ""
+            )
         ),
         role_noun="qualifying role",
         kb_rule="Do not cite a sales methodology; it does not apply to this goal.",

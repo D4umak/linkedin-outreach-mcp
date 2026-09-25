@@ -17,6 +17,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from .textutil import contains_term
+
 SELL = "sell"
 JOB_SEARCH = "job_search"
 HIRE = "hire"
@@ -128,6 +130,48 @@ GOALS: dict[str, Goal] = {
         ),
     ),
 }
+
+# #1338 (25 Sep 2026): a job-search ICP for "Series B SaaS hiring a Head of
+# Product" put "Head of Product" in job_titles.include, so the campaign wrote
+# to peers. The prompt now says so, and exclude_target_role enforces it on
+# whatever the model returns.
+JOB_SEARCH_ROLE_RULE = (
+    "The sender wants the role named in the target description. Put that role's "
+    "title in job_titles.exclude of every persona and never in include: people who "
+    "hold it are peers, not the people who hire for it. Return the exact title as "
+    '"target_role" at the top level of the JSON.'
+)
+
+
+def exclude_target_role(icp: dict, target_role: str) -> dict:
+    """Move the sender's own role out of every persona's job_titles.include.
+
+    Any include entry that carries the role as a whole term ("Head of Product",
+    "Head of Product, Growth") is dropped and the role is appended to exclude
+    once; "VP Product" and "Product Director" are other titles and stay. A
+    bare-list job_titles (the legacy include-only shape) becomes the dict.
+    Edits in place and returns the dict, so it reads the same way on a
+    parsed LLM answer and on the api's response.
+    """
+    role = (target_role or "").strip()
+    if not role or not isinstance(icp, dict):
+        return icp
+    for persona in icp.get("icps") or []:
+        if not isinstance(persona, dict):
+            continue
+        titles = persona.get("job_titles")
+        if isinstance(titles, list):
+            titles = {"include": titles, "exclude": []}
+        elif not isinstance(titles, dict):
+            titles = {"include": [], "exclude": []}
+        include = [t for t in (titles.get("include") or []) if not contains_term(str(t), role)]
+        exclude = list(titles.get("exclude") or [])
+        if not any(str(t).strip().lower() == role.lower() for t in exclude):
+            exclude.append(role)
+        titles["include"], titles["exclude"] = include, exclude
+        persona["job_titles"] = titles
+    return icp
+
 
 _GOAL_BY_INTENT = {"recruit": HIRE, "partner": PARTNER, "buy": BUY, "research": RESEARCH}
 

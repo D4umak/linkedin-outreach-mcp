@@ -33,6 +33,24 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.399 (2026-09-25)
+- Fix: a job-search ICP never targets the role the user wants; the title goes to every persona's exclude list (#1338)
+- Fix: 'unsafe for your account' is not a safe claim
+- Fix: a job-search ICP never targets the role the sender wants (#1338)
+- New: the warning pattern fails the warning, not the pace sentence
+- New: the session waits for the claim ack in the foreground; the tool's footer is expected
+- Fix: a chat the seat can never reach ends the reply instead of being retried or read as success
+- mark the backlog rows that are live
+- plan index and the umbrella outcome #1294
+- slice 4 plan, the case loop's progress as stages
+- slice 3 plan, the dashboard widget
+- slice 2 plan, the evaluator, the user_idea case and questions
+- Fix: an archived campaign's replies leave the local list; handoffs and paused stay
+- slice 1 plan, intake, store, routes and caps
+- the idea widget design
+- Fix: logs on a hosted workspace read the cloud's event log
+- Fix: the release commit regenerates and stages the tool reference
+
 ## v0.10.398 (2026-09-24)
 - Fix: the follow-up step lists only the follow-ups the cap lets fire
 - New: the model is told not to call the pace safe or unsafe

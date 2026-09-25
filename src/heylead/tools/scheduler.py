@@ -77,7 +77,7 @@ async def run_scheduler(
         from .scheduler_status import run_scheduler_logs
         return await run_scheduler_logs(
             hours=_LOOKBACK_DEFAULT if hours is None else hours,
-            event_type=event_type, campaign_id=campaign_id,
+            event_type=event_type, campaign_id=campaign_id, cloud=cloud,
         )
 
     if action == "diagnostics":

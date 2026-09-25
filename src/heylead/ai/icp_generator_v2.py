@@ -196,6 +196,8 @@ def icp_prompt_for(goal: str) -> str:
             f"Create 2-4 personas of people who {g.persona}, for a sender whose goal is: "
             f"{g.label}. Not customers: the sender is not selling to them."
         )
+        if g.key == goals.JOB_SEARCH:
+            opening += " " + goals.JOB_SEARCH_ROLE_RULE
         heading = "What moves them"
         rule = (
             _SELL_SENIORITY_RULE if goals.seniority_floor_applies(g.key)
@@ -358,7 +360,7 @@ async def generate_icp_v2(
         prompt, system=ICP_V2_SYSTEM, temperature=0.2, max_tokens=8192,
     )
 
-    result = await _parse_icp_response(raw, target_description)
+    result = await _parse_icp_response(raw, target_description, goal=goal_key)
     result.processing_time = time.time() - start_time
 
     # Filter below-threshold ICPs
@@ -371,7 +373,7 @@ async def generate_icp_v2(
     # Ensure at least 1 ICP survives filtering
     if not result.icps:
         logger.warning("All ICPs below confidence threshold, keeping best one")
-        all_icps = (await _parse_icp_response(raw, target_description)).icps
+        all_icps = (await _parse_icp_response(raw, target_description, goal=goal_key)).icps
         if all_icps:
             best = max(all_icps, key=lambda x: x.overall_confidence)
             result.icps = [best]
@@ -407,9 +409,11 @@ async def _generate_via_backend(
     finally:
         await client.close()
 
-    # Backend returns v2 format (icps[]) — parse directly
+    # Backend returns v2 format (icps[]) — parse directly. The api cleans a
+    # job-search answer itself (#1338), but the client must not depend on
+    # the backend's version, so the same pass runs here.
     if "icps" in icp_data:
-        return _dict_to_icp_result(icp_data, target_description)
+        return _dict_to_icp_result(icp_data, target_description, goal=goal)
 
     # Fallback: legacy format (segments[]) — convert
     return _convert_legacy_icp(icp_data, target_description)
@@ -492,7 +496,9 @@ async def _enrich_result(result: IcpResult) -> None:
 # Response parsing
 # ──────────────────────────────────────────────
 
-async def _parse_icp_response(raw: str, target_description: str) -> IcpResult:
+async def _parse_icp_response(
+    raw: str, target_description: str, *, goal: str = "sell",
+) -> IcpResult:
     """Parse LLM JSON response into IcpResult.
 
     Uses a 4-strategy repair pipeline (ported from original AI in Charge):
@@ -511,7 +517,7 @@ async def _parse_icp_response(raw: str, target_description: str) -> IcpResult:
 
     try:
         data = json.loads(cleaned)
-        return _dict_to_icp_result(data, target_description)
+        return _dict_to_icp_result(data, target_description, goal=goal)
     except (json.JSONDecodeError, TypeError, ValueError):
         pass
 
@@ -520,7 +526,7 @@ async def _parse_icp_response(raw: str, target_description: str) -> IcpResult:
         repaired = _repair_json(cleaned)
         data = json.loads(repaired)
         logger.info("ICP JSON recovered via regex repair")
-        return _dict_to_icp_result(data, target_description)
+        return _dict_to_icp_result(data, target_description, goal=goal)
     except (json.JSONDecodeError, TypeError, ValueError):
         pass
 
@@ -529,7 +535,7 @@ async def _parse_icp_response(raw: str, target_description: str) -> IcpResult:
         repaired_data = await _llm_repair_json(cleaned, target_description)
         if repaired_data:
             logger.info("ICP JSON recovered via LLM repair")
-            return _dict_to_icp_result(repaired_data, target_description)
+            return _dict_to_icp_result(repaired_data, target_description, goal=goal)
     except Exception as e:
         logger.warning("LLM JSON repair failed: %s", e)
 
@@ -653,9 +659,20 @@ Return ONLY the fixed JSON. Do not include any explanations, just the JSON itsel
 
 
 def _dict_to_icp_result(
-    data: dict[str, Any], target_description: str,
+    data: dict[str, Any], target_description: str, *, goal: str = "sell",
 ) -> IcpResult:
-    """Convert a parsed JSON dict into an IcpResult."""
+    """Convert a parsed JSON dict into an IcpResult.
+
+    For a job search the sender's own role (`target_role`, asked for by
+    goals.JOB_SEARCH_ROLE_RULE) is moved to every persona's exclude list first,
+    whatever the model or the backend put in include (#1338). The dataclass
+    reads only the keys it knows, so target_role itself is dropped here.
+    """
+    from .. import goals
+
+    target_role = data.get("target_role")
+    if goal == goals.JOB_SEARCH and isinstance(target_role, str) and target_role.strip():
+        goals.exclude_target_role(data, target_role)
     icps = []
     for icp_data in data.get("icps", []):
         icp = SingleIcp(

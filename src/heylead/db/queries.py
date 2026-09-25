@@ -2241,6 +2241,12 @@ def _acknowledged_handoffs(db: Any) -> list[dict]:
     return out
 
 
+# Campaign statuses whose replies are no longer anyone's action (twin of
+# heylead-api unanswered_leads.STOPPED_CAMPAIGN_STATUSES). Paused is not here
+# on purpose: a pause is "not now".
+STOPPED_CAMPAIGN_STATUSES = frozenset({"archived", "deleted"})
+
+
 def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
     """Leads whose last message is theirs and older than the grace window.
 
@@ -2259,7 +2265,7 @@ def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
     rows = db.execute(
         """SELECT o.id as outreach_id, o.campaign_id, o.status, o.next_action,
                   c.name as contact_name, c.title, c.company, c.linkedin_url,
-                  ca.name as campaign_name,
+                  ca.name as campaign_name, ca.status as campaign_status,
                   m.text as last_reply_text,
                   m.sentiment as last_sentiment,
                   m.timestamp as last_message_ts
@@ -2311,10 +2317,21 @@ def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
     # A reply that follows a handoff nobody has acted on is still that
     # handoff's: the action is the call, not an answer to "any news?".
     threads = _threads(db, [str(c["outreach_id"]) for c in candidates])
-    for i, candidate in enumerate(candidates):
+    live: list[dict] = []
+    for candidate in candidates:
         pending = pending_handoff(threads.get(str(candidate["outreach_id"]), []))
         if pending is not None:
-            candidates[i] = _as_the_action(candidate, pending)
+            live.append(_as_the_action(candidate, pending))
+            continue
+        # Twin of heylead-api unanswered_leads (api #1260): an archived
+        # campaign sends nothing, so its "closing reply unsent" can never be
+        # sent and an engaged reply from a campaign someone stopped months
+        # ago is not an action anyone takes. A handoff (above) is a person's
+        # call and stays whatever the campaign's status; paused stays too.
+        if str(candidate.get("campaign_status") or "") in STOPPED_CAMPAIGN_STATUSES:
+            continue
+        live.append(candidate)
+    candidates = live
     candidates += _acknowledged_handoffs(db)
     db.close()
     candidates.sort(key=lambda r: int(r.get("last_message_ts") or 0))

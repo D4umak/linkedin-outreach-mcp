@@ -238,12 +238,51 @@ class UnipileAuthError(UnipileError):
 # Error classification for 401/403 responses
 # ──────────────────────────────────────────────
 
+# The provider's own words for "this chat cannot be written to from this
+# seat, now or later". Twin of heylead-api error_category.unreachable_chat_reason.
+_CHAT_GONE_MARKERS = ("resource_not_found", "chat not found")
+_CHAT_OF_ANOTHER_SEAT_MARKERS = ("account_mismatch",)
+
+
+def unreachable_chat_reason(status_code: int, body_text: str | None) -> str:
+    """The terminal reason a send into a chat can never succeed, or ''.
+
+    ``chat_not_found``: 404 resource_not_found on the chat itself.
+    ``chat_of_another_seat``: 403 account_mismatch, the chat belongs to a
+    different LinkedIn seat than the one sending. Either is definitive for
+    the message being answered, so the executors skip instead of failing
+    and retrying (scheduler.executors.unreachable_chat_in). Anything else,
+    a 5xx, a rate limit, a permission refusal that is not a mismatch,
+    answers ''. Asked only by the two chat sends: a 404 elsewhere is not
+    a chat.
+    """
+    lower = (body_text or "").lower()
+    if int(status_code or 0) == 404 and any(m in lower for m in _CHAT_GONE_MARKERS):
+        return "chat_not_found"
+    if int(status_code or 0) == 403 and any(m in lower for m in _CHAT_OF_ANOTHER_SEAT_MARKERS):
+        return "chat_of_another_seat"
+    return ""
+
+
+def _unreachable_result(reason: str) -> dict[str, Any]:
+    """The send result for an unreachable chat. The reason leads the error text
+    so every tool that repeats the error to its caller carries the marker."""
+    said = {
+        "chat_not_found": "the chat no longer exists on LinkedIn",
+        "chat_of_another_seat": "this chat belongs to another LinkedIn seat",
+    }[reason]
+    return {"error": f"{reason}: {said}.", "permanent": True, "unreachable": reason}
+
+
 def _classify_http_auth_error(status_code: int, body_text: str) -> dict[str, Any]:
     """Classify a 401/403 HTTP response into auth vs permission error.
 
     Returns dict with error/auth_error/blocked/permanent keys to merge into result.
     """
     lower = body_text.lower() if body_text else ""
+    unreachable = unreachable_chat_reason(status_code, body_text)
+    if unreachable:
+        return _unreachable_result(unreachable)
     if "subscription_required" in lower or "subscription required" in lower:
         return {"error": "LinkedIn Premium required for this action.", "permanent": True}
     if "not connected" in lower or "not_connected" in lower:
@@ -2114,7 +2153,11 @@ class UnipileClient:
                         pass
             else:
                 body = resp.text[:200]
-                result["error"] = f"Unipile returned {resp.status_code}: {body}"
+                unreachable = unreachable_chat_reason(resp.status_code, resp.text[:500])
+                if unreachable:
+                    result.update(_unreachable_result(unreachable))
+                else:
+                    result["error"] = f"Unipile returned {resp.status_code}: {body}"
         except httpx.TimeoutException:
             result["error"] = "Request timed out after retries."
         except Exception as e:
@@ -2181,7 +2224,11 @@ class UnipileClient:
                         pass
             else:
                 body = resp.text[:200]
-                result["error"] = f"Unipile returned {resp.status_code}: {body}"
+                unreachable = unreachable_chat_reason(resp.status_code, resp.text[:500])
+                if unreachable:
+                    result.update(_unreachable_result(unreachable))
+                else:
+                    result["error"] = f"Unipile returned {resp.status_code}: {body}"
         except httpx.TimeoutException:
             result["error"] = "Request timed out after retries."
         except Exception as e:
