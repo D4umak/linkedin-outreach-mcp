@@ -19,11 +19,8 @@ from ..config import get_tier
 from ..constants import (
     FREE_MAX_CAMPAIGNS,
     FREE_MAX_ENGAGEMENTS,
-    FREE_MAX_FOLLOWUPS,
     FREE_MONTHLY_INVITATIONS,
     FREE_MONTHLY_MESSAGES,
-    PRO_MAX_FOLLOWUPS,
-    TIER_PRO,
 )
 from ..db import aio as db
 from ..db.async_bridge import run_db
@@ -820,11 +817,16 @@ async def _show_overview(offline: bool = False) -> str:
         logger.warning("Verification stats failed: %s", e)
 
     # ── Follow-up ready hint ──
-    max_followups = PRO_MAX_FOLLOWUPS if tier == TIER_PRO else FREE_MAX_FOLLOWUPS
+    # Each campaign's own count, as its plan quotes it: 0 when its follow-ups
+    # are off, its max_followups under the tier ceiling otherwise (#1414).
+    from ..services.campaign_plan import effective_max_followups
+
     total_followup_ready = 0
     for camp in campaigns:
         if camp.get("status") in ("active", "draft"):
-            total_followup_ready += await db.count_followup_ready(camp["id"], max_followups)
+            max_followups = effective_max_followups(camp.get("config_json"), tier)
+            if max_followups > 0:
+                total_followup_ready += await db.count_followup_ready(camp["id"], max_followups)
     if total_followup_ready > 0:
         output.append(
             f"💬 {total_followup_ready} prospect{'s' if total_followup_ready != 1 else ''} "
@@ -860,7 +862,8 @@ async def _show_overview(offline: bool = False) -> str:
         output.append("")
 
     # ── Brand strategy progress ──
-    _brand_plan = await db.get_setting("brand_strategy")
+    from ..services.brand_service import load_brand_plan as _load_brand_plan
+    _brand_plan = await run_db(_load_brand_plan)
     if _brand_plan and isinstance(_brand_plan, dict) and _brand_plan.get("weeks"):
         import time as _t
         from ..config import is_scheduler_enabled
@@ -1581,9 +1584,11 @@ async def _show_campaign_detail(campaign_id: str) -> str:
         "enable_follows": ("Follows", True),
         "enable_endorsements": ("Endorsements", True),
         "enable_engagements": ("Engagements", True),
-        "enable_followups": ("Follow-ups", True),
     }
-    disabled = [label for key, (label, default) in toggles.items() if not config.get(key, default)]
+    # flag_enabled, the reader planner.py acts on: the string "off" that
+    # edit_campaign writes is truthy to a bare .get() (#1414).
+    disabled = [label for key, (label, default) in toggles.items()
+                if not flag_enabled(config, key, default)]
     if disabled:
         settings_lines.append(f"⏸️ Disabled: {', '.join(disabled)}")
 
@@ -1592,15 +1597,21 @@ async def _show_campaign_detail(campaign_id: str) -> str:
     if em != "auto":
         settings_lines.append(f"💬 Engagement: {em.replace('_', ' ')}")
 
-    # Follow-up schedule
+    # Follow-ups: the count the plan quotes and the scheduler keeps, not the
+    # stored max_followups (a new campaign stores 4; a Free tier sends 2, and
+    # none when follow-ups are off). #1414: a header said "Up to 4" above a
+    # plan that said "up to 2".
+    from ..services.campaign_plan import effective_max_followups, local_tier
+
+    max_fu = effective_max_followups(config, local_tier())
     fdd = config.get("followup_delay_days")
-    mf = config.get("max_followups")
-    # Hidden when it matches what a new campaign starts with
-    # (create_campaign.build_campaign_config, aligned with the backend).
-    if fdd and fdd != [1, 3, 7, 14]:
-        settings_lines.append(f"📅 Follow-up schedule: day {','.join(map(str, fdd))}")
-    elif mf and mf != 4:
-        settings_lines.append(f"📅 Max follow-ups: {mf}")
+    if max_fu <= 0:
+        settings_lines.append("📅 Follow-ups: off")
+    elif fdd and fdd != [1, 3, 7, 14]:
+        settings_lines.append(
+            f"📅 Follow-ups: up to {max_fu}, schedule day {','.join(map(str, fdd))}")
+    else:
+        settings_lines.append(f"📅 Follow-ups: up to {max_fu}")
 
     # Business hours
     bh_line = _business_hours_line(config)

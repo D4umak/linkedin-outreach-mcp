@@ -83,14 +83,27 @@ def parse_competitor_names(*sources: Any) -> list[str]:
     return names
 
 
+def competitor_list_is_set(config: dict[str, Any] | None) -> bool:
+    """True once the campaign's own list has been written, even as empty.
+
+    The list in the campaign's config is the setting, and settings are
+    authoritative: one a person cleared or trimmed stays that way. The ICP's
+    researched names stand in only for a campaign whose list was never
+    written. Until 25 Sep 2026 every read took the union of the two, so a
+    list cleared in Settings came straight back (D4umak/heylead-api#1428).
+    """
+    return isinstance(config, dict) and config.get(COMPETITOR_COMPANIES_KEY) is not None
+
+
 def competitor_names_from(
     config: dict[str, Any] | None,
     icp: dict[str, Any] | None = None,
 ) -> list[str]:
     config = config if isinstance(config, dict) else {}
     icp = icp if isinstance(icp, dict) else {}
+    if competitor_list_is_set(config):
+        return parse_competitor_names(config.get(COMPETITOR_COMPANIES_KEY))
     return parse_competitor_names(
-        config.get(COMPETITOR_COMPANIES_KEY),
         icp.get("competitors"),
         icp.get(COMPETITOR_COMPANIES_KEY),
     )

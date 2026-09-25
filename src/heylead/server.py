@@ -33,6 +33,18 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.402 (2026-09-25)
+- Fix: the campaign plan says follow-ups are off when they are, lists only the warm-up touches that are on, and no longer promises to leave existing connections alone when the campaign includes them (#1414)
+- Fix: show_status and scheduler diagnostics quote the follow-up count the plan quotes (the tier-capped setting, or off), and a stored "off" switch shows as disabled (#1414)
+- Fix: the local scheduler, send_followup and suggest_next_action keep a campaign to its follow-up count: its own setting under the tier ceiling (Free 2), none when follow-ups are off (#1414)
+- Fix: on a hosted account, campaign delete and archive ask the workspace first, read the campaign back, and say plainly when the workspace still has it; retry_failed and repair_queue say they have no hosted route instead of changing only this computer's copy (#1415)
+- Fix: a job-search first message never claims the company is hiring without a hiring signal, never reuses persona words, and asks a hiring manager for a short call (#1416)
+- Fix: our message is told by is_sender first in the reply dedup and the inbox
+- Fix: a post claims nothing about the author that the author did not give
+- Fix: keep the brand plan per workspace and name it on the push
+- Fix: a neutral example name in the self-filter docstring and test
+- Fix: research what the user sells, for a sale only; a cleared list stays cleared
+
 ## v0.10.401 (2026-09-25)
 - Fix: directories stop advertising voice memos and a sales-only SDR
 - New: a queued PR hears what would park it before its turn
@@ -3042,14 +3054,14 @@ async def inspect(
     Args:
         action: What to show:
             "agents"  — one-screen digest of holds, replans, closer, skips, jobs (default)
-            "holds"   — fresh hold_for_operator rows and coordinator campaign holds
+            "holds"   — people held for you (the hold subset of "waiting") and coordinator campaign holds
             "replans" — today's strategist_replan_decision rows
             "closer"  — today's hot_lead_closer_decision rows
             "skips"   — recent reply skips (hard gates, cap, dedup, agent skip)
             "jobs"    — pending scheduler jobs and recent gated-job refusals
             "commons" — digest, beats (including product), live notes, coordinator hold, stale liveness
             "journal" — hosted agent diary (cloud workers). Self-hosted: use the other actions.
-            "waiting" — opening messages and follow-ups held for the user's approval (hosted)
+            "waiting" — who is waiting on you (Needs attention's people), then messages held for your approval (hosted)
         campaign_id: Optional campaign filter (full id or prefix).
         outreach_id: Optional outreach filter (full id or prefix).
         limit: Max rows per slice, 1-100 (default 20).

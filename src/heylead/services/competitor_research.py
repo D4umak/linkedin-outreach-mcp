@@ -1,14 +1,27 @@
-"""Web-research the client's competitors after ICP generation.
+"""Web-research the competitors of what the client sells, after ICP generation.
 
-Serper for "{company} competitors", then an LLM extract. Failures are empty,
-never blocking. Hosted accounts go through the backend Serper proxy.
+For a sale only: Serper for "{offer} competitors" and "{offer} alternatives",
+then an LLM extract. Failures are empty, never blocking. Hosted accounts go
+through the backend Serper proxy.
+
+The subject is the offer (the campaign's company context, else its project
+brief), never the sender's company. That value is the tail of the seat's
+LinkedIn headline, the employer: on 25 Sep 2026 it had a person selling AI
+outreach researched as "Tver State University" and handed "GoIT, Postnauka"
+as competitors (D4umak/heylead-api#1428). The sender's company is only ever a
+name to drop from the answer. A job search, a hire, a partnership, a vendor
+search or research interviews have no competitors, so they are not researched.
+The hosted twin is heylead-api ``app/services/competitor_research.py``.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
+from .. import goals
+from ..textutil import contains_term
 from .competitors import normalize_company, parse_competitor_names
 
 logger = logging.getLogger(__name__)
@@ -18,27 +31,68 @@ _EXTRACT_SYSTEM = (
     "Return strict JSON only."
 )
 
-_EXTRACT_PROMPT = """The client company is: {company}
+_EXTRACT_PROMPT = """The client sells: {offer}
 Context: {context}
 
 Web search results:
 {snippets}
 
-List companies that compete with this client — same product category, sold to
-the same buyers. Do NOT include the client itself, investors, customers,
-job boards, or generic industry terms.
+List companies that sell the same kind of product or service to the same
+buyers. Do NOT include the client itself, investors, customers, job boards,
+schools or universities, or generic industry terms.
 
 Return ONLY JSON:
 {{"competitors": ["Company A", "Company B"]}}
 """
 
+_OFFER_QUERY_CHARS = 80
+_URL_SCHEME = re.compile(r"^https?://(www\.)?", re.I)
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s")
+
+
+def researches_competitors(goal: Any) -> bool:
+    """Only a sale has competitors to keep out of the audience."""
+    return goals.normalize_goal(goal) == goals.SELL
+
+
+def offer_text(company_context: str = "", project_brief: str = "") -> str:
+    """What the campaign sells: its company context, else its project brief."""
+    for text in (company_context, project_brief):
+        flat = " ".join(str(text or "").split())
+        if flat:
+            return flat
+    return ""
+
+
+def offer_query(offer: str) -> str:
+    """The search phrase for an offer: its first sentence, cut at a word."""
+    text = _URL_SCHEME.sub("", " ".join(str(offer or "").split()))
+    first = _SENTENCE_END.split(text, maxsplit=1)[0].rstrip(".!? ")
+    if len(first) > _OFFER_QUERY_CHARS:
+        first = first[:_OFFER_QUERY_CHARS].rsplit(" ", 1)[0]
+    return first.strip(" ,;:-")
+
+
+def _is_self(name: str, self_keys: list[str]) -> bool:
+    key = normalize_company(name)
+    return any(
+        contains_term(key, own) or contains_term(own, key)
+        for own in self_keys
+    )
+
 
 def names_from_extract(raw: Any, *, self_names: list[str]) -> list[str]:
+    """Accept a list or {competitors: [...]} and drop the client's own names.
+
+    Own is a whole-term match on the normalised names, either way round:
+    "HeyLead AI" is HeyLead, and "Northwind" is "Northwind Group Ltd". Exact
+    equality let the sender's employer through under any other spelling.
+    """
     if isinstance(raw, dict):
         raw = raw.get("competitors") or raw.get("companies") or []
     names = parse_competitor_names(raw)
-    self_keys = {normalize_company(n) for n in self_names if n}
-    return [n for n in names if normalize_company(n) not in self_keys]
+    self_keys = [k for k in (normalize_company(n) for n in self_names if n) if len(k) >= 2]
+    return [n for n in names if not _is_self(n, self_keys)]
 
 
 def _snippet_lines(items: list[dict[str, Any]]) -> str:
@@ -52,15 +106,19 @@ def _snippet_lines(items: list[dict[str, Any]]) -> str:
 
 
 async def research_competitors(
-    company_name: str,
-    company_context: str = "",
+    offer: str,
+    *,
+    goal: str,
+    sender_company: str = "",
     target_description: str = "",
 ) -> list[str]:
-    """Search the web and extract competitor company names. Empty on failure."""
-    company = (company_name or "").strip()
-    if not company and not (company_context or "").strip():
+    """Search the web for what competes with *offer*. Empty on failure.
+
+    ``sender_company`` is never searched; it is dropped from the answer.
+    """
+    if not researches_competitors(goal):
         return []
-    query_name = company or (target_description or "").strip()[:80]
+    query_name = offer_query(offer)
     if not query_name:
         return []
 
@@ -81,7 +139,7 @@ async def research_competitors(
         return []
 
     context = " ".join(
-        part for part in (company_context, target_description) if part
+        part for part in (offer, target_description) if part
     ).strip()[:1500]
     try:
         from ..ai.llm import LLMClient
@@ -89,7 +147,7 @@ async def research_competitors(
         client = LLMClient()
         parsed = await client.generate_json(
             _EXTRACT_PROMPT.format(
-                company=query_name,
+                offer=query_name,
                 context=context or "(none)",
                 snippets=snippets,
             ),
@@ -111,24 +169,28 @@ async def research_competitors(
     except Exception:
         logger.info("Competitor extract failed for %s", query_name, exc_info=True)
         return []
-    return names_from_extract(parsed, self_names=[company, query_name])
+    return names_from_extract(parsed, self_names=[sender_company])
 
 
 async def attach_competitors_to_icp(
     result: Any,
     *,
-    company_name: str = "",
-    company_context: str = "",
+    goal: str,
+    offer: str,
+    sender_company: str = "",
     target_description: str = "",
 ) -> list[str]:
     """Research and set ``result.competitors``. Returns the names. Never raises."""
     existing = parse_competitor_names(getattr(result, "competitors", None))
     if existing:
         return existing
+    if not researches_competitors(goal):
+        return []
     try:
         names = await research_competitors(
-            company_name,
-            company_context=company_context,
+            offer,
+            goal=goal,
+            sender_company=sender_company,
             target_description=target_description,
         )
     except Exception:

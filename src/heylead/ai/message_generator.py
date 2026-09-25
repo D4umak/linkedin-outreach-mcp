@@ -24,6 +24,7 @@ import logging
 from typing import Any
 
 from . import schemas
+from ..services import job_search_copy
 from .length_fixer import shorten_to_limit
 from .llm import LLMClient
 from .news_service import get_prospect_news
@@ -318,6 +319,27 @@ async def generate_message(
         message = raw.strip().strip('"').strip("'").strip()
         reasoning = f"v63 intent={_intent} prompts={system_name}+{outreach_prompt}"
 
+        # A job-search draft may not presume an opening no signal supports
+        # (api #1416): one regeneration with the correction, then hold.
+        if outreach_prompt == "outreach_job_search":
+            hiring_signal = job_search_copy.hiring_signal_for(
+                prospect, {**(campaign_context or {}), **(campaign_ctx or {})},
+                prospect_analysis,
+            )
+            presumed = job_search_copy.job_search_presumption_error(message, hiring_signal)
+            if presumed:
+                logger.info("Job-search draft refused, writing once more: %s", presumed)
+                raw = await client.generate(
+                    prompt + "\n\nYOUR LAST DRAFT WAS REFUSED:\n"
+                    + job_search_copy.presumption_correction(presumed),
+                    system=system, temperature=temp,
+                )
+                message = raw.strip().strip('"').strip("'").strip()
+                presumed = job_search_copy.job_search_presumption_error(message, hiring_signal)
+                if presumed:
+                    logger.warning("Job-search draft held after one regeneration: %s", presumed)
+                    return {"message": "", "reasoning": reasoning, "held": str(presumed)}
+
     else:
         # ── Fallback to legacy prompts ──
         logger.debug("Using legacy prompts for invitation message (v63 not found)")
@@ -370,6 +392,35 @@ async def generate_message(
         message = await shorten_to_limit(message, max_chars)
 
     return {"message": message, "reasoning": reasoning}
+
+
+def check_job_search_draft(
+    validation: Any,
+    message: str,
+    *,
+    prospect: dict[str, Any] | None,
+    campaign_config: dict[str, Any] | None,
+    campaign_ctx: dict[str, Any] | None = None,
+    analysis: dict[str, Any] | None = None,
+) -> None:
+    """Fail ``validation`` when a job-search draft presumes an opening.
+
+    The send path's half of api #1416: the improve and fix passes rewrite a
+    draft after generate_message let it go, so every validation of a
+    job-search draft runs this too. A no-op for every other campaign.
+    """
+    from ..services.job_search_guard import is_job_search_campaign
+
+    if not is_job_search_campaign(campaign_config):
+        return
+    presumed = job_search_copy.job_search_presumption_error(
+        message,
+        job_search_copy.hiring_signal_for(
+            prospect, {**(campaign_config or {}), **(campaign_ctx or {})}, analysis,
+        ),
+    )
+    if presumed:
+        validation.fail("JobSearchPresumption", str(presumed))
 
 
 def _strip_name_opener(message: str, prospect: dict[str, Any]) -> str:

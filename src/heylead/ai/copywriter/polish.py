@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from .render import rules_for
 from .rules import RULES
@@ -221,3 +222,74 @@ async def read_back(text: str, *, channel: str, max_chars: int = 0) -> str:
             ", ".join(polished.offences), ", ".join(polished.repaired) or "nothing",
         )
     return polished.text
+
+
+async def keep_to_sources(
+    draft: str,
+    *,
+    sources: tuple[Any, ...],
+    channel: str,
+    max_chars: int = 0,
+    about_author: bool = False,
+) -> str:
+    """*draft* without the claims about its author that *sources* do not hold.
+
+    The client twin of heylead-api's ``copywriter.polish.keep_to_sources``
+    (heylead-api#1449). 25 Sep 2026: a post opened "Having spoken with over
+    600 CTOs" for an author who never said it. The same three steps as
+    polish, cheapest first:
+
+    1. Read the draft for claims (author_claims.find). No model call, so a
+       post with no figures, or only figures the author gave, costs nothing.
+    2. One rewrite asked to remove exactly those claims and change nothing
+       else, through ``llm_router.call_llm`` so it runs on a hosted install
+       with no local key too. The rewrite gets the polish pass like any draft.
+    3. What the model kept, or swapped for a vaguer claim, goes by hand: the
+       sentences carrying it are deleted. Deletion cannot invent a fact.
+
+    ``sources`` is what the author gave: the profile and the topic (and for
+    a headline or About, their expertise and audience). ``about_author`` reads
+    every line as about the author, for a headline or an About section.
+    """
+    from . import author_claims
+
+    text = (draft or "").strip()
+    if not text:
+        return text
+    facts = author_claims.known(*sources)
+    claims = author_claims.find(text, facts, about_author=about_author)
+    if not claims:
+        return text
+
+    from .. import llm_router
+
+    figures = ", ".join(f'"{c.figure}"' for c in claims)
+    try:
+        rewritten = await llm_router.call_llm(
+            author_claims.rewrite_prompt(text, claims, channel, max_chars),
+            system=author_claims.REWRITE_SYSTEM + "\n\n" + rules_for(channel),
+            temperature=0.2,
+            max_tokens=2048,
+        )
+    except Exception as e:  # a rewrite that cannot run must not keep the claim
+        logger.info("claims: rewrite failed on %s (%s); removing by hand", channel, e)
+        rewritten = ""
+
+    candidate = (rewritten or "").strip()
+    if candidate:
+        candidate = (await polish(candidate, channel=channel, max_chars=max_chars)).text
+    if candidate and not author_claims.find(candidate, facts, about_author=about_author):
+        logger.info(
+            "claims: %s draft claimed %s, which nobody gave; removed by the model",
+            channel, figures,
+        )
+        return candidate
+
+    # The model kept a claim, reworded it into a vaguer one, or did not
+    # answer. Take the sentences out of the better of the two texts.
+    kept = author_claims.drop(candidate or text, facts, about_author=about_author)
+    logger.info(
+        "claims: %s draft claimed %s, which nobody gave; removed by hand%s",
+        channel, figures, "" if kept else ", and nothing was left",
+    )
+    return kept

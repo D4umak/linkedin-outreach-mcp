@@ -12,6 +12,7 @@ from ..db.async_bridge import run_db
 from ..ai.inbound_qualifier import _classify_fast
 from ..db import aio as db
 from ..linkedin import get_account_id, get_linkedin_client
+from ..linkedin.message_sender import message_is_ours
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,22 @@ def _contact_provider_id(contact: dict) -> str:
     from ..author_identity import contact_provider_id
 
     return contact_provider_id(contact)
+
+
+def _own_provider_id() -> str:
+    """The seat's provider id from the profile setting, or "" (fallback only:
+    message_is_ours reads Unipile's is_sender first)."""
+    from ..db.queries import get_setting
+
+    profile = get_setting("profile", {}) or {}
+    if isinstance(profile, str):
+        import json
+
+        try:
+            profile = json.loads(profile)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+    return str(profile.get("provider_id") or "") if isinstance(profile, dict) else ""
 
 
 def _relative_time(ts: int) -> str:
@@ -457,6 +474,7 @@ async def _list_inbox(client: Any, account_id: str, limit: int) -> str:
                 ci["contact_headline"] = profile.get("headline", "")
 
     # Batch fetch last messages (all, in groups of BATCH)
+    own_id = await run_db(_own_provider_id) if needs_message else ""
     for start in range(0, len(needs_message), BATCH):
         batch = needs_message[start : start + BATCH]
         tasks = [
@@ -467,10 +485,13 @@ async def _list_inbox(client: Any, account_id: str, limit: int) -> str:
         for ci, msgs in zip(batch, msg_results):
             if isinstance(msgs, list) and msgs:
                 ci["last_text"] = msgs[0].get("text", "")
-                # Also extract sender_id for provider_id fallback
+                # Also extract sender_id for provider_id fallback -- only
+                # from THEIR message. Until 25 Sep 2026 this compared the
+                # sender id with the Unipile account id, which never match,
+                # so our own last message made us the contact.
                 if not ci["contact_provider_id"]:
                     sid = msgs[0].get("sender_id", "")
-                    if sid and sid != account_id:
+                    if sid and not message_is_ours(msgs[0], own_id):
                         ci["contact_provider_id"] = sid
 
     # Fallback: resolve chats that got a provider_id from message fetching
@@ -554,8 +575,15 @@ async def _read_conversation(
     if not messages:
         return f"No messages found in chat `{chat_id}`."
 
+    # Ours by is_sender first: never resolved as the contact, never their words.
+    own_id = await run_db(_own_provider_id)
+    ours = [message_is_ours(m, own_id) for m in messages]
+
     # Resolve sender names if empty (backend mode returns empty sender_name)
-    sender_ids = {m.get("sender_id", "") for m in messages if not m.get("sender_name")}
+    sender_ids = {
+        m.get("sender_id", "") for m, mine in zip(messages, ours)
+        if not m.get("sender_name") and not mine
+    }
     sender_ids.discard("")
     sender_names: dict[str, str] = {}
 
@@ -588,9 +616,9 @@ async def _read_conversation(
     lines = [header, "---"]
     prospect_texts: list[str] = []
 
-    for msg in messages:
+    for msg, mine in zip(messages, ours):
         sender_id = msg.get("sender_id", "")
-        sender = msg.get("sender_name") or sender_names.get(sender_id, "Unknown")
+        sender = msg.get("sender_name") or ("You" if mine else sender_names.get(sender_id, "Unknown"))
         text = msg.get("text") or ""
         ts = msg.get("timestamp", 0)
 
@@ -602,7 +630,7 @@ async def _read_conversation(
         lines.append("")
 
         # Collect contact's messages for qualification
-        is_contact_msg = (
+        is_contact_msg = not mine and (
             (contact_provider_id and sender_id == contact_provider_id)
             or (contact_name_resolved and sender and contact_name_resolved.lower() in sender.lower())
             or sender_names.get(sender_id) not in ("You", None)

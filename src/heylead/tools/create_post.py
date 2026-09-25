@@ -95,6 +95,7 @@ async def run_create_post(
             call_llm, account_id, topic, tone,
             name, title, company, industry, voice_block, voice,
             example_posts_block(examples), examples, post_image,
+            profile=profile,
         )
         output_parts.append(result)
 
@@ -103,18 +104,29 @@ async def run_create_post(
         result = await _publish_x(
             call_llm, topic, tone,
             name, title, company, industry, voice_block, voice,
+            profile=profile,
         )
         output_parts.append(result)
 
     return "\n\n---\n\n".join(output_parts)
 
 
+def _author_sources(profile, name, title, company, industry, topic) -> tuple:
+    """What the author gave, for the claims check: the stored profile (or the
+    four fields a caller passed without it) and the topic."""
+    given = profile or {"name": name, "title": title, "company": company, "industry": industry}
+    return (given, topic)
+
+
 async def _publish_linkedin(
     call_llm, account_id, topic, tone,
     name, title, company, industry, voice_block, voice=None,
-    examples_block="", examples=None, image=None,
+    examples_block="", examples=None, image=None, profile=None,
 ) -> str:
     """Generate and publish a LinkedIn post."""
+    from ..ai.copywriter.author_claims import known_facts_rule
+    from ..ai.copywriter.polish import keep_to_sources
+
     try:
         prompt = f"""Write a LinkedIn post for {name} ({title} at {company}).
 Industry: {industry}
@@ -136,7 +148,9 @@ Requirements:
 - Do NOT use hashtags unless the user's style includes them
 - Do NOT use emojis unless the user's style includes them
 - Be authentic and conversational, not corporate
-- Share a genuine insight, story, or perspective
+- Share a genuine insight or perspective. A story about {name} only if this
+  prompt tells it.
+{known_facts_rule(name)}
 - Say things the way {name} would say them out loud. No sales-methodology
   vocabulary, and no pointing at a number as though it explained itself.
 
@@ -154,6 +168,16 @@ Return ONLY the post text, nothing else."""
         # own past posts, so a leak republishes last quarter's news.
         if borrows_from_examples(post_text, examples or []):
             return "LinkedIn: Draft copied from a past post and was not published."
+        # 25 Sep 2026: "Having spoken with over 600 CTOs", for an author who
+        # never said it. A figure they did not give does not go out.
+        post_text = await keep_to_sources(
+            post_text, channel="post", max_chars=1200,
+            sources=_author_sources(profile, name, title, company, industry, topic),
+        )
+        # The floor the draft already had to clear: what is left after the
+        # claims go must still be a post, not a stub the gate would pad out.
+        if len(post_text) < 30:
+            return "LinkedIn: Draft was made of claims you never gave and was not published."
         post_text = await guard_draft(post_text, voice or {}, "post", 1200)
         if not post_text:
             return "LinkedIn: Draft failed quality checks and was not published."
@@ -195,9 +219,12 @@ Return ONLY the post text, nothing else."""
 
 async def _publish_x(
     call_llm, topic, tone,
-    name, title, company, industry, voice_block, voice=None,
+    name, title, company, industry, voice_block, voice=None, profile=None,
 ) -> str:
     """Generate and publish an X/Twitter post via backend proxy."""
+    from ..ai.copywriter.author_claims import known_facts_rule
+    from ..ai.copywriter.polish import keep_to_sources
+
     try:
         prompt = f"""Write a tweet for {name} ({title} at {company}).
 Industry: {industry}
@@ -216,6 +243,7 @@ Requirements:
 - Do NOT use hashtags unless the user's style includes them
 - No emojis unless the user naturally uses them
 - End with a punchy statement or question
+{known_facts_rule(name)}
 - Say things the way {name} would say them out loud. No sales-methodology
   vocabulary, and no pointing at a number as though it explained itself.
 
@@ -225,6 +253,12 @@ Return ONLY the tweet text, nothing else."""
         if not tweet_text or len(tweet_text) < 10:
             return "X: Failed to generate tweet content."
         tweet_text = tweet_text.strip()
+        tweet_text = await keep_to_sources(
+            tweet_text, channel="x_post", max_chars=280,
+            sources=_author_sources(profile, name, title, company, industry, topic),
+        )
+        if len(tweet_text) < 10:
+            return "X: Draft was made of claims you never gave and was not published."
         if len(tweet_text) > 280:
             tweet_text = tweet_text[:277] + "..."
         from ..ai.draft_guard import guard_draft

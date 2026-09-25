@@ -33,7 +33,11 @@ BOOKING_URL_RE = re.compile(
 # at both ends by a non-word character so it cannot start mid-token, and the
 # digit count is checked separately: the regex alone would take the front of an
 # ISO timestamp ("2026-09-25T15:00" begins 2026-09-25) for a number.
-_PHONE_RE = re.compile(r"(?<![\w.+])\+?\d[\d\s().-]{6,18}\d(?![\w.])")
+# The end allows a full stop that ends a sentence ("My number is +447700900123.")
+# and refuses one that goes on into more digits or letters (1.2.3.4, v2.0.1):
+# until 25 Sep 2026 any "." after the last digit hid the number. It may open
+# with a bracket, "(415) 555-0123", which used to come back as "415) 555-0123".
+_PHONE_RE = re.compile(r"(?<![\w.+(])\+?\(?\d[\d\s().-]{6,18}\d(?!\w|\.\w)")
 
 # Fewest digits anyone's number has once the spaces come out (a UK mobile
 # without its country code is 11, a US number 10, an extension-less landline 9).

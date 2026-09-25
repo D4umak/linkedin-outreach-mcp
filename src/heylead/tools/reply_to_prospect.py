@@ -55,6 +55,7 @@ from ..linkedin import (
     get_account_id,
     get_linkedin_client,
 )
+from ..linkedin.message_sender import message_is_ours
 from ..db.async_bridge import run_db
 
 logger = logging.getLogger(__name__)
@@ -138,18 +139,22 @@ def chat_already_replied(
     A LinkedIn-only page of 10 must not veto a newer local prospect row
     (Amanda 22:33 after our 22:26). A LinkedIn-only SDR that never landed
     locally still counts as already replied.
+
+    Whose message it is comes from message_is_ours: Unipile's is_sender
+    first, our provider id only for a message without the flag. Until 25 Sep
+    2026 this compared sender ids alone, so a stale or empty provider id read
+    our own reply as theirs and the lane answered again.
     """
     last_prospect = 0
     last_sdr = 0
-    ours = (our_provider_id or "").strip()
+    own_id = (our_provider_id or "").strip()
     for msg in linkedin_messages or []:
         ts = _unix_ts(msg.get("timestamp"))
         if not ts:
             continue
-        sender = str(msg.get("sender_id") or "")
-        if sender and sender == ours:
+        if message_is_ours(msg, own_id):
             last_sdr = max(last_sdr, ts)
-        elif sender:
+        elif msg.get("sender_id"):
             last_prospect = max(last_prospect, ts)
     for msg in local_messages or []:
         ts = _unix_ts(msg.get("timestamp") or msg.get("created_at"))
@@ -169,12 +174,12 @@ def newest_our_linkedin_message(
     our_provider_id: str,
     linkedin_messages: list[dict[str, Any]] | None,
 ) -> dict[str, Any] | None:
-    """Newest LinkedIn message sent as *our_provider_id*, or None."""
-    ours = (our_provider_id or "").strip()
+    """Newest LinkedIn message we sent, or None (is_sender first, see above)."""
+    own_id = (our_provider_id or "").strip()
     best: dict[str, Any] | None = None
     best_ts = 0
     for msg in linkedin_messages or []:
-        if str(msg.get("sender_id") or "") != ours:
+        if not message_is_ours(msg, own_id):
             continue
         ts = _unix_ts(msg.get("timestamp"))
         if ts > best_ts:
@@ -363,55 +368,56 @@ async def run_reply_to_prospect(
     # written down so get_auto_reply_candidates stops re-firing.
     local_msgs = await run_db(get_messages_for_outreach, outreach_id)
     try:
-        _our_provider_id = (await run_db(get_setting, "profile", {})).get("provider_id", "")
-        if _our_provider_id:
-            _recent_chat_msgs = await client.get_chat_messages(
-                account_id, chat_id, limit=10,
+        # No provider id is no reason to skip: is_sender answers without one
+        # (until 25 Sep 2026 an empty profile id switched this dedup off).
+        _our_provider_id = (await run_db(get_setting, "profile", {}) or {}).get("provider_id", "")
+        _recent_chat_msgs = await client.get_chat_messages(
+            account_id, chat_id, limit=10,
+        )
+        if chat_already_replied(
+            _our_provider_id, _recent_chat_msgs, local_msgs,
+        ):
+            winning = newest_our_linkedin_message(
+                _our_provider_id, _recent_chat_msgs,
             )
-            if chat_already_replied(
-                _our_provider_id, _recent_chat_msgs, local_msgs,
-            ):
-                winning = newest_our_linkedin_message(
-                    _our_provider_id, _recent_chat_msgs,
+            if winning:
+                li_ts = _unix_ts(winning.get("timestamp"))
+                local_sdr_max = max(
+                    (
+                        _unix_ts(m.get("timestamp") or m.get("created_at"))
+                        for m in local_msgs
+                        if m.get("role") == "sdr"
+                    ),
+                    default=0,
                 )
-                if winning:
-                    li_ts = _unix_ts(winning.get("timestamp"))
-                    local_sdr_max = max(
-                        (
-                            _unix_ts(m.get("timestamp") or m.get("created_at"))
-                            for m in local_msgs
-                            if m.get("role") == "sdr"
+                if li_ts > local_sdr_max:
+                    await run_db(
+                        save_message,
+                        outreach_id,
+                        role="sdr",
+                        text=(winning.get("text") or "").strip()[:2000]
+                        or "(LinkedIn reply)",
+                        timestamp=li_ts,
+                        external_message_id=(
+                            str(winning.get("message_id") or "").strip()
+                            or None
                         ),
-                        default=0,
                     )
-                    if li_ts > local_sdr_max:
-                        await run_db(
-                            save_message,
-                            outreach_id,
-                            role="sdr",
-                            text=(winning.get("text") or "").strip()[:2000]
-                            or "(LinkedIn reply)",
-                            timestamp=li_ts,
-                            external_message_id=(
-                                str(winning.get("message_id") or "").strip()
-                                or None
-                            ),
-                        )
-                await client.close()
-                await run_db(
-                    log_action, "reply_dedup_blocked_chat_scoped",
-                    outreach_id=outreach_id,
-                    result="skipped",
-                    details={
-                        "reason": "already_replied_in_linkedin_chat",
-                        "chat_id": chat_id,
-                        "prospect": candidate.get("name", "Unknown"),
-                    },
-                )
-                return (
-                    f"Already replied to {candidate.get('name', 'Unknown')} "
-                    f"in this LinkedIn chat (possibly from another campaign) — skipping."
-                )
+            await client.close()
+            await run_db(
+                log_action, "reply_dedup_blocked_chat_scoped",
+                outreach_id=outreach_id,
+                result="skipped",
+                details={
+                    "reason": "already_replied_in_linkedin_chat",
+                    "chat_id": chat_id,
+                    "prospect": candidate.get("name", "Unknown"),
+                },
+            )
+            return (
+                f"Already replied to {candidate.get('name', 'Unknown')} "
+                f"in this LinkedIn chat (possibly from another campaign) — skipping."
+            )
     except Exception as e:
         if getattr(getattr(e, "response", None), "status_code", None) == 404:
             # A gone chat holds no reply of ours to dedup against. Carry on:

@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from .copywriter.author_claims import known_facts_rule
 from .llm import LLMClient
 from .llm import loads_json_object as parse_json
 from .voice_block import voice_prompt_block
@@ -291,6 +292,7 @@ Expertise: {expertise}
 - Use keywords their target audience would search
 - Be specific, not generic
 - Match their voice tone and formality level
+{known_facts_only}
 
 Return ONLY valid JSON:
 {{
@@ -326,11 +328,13 @@ Expertise: {expertise}
 - If target audience data is provided, write the summary to resonate with them.
   Reference their pain points. Show credibility in their industry.
 - Hook in the first 2 lines (visible before "see more")
-- Tell a story: who you are, what you do, who you help, results you deliver
+- Tell a story: who you are, what you do, who you help, and results you
+  deliver only as the profile above states them
 - Include a clear CTA at the end (book a call, connect, visit website)
 - Use short paragraphs and line breaks for readability
 - Include relevant keywords naturally
 - Match the user's voice and tone
+{known_facts_only}
 
 Return ONLY valid JSON:
 {{
@@ -550,6 +554,7 @@ async def generate_brand_action(
         "expertise": _expertise_core(expertise, profile),
         "voice_block": voice_prompt_block(voice),
         "icp_context": icp_str,
+        "known_facts_only": known_facts_rule(profile.get("name", "")),
     }
 
     if subtype == "headline":
@@ -586,4 +591,44 @@ async def generate_brand_action(
         llm = LLMClient()
         raw = await llm.generate(prompt, system=_ACTION_SYSTEM, temperature=0.7, max_tokens=2000)
 
-    return parse_json(raw, fallback={"error": "Failed to generate action content"})
+    result = parse_json(raw, fallback={"error": "Failed to generate action content"})
+    return await _keep_to_what_they_gave(
+        result, subtype, sources=(profile, _expertise_core(expertise, profile), icp_str),
+    )
+
+
+async def _keep_to_what_they_gave(
+    result: dict[str, Any], subtype: str, *, sources: tuple[Any, ...],
+) -> dict[str, Any]:
+    """Every headline option and every part of the About, without a figure the
+    author never gave (heylead-api#1449).
+
+    A headline or an About section is about its author in every line, and the
+    headline is applied to the live profile without anyone reading it first.
+    Each text is read back for the house rules first, as the api's headline
+    and About generators do, then checked for claims.
+    """
+    from .copywriter.polish import keep_to_sources, read_back
+
+    if not isinstance(result, dict):
+        return result
+    if subtype == "headline" and isinstance(result.get("options"), list):
+        kept = []
+        for option in result["options"]:
+            if not isinstance(option, dict):
+                continue
+            text = await keep_to_sources(
+                await read_back(str(option.get("text") or ""), channel="headline", max_chars=220),
+                sources=sources, channel="headline", max_chars=220, about_author=True,
+            )
+            if text:
+                kept.append({**option, "text": text})
+        result["options"] = kept
+    elif subtype == "summary":
+        for key in ("summary", "hook", "cta"):
+            if isinstance(result.get(key), str):
+                result[key] = await keep_to_sources(
+                    await read_back(result[key], channel="about"),
+                    sources=sources, channel="about", about_author=True,
+                )
+    return result

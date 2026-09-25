@@ -1,7 +1,8 @@
 """Tool: inspect — read-only digest of in-process agent ops.
 
-Reads ``outreaches.next_action`` holds and ``actions_log`` decisions.
-Never writes, never calls LinkedIn, never calls an LLM.
+Reads operator holds through services.waiting_on_you (the one reader of who
+is waiting) and ``actions_log`` decisions. Never writes, never calls
+LinkedIn, never calls an LLM.
 """
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ from ..services.coordinator import coordinator_mode
 from ..services.hot_lead_closer import hot_lead_closer_mode
 from ..services.icp_research import icp_research_mode
 from ..services.product_agent import product_agent_mode
-from ..services.reply_agent import is_fresh_hold, parse_operator_hold, reply_agent_mode
+from ..services.reply_agent import reply_agent_mode
+from ..services.waiting_on_you import HOLD, Waiting, render_waiting, who_is_waiting
 from ..services.strategist_replan import strategist_replan_mode
 from ..db.queries import get_campaign, get_setting
 
@@ -114,7 +116,30 @@ def _waiting_line(i: int, draft: dict[str, Any]) -> list[str]:
     return [f"{i}. {who} · {kind} · campaign {campaign}", f"   {text}"]
 
 
-async def _waiting_from_host(campaign_id: str, limit: int) -> str:
+async def _waiting(campaign_id: str, limit: int) -> str:
+    """Who is waiting on you, then the messages waiting for your approval.
+
+    The people come from services.waiting_on_you, the reader Needs attention,
+    inspect(action='holds') and check_replies share; until 25 Sep 2026 this
+    action listed drafts only and named nobody on a self-hosted install.
+    """
+    try:
+        cap = int(limit or _DEFAULT_LIMIT)
+    except (TypeError, ValueError):
+        cap = _DEFAULT_LIMIT
+    cap = max(1, min(cap, _MAX_LIMIT))
+    try:
+        people = await run_db(
+            who_is_waiting, campaign_id=(campaign_id or "").strip(), limit=cap,
+        )
+        head = render_waiting(people)
+    except Exception as exc:
+        logger.warning("inspect waiting: people failed: %s", exc)
+        head = f"Who is waiting could not be read: {exc}"
+    return head + "\n\n" + await _waiting_from_host(campaign_id, cap)
+
+
+async def _waiting_from_host(campaign_id: str, cap: int) -> str:
     """Opening messages and follow-ups held for approval (hosted).
 
     The same list the dashboard's Approvals page reads
@@ -127,13 +152,8 @@ async def _waiting_from_host(campaign_id: str, limit: int) -> str:
     if not is_backend_mode():
         return (
             "Nothing waits for approval on a self-hosted install: messages are "
-            "sent as written. inspect(action='holds') lists people held for you."
+            "sent as written."
         )
-    try:
-        cap = int(limit or _DEFAULT_LIMIT)
-    except (TypeError, ValueError):
-        cap = _DEFAULT_LIMIT
-    cap = max(1, min(cap, _MAX_LIMIT))
     try:
         data = await get_hosted_json(
             "/api/v1/scheduler/outreach-drafts", params={"limit": _MAX_LIMIT},
@@ -218,7 +238,7 @@ async def run_inspect(
     if action == "review":
         return await _review_from_host(campaign_id, limit)
     if action == "waiting":
-        return await _waiting_from_host(campaign_id, limit)
+        return await _waiting(campaign_id, limit)
     if action not in VALID_ACTIONS:
         return (
             f"Unknown inspect action: '{action}'.\n\n"
@@ -293,41 +313,11 @@ def _remaining_labels(details: dict[str, Any]) -> str:
     return ", ".join(labels)
 
 
-def _list_holds(campaign_id: str, outreach_id: str, limit: int) -> list[dict[str, Any]]:
-    db = get_db()
-    params: list[Any] = []
-    scope = _scope_sql("o.campaign_id", "o.id", campaign_id, outreach_id, params)
-    rows = db.execute(
-        f"""SELECT o.id AS outreach_id, o.campaign_id, o.next_action, o.updated_at,
-                   c.name, c.linkedin_url, ca.name AS campaign_name,
-                   COALESCE((
-                       SELECT MAX(m.timestamp) FROM messages m
-                       WHERE m.outreach_id = o.id AND m.role = 'prospect'
-                   ), 0) AS last_prospect_ts
-            FROM outreaches o
-            JOIN contacts c ON o.contact_id = c.id
-            LEFT JOIN campaigns ca ON ca.id = o.campaign_id
-            WHERE json_valid(o.next_action)
-              AND json_extract(o.next_action, '$.type') = 'hold_for_operator'
-              {scope}
-            ORDER BY o.updated_at DESC
-            LIMIT 200""",
-        params,
-    ).fetchall()
-    db.close()
-    fresh: list[dict[str, Any]] = []
-    for row in rows:
-        item = dict(row)
-        hold = parse_operator_hold(item.get("next_action") or "")
-        if not hold:
-            continue
-        if not is_fresh_hold(hold, int(item.get("last_prospect_ts") or 0)):
-            continue
-        item["hold"] = hold
-        fresh.append(item)
-        if len(fresh) >= limit:
-            break
-    return fresh
+def _list_holds(campaign_id: str, outreach_id: str, limit: int) -> list[Waiting]:
+    """The hold subset of who is waiting (services.waiting_on_you)."""
+    return who_is_waiting(
+        kinds=(HOLD,), campaign_id=campaign_id, outreach_id=outreach_id, limit=limit,
+    )
 
 
 def _list_log_rows(
@@ -574,17 +564,15 @@ def _latest_steps(outreach_ids: list[str], action_type: str) -> dict[str, dict[s
     return latest
 
 
-def _format_holds(rows: list[dict[str, Any]]) -> list[str]:
-    if not rows:
+def _format_holds(holds: list[Waiting]) -> list[str]:
+    if not holds:
         return ["No operator holds."]
-    lines = [f"Operator holds ({len(rows)}):", ""]
-    for row in rows:
-        hold = row.get("hold") or {}
-        reason = (hold.get("reason") or "needs a human").strip()
-        campaign = _campaign_of(row)
-        camp = f" · {campaign}" if campaign else ""
-        lines.append(f"• **{_name_of(row)}** — {reason}")
-        lines.append(f"  outreach `{_short_id(row)}`{camp}")
+    lines = [f"Operator holds ({len(holds)}):", ""]
+    for hold in holds:
+        who = prospect_link(hold.name or "Unknown", hold.linkedin_url)
+        camp = f" · {hold.campaign_name}" if hold.campaign_name else ""
+        lines.append(f"• **{who}** — {hold.held_because or 'needs a human'}")
+        lines.append(f"  outreach `{hold.outreach_id[:8]}`{camp}")
         lines.append("")
     return lines
 

@@ -149,11 +149,15 @@ async def generate_icp_result_for_campaign(
     )
     result.source_info = {**(result.source_info or {}), "goal_match": verdict.to_dict()}
     try:
-        from ..services.competitor_research import attach_competitors_to_icp
+        from ..services.competitor_research import attach_competitors_to_icp, offer_text
+        # Researched from what is sold, for a sale only; the sender's company
+        # is the headline's employer and is only dropped from the answer
+        # (D4umak/heylead-api#1428).
         await attach_competitors_to_icp(
             result,
-            company_name=str(ctx.get("company") or ""),
-            company_context=company_context,
+            goal=goal,
+            offer=offer_text(company_context),
+            sender_company=str(ctx.get("company") or ""),
             target_description=target_description,
         )
     except Exception:

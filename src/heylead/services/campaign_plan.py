@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 
 from .. import constants as c
 from .. import facts
+from .outreach_channel import exclude_connections_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,13 @@ _CHOSEN_SOURCES = ("dashboard", "local")
 NEVER_LINE = (
     "HeyLead never posts on your profile, never messages your existing "
     "connections in this campaign, and stops the moment you pause."
+)
+# A campaign with exclude_connections off can enrol people the seat is
+# already connected to, so the plan must not promise it will leave them alone
+# (D4umak/heylead-api#1414; same words as the api's).
+NEVER_LINE_INCLUDES_CONNECTIONS = (
+    "HeyLead never posts on your profile and stops the moment you pause. This "
+    "campaign can include people you are already connected to."
 )
 NEVER_LINE_CONNECTIONS_ONLY = (
     "HeyLead never posts on your profile, writes only to the people this "
@@ -185,6 +193,27 @@ def _seat_caps(seat: dict[str, Any] | None) -> tuple[int, int]:
     return daily, weekly
 
 
+def effective_max_followups(cfg: dict[str, Any] | str | None, tier: str) -> int:
+    """How many follow-ups this campaign can actually send one person.
+
+    0 when follow-ups are switched off (planner.py skips every follow-up
+    when ``enable_followups`` is off). Otherwise the campaign's own
+    max_followups below the tier ceiling, the tier ceiling when it is unset,
+    the way the scheduler's state machine reads it. Twin of heylead-api's
+    ``campaign_plan.effective_max_followups`` (#1414: a header said "Up to
+    4" next to a plan that said "up to 2").
+    """
+    cfg = _json_dict(cfg)
+    if not _flag(cfg, "enable_followups", True):
+        return 0
+    tier_max = c.PRO_MAX_FOLLOWUPS if str(tier or c.TIER_FREE) == c.TIER_PRO else c.FREE_MAX_FOLLOWUPS
+    try:
+        cfg_max = int(cfg.get("max_followups") or 0)
+    except (TypeError, ValueError):
+        cfg_max = 0
+    return min(cfg_max, tier_max) if cfg_max > 0 else tier_max
+
+
 def _fu_word(n: int) -> str:
     return "follow-up" if n == 1 else "follow-ups"
 
@@ -201,14 +230,12 @@ def _followup_line(cfg: dict[str, Any], tier: str) -> tuple[str, str]:
             except (TypeError, ValueError):
                 continue
     pro = tier == c.TIER_PRO
-    tier_max = c.PRO_MAX_FOLLOWUPS if pro else c.FREE_MAX_FOLLOWUPS
-    # The campaign's own max_followups wins below the tier ceiling, the way
-    # the scheduler's state machine reads it (heylead-api scheduler.py).
-    try:
-        cfg_max = int(cfg.get("max_followups") or 0)
-    except (TypeError, ValueError):
-        cfg_max = 0
-    max_fu = min(cfg_max, tier_max) if cfg_max > 0 else tier_max
+    max_fu = effective_max_followups(cfg, tier)
+    if max_fu <= 0:
+        return (
+            "Follow-ups are off: if they do not reply to the opening message, HeyLead stops.",
+            "Off",
+        )
     if not schedule and pro:
         schedule = list(c.PRO_FOLLOWUP_SCHEDULE_DAYS)
     # Only the gaps the cap lets fire: a 1,3,7,14 cadence under a cap of 2
@@ -228,6 +255,30 @@ def _followup_line(cfg: dict[str, Any], tier: str) -> tuple[str, str]:
         "Then HeyLead stops.",
         "A day apart",
     )
+
+
+def _warmup_line(cfg: dict[str, Any]) -> str:
+    """The warm-up the scheduler arms: only the touches this campaign has on.
+
+    planner.py reads enable_profile_views, enable_follows and
+    enable_engagements (the comment) with a default of on; a campaign with
+    engagements off was still promised "a comment on a recent post" (#1414).
+    """
+    touches = [
+        name for key, name in (
+            ("enable_profile_views", "a profile view"),
+            ("enable_follows", "a follow"),
+            ("enable_engagements", "a comment on a recent post"),
+        ) if _flag(cfg, key, True)
+    ]
+    if not touches:
+        return "No warm-up: the invitation is the first thing they see from you."
+    listed = touches[0] if len(touches) == 1 else ", ".join(touches[:-1]) + f" and {touches[-1]}"
+    gap = (
+        f", {_minutes(c.ENGAGEMENT_DELAY_MIN)} to {_minutes(c.ENGAGEMENT_DELAY_MAX)} minutes apart"
+        if len(touches) > 1 else ""
+    )
+    return f"Before each invitation: {listed}{gap}. Nothing is written on your own profile."
 
 
 def _is_job_search(cfg: dict[str, Any], context: dict[str, Any]) -> bool:
@@ -285,13 +336,7 @@ def campaign_plan(
     steps.append(PlanStep("find", "Find", find, "Today"))
 
     if not connections_only:
-        steps.append(PlanStep(
-            "warmup", "Warm-up",
-            "Before each invitation: a profile view, a follow and a comment on a recent post, "
-            f"{_minutes(c.ENGAGEMENT_DELAY_MIN)} to {_minutes(c.ENGAGEMENT_DELAY_MAX)} minutes apart. "
-            "Nothing is written on your own profile.",
-            "Before each invitation",
-        ))
+        steps.append(PlanStep("warmup", "Warm-up", _warmup_line(cfg), "Before each invitation"))
         steps.append(PlanStep(
             "invite", "Invite",
             f"From {day} at {start:02d}:00 your time: up to {daily} "
@@ -343,7 +388,11 @@ def campaign_plan(
 
     steps.append(PlanStep(
         "never", "Never",
-        NEVER_LINE_CONNECTIONS_ONLY if connections_only else NEVER_LINE,
+        NEVER_LINE_CONNECTIONS_ONLY if connections_only
+        # The reader planner.py enforces with: an unset key is off there, so
+        # the promise is made only where the scheduler keeps it.
+        else NEVER_LINE if exclude_connections_enabled(cfg)
+        else NEVER_LINE_INCLUDES_CONNECTIONS,
         "Always",
     ))
     return steps
@@ -355,6 +404,18 @@ def render_plan(steps: list[PlanStep]) -> str:
     for i, step in enumerate(steps, start=1):
         lines.append(f"{i}. {step.title}: {step.line}")
     return "\n".join(lines)
+
+
+def local_tier() -> str:
+    """The tier this install's plan reads: config's ``tier``, Free when unset.
+
+    Every client surface that quotes a follow-up count passes this to
+    ``effective_max_followups``, so the plan, show_status and the scheduler
+    diagnostics quote one number (#1414).
+    """
+    from .. import config
+
+    return str(config.load_config().get("tier") or c.TIER_FREE)
 
 
 def _local_state() -> dict[str, Any]:
@@ -369,7 +430,7 @@ def _local_state() -> dict[str, Any]:
     cfg = config.load_config()
     hosted = config.is_backend_mode()
     return {
-        "tier": cfg.get("tier") or c.TIER_FREE,
+        "tier": local_tier(),
         "send_approval_mode": "" if hosted else MODE_AUTOPILOT,
         "working_hours": cfg.get("working_hours") or None,
         "working_hours_source": "" if hosted else "local",

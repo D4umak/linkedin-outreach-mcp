@@ -38,7 +38,6 @@ from ..constants import (
     FOLLOWUP_DELAY_MAX,
     FOLLOWUP_DELAY_MIN,
     FREE_MAX_ENGAGEMENTS,
-    FREE_MAX_FOLLOWUPS,
     FREE_MONTHLY_INVITATIONS,
     DM_DELAY_MAX,
     DM_DELAY_MIN,
@@ -60,9 +59,7 @@ from ..constants import (
     JOB_SEND_DM,
     JOB_WITHDRAW_INVITE,
     PRO_FOLLOWUP_SCHEDULE_DAYS,
-    PRO_MAX_FOLLOWUPS,
     STALE_INVITE_DAYS,
-    TIER_PRO,
 )
 from ..db.queries import (
     create_scheduler_job,
@@ -475,20 +472,26 @@ async def _rescue_orphans(
     message. A follow-up such a prospect may be owed is _plan_followups' job,
     and that already runs for completed campaigns.
     """
-    from ..db.queries import find_orphaned_outreaches
+    from ..db import queries as _queries
+    from ..services.campaign_plan import effective_max_followups
 
-    max_followups = PRO_MAX_FOLLOWUPS if tier == TIER_PRO else 2
+    config = await run_db(_get_campaign_config, campaign_id)
+    # The count the plan promises (#1414): the campaign's max_followups under
+    # the tier ceiling, 0 when follow-ups are off. followup_count 0 is the
+    # opening message, which the rescue still owes with follow-ups off, so
+    # the query bound never drops below 1. This was a literal 2 for Free and
+    # the Pro ceiling whatever the campaign said.
+    max_followups = max(effective_max_followups(config, tier), 1)
     since = (
         None if max_accepted_age_days is None
         else now - (max_accepted_age_days * 86400)
     )
     orphans = await run_db(
-        find_orphaned_outreaches, campaign_id, max_followups, since,
+        _queries.find_orphaned_outreaches, campaign_id, max_followups, since,
     )
     if not orphans:
         return
 
-    config = await run_db(_get_campaign_config, campaign_id)
     custom_schedule = config.get("followup_delay_days")
     if custom_schedule and not isinstance(custom_schedule, list):
         custom_schedule = None
@@ -1248,12 +1251,15 @@ async def _plan_followups(campaign_id: str, now: int, tier: str) -> None:
         await _log_skip(campaign_id, "followup", "feature_disabled")
         return
 
-    # Use per-campaign max_followups if set, else tier default
-    config_max = config.get("max_followups")
-    if config_max and isinstance(config_max, int) and 1 <= config_max <= 5:
-        max_followups = config_max
-    else:
-        max_followups = PRO_MAX_FOLLOWUPS if tier == TIER_PRO else FREE_MAX_FOLLOWUPS
+    # The count the plan promises and the hosted scheduler keeps (#1414): the
+    # campaign's max_followups under the tier ceiling. This used to take any
+    # stored 1-5 as is, so a Free campaign storing 4 (every new campaign)
+    # planned 4 against the published "up to 2 follow-ups" (facts.FREE_PLAN_LINE).
+    from ..services.campaign_plan import effective_max_followups
+
+    max_followups = effective_max_followups(config, tier)
+    if max_followups <= 0:
+        return
 
     # Check for existing pending followup jobs (dedup)
     pending_followups = await run_db(get_pending_job_count, campaign_id, JOB_FOLLOWUP)

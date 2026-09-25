@@ -496,12 +496,10 @@ async def run_create_campaign(
     )
     if not competitor_names:
         try:
-            from ..services.competitor_research import research_competitors
-            from ..services.sender_context import sender_context
-            sender = await sender_context()
-            competitor_names = await research_competitors(
-                str((sender or {}).get("company") or ""),
+            competitor_names = await _research_campaign_competitors(
+                goal=wanted_goal,
                 company_context=company_context,
+                project_brief=project_brief,
                 target_description=target_description,
             )
         except Exception:
@@ -1398,6 +1396,36 @@ def _first_segment_name(icp_json: str | dict | None) -> str:
     if isinstance(segments, list) and segments and isinstance(segments[0], dict):
         return str(segments[0].get("name") or "").strip()
     return str(data.get("name") or "").strip()
+
+
+async def _research_campaign_competitors(
+    *,
+    goal: str,
+    company_context: str,
+    project_brief: str,
+    target_description: str,
+) -> list[str]:
+    """Competitors of what this campaign sells; none for any goal but a sale.
+
+    The sender's company is the tail of the seat's headline, its employer:
+    it is only dropped from the answer, never searched (D4umak/heylead-api#1428).
+    """
+    from ..services.competitor_research import (
+        offer_text,
+        research_competitors,
+        researches_competitors,
+    )
+    offer = offer_text(company_context, project_brief)
+    if not researches_competitors(goal) or not offer:
+        return []
+    from ..services.sender_context import sender_context
+    sender = await sender_context()
+    return await research_competitors(
+        offer,
+        goal=goal,
+        sender_company=str((sender or {}).get("company") or ""),
+        target_description=target_description,
+    )
 
 
 async def _goal_match_gate(

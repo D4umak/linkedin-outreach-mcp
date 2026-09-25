@@ -588,6 +588,7 @@ async def _execute_post_action(action: dict[str, Any], action_id: str, account_i
     title = profile.get("title", "")
     company = profile.get("company", "")
     industry = profile.get("industry", "")
+    from ..ai.copywriter.author_claims import known_facts_rule
     from ..ai.voice_analyzer import voice_prompt_block
     from ..services.voice_examples import example_posts_block, select_example_posts
 
@@ -615,7 +616,9 @@ Requirements:
 - Do NOT use hashtags unless the user's style includes them
 - Do NOT use emojis unless the user's style includes them
 - Be authentic and conversational, not corporate
-- Share a genuine insight, story, or perspective
+- Share a genuine insight or perspective. A story about {name} only if this
+  prompt tells it.
+{known_facts_rule(name)}
 
 Return ONLY the post text, nothing else."""
 
@@ -658,6 +661,19 @@ Return ONLY the post text, nothing else."""
 
     if borrows_from_examples(post_text, examples):
         return "Draft copied from a past post and was not published."
+
+    # 25 Sep 2026: "Having spoken with over 600 CTOs", for an author who
+    # never said it. Nobody reads this post before it goes out, so a figure
+    # the author did not give is taken out here or the post does not go.
+    from ..ai.copywriter.polish import keep_to_sources
+
+    post_text = await keep_to_sources(
+        post_text, sources=(profile, topic), channel="post", max_chars=1200,
+    )
+    # The floor the draft already had to clear: what is left after the claims
+    # go must still be a post, not a stub the gate would pad out.
+    if len(post_text) < 30:
+        return "Draft was made of claims you never gave and was not published."
 
     post_text = await guard_draft(post_text, voice or {}, "post", 1200)
     if not post_text:

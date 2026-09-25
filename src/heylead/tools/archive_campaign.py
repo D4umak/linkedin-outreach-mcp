@@ -17,8 +17,9 @@ from ..db.queries import (
     skip_pending_outreaches,
     update_campaign,
 )
+from .. import config
 from ..db.async_bridge import run_db
-from ..services.cloud_sync import sync_campaign_archive
+from ..services.cloud_sync import hosted_campaign_lifecycle
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,25 @@ async def run_archive_campaign(campaign_id: str = "", force: bool = False) -> st
             f"confirm=True) to archive anyway\n"
         )
 
+    # On a hosted account the workspace sends from this campaign: archive it
+    # there first, read it back, and archive this computer's copy only once
+    # the workspace has (heylead-api #1415, the same shape as delete).
+    if config.is_backend_mode():
+        kind, detail = await hosted_campaign_lifecycle("archive", campaign_id)
+        if kind == "failed":
+            logger.warning(
+                "Hosted archive of %s did not land: %s", campaign_id, detail,
+            )
+            return (
+                f"Campaign '{campaign['name']}' was not archived. Your HeyLead "
+                f"workspace still has it ({detail}).\n\n"
+                "Nothing was changed, in the workspace or on this computer.\n\n"
+                "Retry: "
+                f"campaign(action='archive', campaign_id='{campaign_id}', confirm=True)\n"
+                "To stop it sending meanwhile: "
+                f"campaign(action='pause', campaign_id='{campaign_id}')"
+            )
+
     # Archive it and skip pending outreaches
     skipped = await run_db(skip_pending_outreaches, campaign_id)
     await run_db(update_campaign, campaign_id, status="completed")
@@ -109,16 +129,7 @@ async def run_archive_campaign(campaign_id: str = "", force: bool = False) -> st
         )
     else:
         await run_db(log_action, "campaign_archived", details=log_details)
-    # Sync to backend so cloud scheduler also stops
-    synced = await sync_campaign_archive(campaign_id)
-    logger.info(
-        "Archived campaign %s: %s (cloud_synced=%s)",
-        campaign_id, campaign["name"], synced,
-    )
-
-    cloud_note = ""
-    if not synced:
-        cloud_note = "\n**Warning**: Could not sync archive to cloud scheduler."
+    logger.info("Archived campaign %s: %s", campaign_id, campaign["name"])
 
     result = (
         f"Campaign '{campaign['name']}' has been archived.\n\n"
@@ -130,6 +141,6 @@ async def run_archive_campaign(campaign_id: str = "", force: bool = False) -> st
     result += (
         "No further outreach will be sent for this campaign.\n\n"
         f"To view archived campaign details: show_status(campaign_id=\"{campaign_id[:8]}...\")\n"
-        f"To create a new campaign: create_campaign(\"your target description\"){cloud_note}"
+        f"To create a new campaign: create_campaign(\"your target description\")"
     )
     return result

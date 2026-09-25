@@ -16,9 +16,10 @@ from ..db.queries import (
     log_action,
     skip_pending_outreaches,
 )
+from .. import config
 from ..db.schema import get_db
 from ..db.async_bridge import run_db
-from ..services.cloud_sync import sync_campaign_delete
+from ..services.cloud_sync import hosted_campaign_lifecycle
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,30 @@ async def run_delete_campaign(campaign_id: str = "", confirm: bool = False) -> s
             "  **This cannot be undone.**\n\n"
             f'To confirm: delete_campaign(campaign_id="{campaign_id}", confirm=True)'
         )
+
+    # A hosted account's campaign lives in its HeyLead workspace, which sends
+    # from it. Ask the workspace first and touch this computer's copy only
+    # once the workspace no longer holds it: on 24 Sep 2026 the local copy
+    # went first, the api's delete failed behind a 404, and the reply said
+    # "permanently deleted" about a draft the dashboard still showed
+    # (heylead-api #1415). Kept local, the campaign can still be named in a
+    # retry.
+    hosted = config.is_backend_mode()
+    if hosted:
+        kind, detail = await hosted_campaign_lifecycle("delete", campaign_id)
+        if kind == "failed":
+            logger.warning(
+                "Hosted delete of %s did not land: %s", campaign_id, detail,
+            )
+            return (
+                f"Campaign **{campaign['name']}** was not deleted. Your HeyLead "
+                f"workspace still has it ({detail}).\n\n"
+                "Nothing was removed, in the workspace or on this computer.\n\n"
+                "Retry: "
+                f'campaign(action="delete", campaign_id="{campaign_id}", confirm=True)\n'
+                "To stop it sending meanwhile: "
+                f'campaign(action="archive", campaign_id="{campaign_id}", confirm=True)'
+            )
 
     # Mark pending outreaches as skipped before deletion
     await run_db(skip_pending_outreaches, campaign_id)
@@ -224,6 +249,14 @@ async def run_delete_campaign(campaign_id: str = "", confirm: bool = False) -> s
     deleted_counts, delete_error = await run_db(_delete_campaign_data)
     if delete_error:
         logger.error(f"Delete campaign failed: {delete_error}", exc_info=True)
+        if hosted:
+            return (
+                f"Campaign **{campaign['name']}** was deleted from your HeyLead "
+                "workspace, but the copy on this computer could not be "
+                f"removed: {delete_error}\n\n"
+                "The local delete was rolled back. Pending outreaches here "
+                "were marked skipped, so this computer will not send from it."
+            )
         return (
             f"Delete failed: {delete_error}\n\n"
             "Nothing was deleted — the partial delete was rolled back.\n"
@@ -231,28 +264,26 @@ async def run_delete_campaign(campaign_id: str = "", confirm: bool = False) -> s
             "stay that way, so the campaign will not send until you resume it."
         )
 
-    # Sync deletion to backend so cloud scheduler stops processing
-    synced = await sync_campaign_delete(campaign_id)
-
     # Log the deletion (without campaign_id since it's gone)
     await run_db(log_action, "campaign_deleted",
         details={
             "campaign_name": campaign["name"],
             "deleted_outreaches": deleted_counts.get("outreaches", 0),
             "deleted_contacts": deleted_counts.get("contacts", 0),
+            "hosted": hosted,
         },)
 
     logger.info(f"Deleted campaign: {campaign['name']} ({campaign_id})")
 
-    cloud_note = ""
-    if not synced:
-        cloud_note = "\n**Warning**: Could not sync deletion to cloud scheduler."
-
+    where = (
+        " from your HeyLead workspace and this computer" if hosted else ""
+    )
     return (
-        f"\U0001f5d1\ufe0f Campaign **{campaign['name']}** has been permanently deleted.\n\n"
+        f"\U0001f5d1\ufe0f Campaign **{campaign['name']}** has been permanently "
+        f"deleted{where}.\n\n"
         f"Removed:\n"
         f"  \u2022 {deleted_counts.get('outreaches', 0)} outreaches\n"
         f"  \u2022 {deleted_counts.get('contacts', 0)} contacts\n"
         f"  \u2022 Associated messages, engagements, and logs\n\n"
-        f"Use create_campaign() to start a new campaign.{cloud_note}"
+        f"Use create_campaign() to start a new campaign."
     )

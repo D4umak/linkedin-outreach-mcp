@@ -161,6 +161,11 @@ async def _repair_sendable_queue(campaign_id: str = "") -> str:
     from ..db import aio as adb
     from ..db.async_bridge import run_db
     from ..db.queries import delete_never_contacted_below_threshold
+    from ..services.cloud_sync import hosted_queue_refusal
+
+    refusal = hosted_queue_refusal("repair_queue")
+    if refusal:
+        return refusal
 
     campaign, err = await adb.find_active_campaign(campaign_id)
     if not campaign:

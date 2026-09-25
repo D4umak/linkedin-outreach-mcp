@@ -34,10 +34,8 @@ from typing import Any
 from ..flags import flag_enabled
 from ..config import get_tier
 from ..constants import (
-    FREE_MAX_FOLLOWUPS,
     MIN_WARMUP_ENGAGEMENTS,
     PRO_FOLLOWUP_SCHEDULE_DAYS,
-    PRO_MAX_FOLLOWUPS,
     TIER_PRO,
 )
 from ..db.queries import (
@@ -255,8 +253,8 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
             )
 
     tier = get_tier()
-    max_followups = PRO_MAX_FOLLOWUPS if tier == TIER_PRO else FREE_MAX_FOLLOWUPS
     now = int(time.time())
+    from ..services.campaign_plan import effective_max_followups
 
     # ── Scan all outreaches across campaigns ──
     recommendations: list[dict[str, Any]] = []
@@ -264,6 +262,9 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
     for camp in campaigns:
         cid = camp["id"]
         camp_name = camp["name"]
+        # This campaign's own count, as its plan promises: its max_followups
+        # under the tier ceiling, 0 when follow-ups are off (#1414).
+        max_followups = effective_max_followups(camp.get("config_json"), tier)
 
         def _get_outreaches():
             db = get_db()
@@ -283,6 +284,11 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
             db.close()
             return rows
         outreaches = await run_db(_get_outreaches)
+        # Held for a person: the hold subset of who is waiting, fresh by the
+        # rule inspect and Needs attention share. Until 25 Sep 2026 this
+        # judged holds itself and kept one a person had answered since.
+        from ..services.waiting_on_you import HOLD, who_is_waiting
+        held = {w.outreach_id: w for w in await run_db(who_is_waiting, kinds=(HOLD,), campaign_id=cid)}
 
         # A campaign can hold hundreds of failed rows; three is enough to tell
         # the user the vertical needs attention without burying everything else.
@@ -334,33 +340,23 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
                 _auto_reply_note = " (auto-reply enabled — scheduler will handle)"
 
             # Priority 1: Operator hold (exception agent)
-            _hold = None
-            try:
-                from ..services.reply_agent import is_fresh_hold, parse_operator_hold
-                _hold = parse_operator_hold(r.get("next_action") or "")
-                _last_prospect_ts = 0
-                for _m in reversed(messages or []):
-                    if _m.get("role") == "prospect":
-                        _last_prospect_ts = int(_m.get("timestamp") or 0)
-                        break
-                if _hold and is_fresh_hold(_hold, _last_prospect_ts):
-                    score = _score_action(1, temperature, eng_count, days_since, fit_score)
-                    recommendations.append({
-                        "priority": 1,
-                        "score": score + 1.0,
-                        "icon": ACTION_ICONS.get("approval", ACTION_ICONS["hot_lead"]),
-                        "text": (
-                            f"Held for operator: **{name}** ({role_str}){_src_tag} — "
-                            f"{_hold.get('reason') or 'needs a human'}"
-                        ),
-                        "action": f'Run: send_message(action="reply", outreach_id="{outreach_id}")',
-                        "fit_score": fit_score,
-                        "campaign": camp_name,
-                        "temp": temp_badge,
-                    })
-                    continue
-            except Exception:
-                _hold = None
+            _held = held.get(outreach_id)
+            if _held is not None:
+                score = _score_action(1, temperature, eng_count, days_since, fit_score)
+                recommendations.append({
+                    "priority": 1,
+                    "score": score + 1.0,
+                    "icon": ACTION_ICONS.get("approval", ACTION_ICONS["hot_lead"]),
+                    "text": (
+                        f"Held for operator: **{name}** ({role_str}){_src_tag} — "
+                        f"{_held.held_because}"
+                    ),
+                    "action": f'Run: send_message(action="reply", outreach_id="{outreach_id}")',
+                    "fit_score": fit_score,
+                    "campaign": camp_name,
+                    "temp": temp_badge,
+                })
+                continue
 
             # Priority 1: Hot leads
             if status == "hot_lead":
@@ -872,8 +868,9 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
     # ── Brand strategy suggestion ──
     try:
         from ..config import is_scheduler_enabled as _sched_enabled
-        _brand_analysis = await run_db(get_setting, "brand_analysis")
-        _brand_plan = await run_db(get_setting, "brand_strategy")
+        from ..services.brand_service import load_brand_analysis, load_brand_plan
+        _brand_analysis = await run_db(load_brand_analysis)
+        _brand_plan = await run_db(load_brand_plan)
         _scheduler_on = _sched_enabled()
 
         if hs and (hs.total < 60 or (total_lifetime >= 10 and acc_rate < 0.25)):

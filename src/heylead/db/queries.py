@@ -2090,6 +2090,17 @@ def get_inbound_auto_reply_candidates(min_age_seconds: int = 300) -> list[dict]:
     return get_auto_reply_candidates(campaign_id=None, min_age_seconds=min_age_seconds)
 
 
+def _calendar_in_next_action(next_action: str) -> str:
+    """Their own booking page, kept on the row's next_action, or ""."""
+    if not next_action:
+        return ""
+    try:
+        payload = json.loads(next_action)
+    except (json.JSONDecodeError, TypeError):
+        return ""
+    return str(payload.get("prospect_calendar_url") or "") if isinstance(payload, dict) else ""
+
+
 def _unanswered_lead_reason(
     text: str,
     sentiment: str,
@@ -2097,14 +2108,7 @@ def _unanswered_lead_reason(
     hours: int,
 ) -> tuple[str, str]:
     """Return (reason, calendar_url) for an unanswered lead."""
-    calendar_url = ""
-    if next_action:
-        try:
-            payload = json.loads(next_action)
-            if isinstance(payload, dict):
-                calendar_url = str(payload.get("prospect_calendar_url") or "")
-        except (json.JSONDecodeError, TypeError):
-            pass
+    calendar_url = _calendar_in_next_action(next_action)
     try:
         from ..ai.sentiment import detect_calendar_url
         found = detect_calendar_url(text or "") or ""
@@ -2203,17 +2207,18 @@ def _as_the_action(candidate: dict, pending: dict) -> dict:
     }
 
 
-def _acknowledged_handoffs(db: Any) -> list[dict]:
+def _acknowledged_handoffs(db: Any, narrowing: str = "", params: Sequence[Any] = ()) -> list[dict]:
     """Rows whose prospect handed over a way to meet and whose operator has
     not acted, although the lane has answered since.
 
     get_unanswered_leads' own query needs the prospect's message to be the
     last one, so until 23 Sep 2026 the lane's acknowledgement took "Call
     <number>" off Needs attention. What ends one here is a person acting: a
-    message of their own, or closing the prospect.
+    message of their own, or closing the prospect. ``narrowing`` and
+    ``params`` are narrowing_sql's, the main query's own.
     """
     rows = db.execute(
-        """SELECT o.id as outreach_id, o.campaign_id, o.status, o.next_action,
+        f"""SELECT o.id as outreach_id, o.campaign_id, o.status, o.next_action,
                   c.name as contact_name, c.title, c.company, c.linkedin_url,
                   ca.name as campaign_name
            FROM outreaches o
@@ -2227,10 +2232,10 @@ def _acknowledged_handoffs(db: Any) -> list[dict]:
              )
              AND m.role = 'sdr'
              AND COALESCE(m.sentiment, '') LIKE 'move:%'
-             AND o.status IN ('hot_lead', 'replied')
+             AND o.status IN ('hot_lead', 'replied'){narrowing}
            ORDER BY m.timestamp ASC
            LIMIT ?""",
-        (_HANDOFF_CANDIDATES_MAX,),
+        (*params, _HANDOFF_CANDIDATES_MAX),
     ).fetchall()
     candidates = [dict(r) for r in rows]
     if not candidates:
@@ -2251,23 +2256,71 @@ def _acknowledged_handoffs(db: Any) -> list[dict]:
 STOPPED_CAMPAIGN_STATUSES = frozenset({"archived", "deleted"})
 
 
-def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
-    """Leads whose last message is theirs and older than the grace window.
+# The kinds of wait these rows carry; services.waiting_on_you names them for
+# every surface (twin of heylead-api unanswered_leads).
+REPLY = "reply"
+HANDOFF = "handoff"
+HOLD = "hold"
+
+
+def narrowing_sql(campaign_id: str, outreach_id: str, params: list[Any]) -> str:
+    """AND-clauses narrowing a read to one campaign or one outreach (alias ``o``).
+
+    A prefix matches too: inspect prints eight characters of an id and a
+    person or the assistant passes those back.
+    """
+    parts: list[str] = []
+    if campaign_id:
+        parts.append("(o.campaign_id = ? OR o.campaign_id LIKE ?)")
+        params.extend([campaign_id, f"{campaign_id}%"])
+    if outreach_id:
+        parts.append("(o.id = ? OR o.id LIKE ?)")
+        params.extend([outreach_id, f"{outreach_id}%"])
+    return "".join(f" AND {part}" for part in parts)
+
+
+def waiting_candidates(
+    *,
+    now: int,
+    min_age_seconds: int | None = None,
+    campaign_id: str = "",
+    outreach_id: str = "",
+    held: list[dict] | None = None,
+) -> list[dict]:
+    """Every row a person is waiting on, oldest first (twin of heylead-api
+    unanswered_leads.waiting_candidates).
+
+    Each row carries ``kind`` (REPLY, HANDOFF or HOLD), ``reason`` (the line
+    Needs attention prints) and ``prospect_calendar_url``. Three sources, one
+    pass:
+
+    * replies whose last message is theirs, past the grace window, that the
+      lane is not about to answer (the query below);
+    * ways to meet the lane has acknowledged and a person has not acted on
+      (_acknowledged_handoffs);
+    * ``held``: fresh operator holds, read by waiting_on_you.fresh_operator_holds.
+      Until 25 Sep 2026 a hold on a reply this query did not admit (a polite
+      "no" split over two messages, the second one neutral) reached
+      inspect(action='holds') and never Needs attention.
 
     A booking-link hot lead with no SDR reply is the product-loud case:
     Overview and email must name them. Pending auto_reply jobs are excluded
-    so a healthy delayed reply stays quiet.
+    so a healthy delayed reply stays quiet. Every row, whatever its source,
+    is asked pending_handoff first: a handoff is the action however it
+    arrived. Callers go through waiting_on_you.who_is_waiting.
     """
     from ..constants import UNANSWERED_LEAD_GRACE_SECONDS
+    from ..formatter import format_wait_age
 
     if min_age_seconds is None:
         min_age_seconds = UNANSWERED_LEAD_GRACE_SECONDS
-    now = int(time.time())
     cutoff = now - min_age_seconds
     stale_running = now - 600
+    narrow_params: list[Any] = []
+    narrowing = narrowing_sql(campaign_id, outreach_id, narrow_params)
     db = get_db()
     rows = db.execute(
-        """SELECT o.id as outreach_id, o.campaign_id, o.status, o.next_action,
+        f"""SELECT o.id as outreach_id, o.campaign_id, o.status, o.next_action,
                   c.name as contact_name, c.title, c.company, c.linkedin_url,
                   ca.name as campaign_name, ca.status as campaign_status,
                   m.text as last_reply_text,
@@ -2281,7 +2334,7 @@ def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
                  SELECT m2.id FROM messages m2
                  WHERE m2.outreach_id = o.id
                  ORDER BY m2.timestamp DESC LIMIT 1
-             )
+             ){narrowing}
              AND m.role = 'prospect'
              AND m.timestamp <= ?
              AND m.sentiment NOT IN ('opt_out', 'out_of_office')
@@ -2312,20 +2365,26 @@ def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
              )
            ORDER BY m.timestamp ASC
            LIMIT 50""",
-        (cutoff, stale_running),
+        (*narrow_params, cutoff, stale_running),
     ).fetchall()
-    # Replies nobody has answered, and ways to meet the lane acknowledged and
-    # a person has still to act on, oldest first. They cannot be the same
-    # row: one ends with the prospect, the other with the lane.
+    # Replies nobody has answered, held replies, and ways to meet the lane
+    # acknowledged and a person has still to act on, oldest first. A reply
+    # and a hold on one outreach are one row: the hold says why only a
+    # person can answer it.
     candidates = [dict(raw) for raw in rows]
+    held_by_id = {str(h["outreach_id"]): h for h in (held or [])}
+    seen = {str(c["outreach_id"]) for c in candidates}
+    held_only = {oid for oid in held_by_id if oid not in seen}
+    candidates += [held_by_id[oid] for oid in held_by_id if oid in held_only]
     # A reply that follows a handoff nobody has acted on is still that
     # handoff's: the action is the call, not an answer to "any news?".
     threads = _threads(db, [str(c["outreach_id"]) for c in candidates])
     live: list[dict] = []
     for candidate in candidates:
-        pending = pending_handoff(threads.get(str(candidate["outreach_id"]), []))
+        oid = str(candidate["outreach_id"])
+        pending = pending_handoff(threads.get(oid, []))
         if pending is not None:
-            live.append(_as_the_action(candidate, pending))
+            live.append({**_as_the_action(candidate, pending), "kind": HANDOFF})
             continue
         # Twin of heylead-api unanswered_leads (api #1260): an archived
         # campaign sends nothing, so its "closing reply unsent" can never be
@@ -2334,39 +2393,48 @@ def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
         # call and stays whatever the campaign's status; paused stays too.
         if str(candidate.get("campaign_status") or "") in STOPPED_CAMPAIGN_STATUSES:
             continue
-        live.append(candidate)
-    candidates = live
-    candidates += _acknowledged_handoffs(db)
+        if _calendar_in_next_action(str(candidate.get("next_action") or "")):
+            kind = HANDOFF
+        elif oid in held_by_id:
+            kind = HOLD
+        else:
+            kind = REPLY
+        live.append({**candidate, "kind": kind})
+    live += [
+        {**row, "kind": HANDOFF}
+        for row in _acknowledged_handoffs(db, narrowing, narrow_params)
+    ]
     db.close()
-    candidates.sort(key=lambda r: int(r.get("last_message_ts") or 0))
+    live.sort(key=lambda r: int(r.get("last_message_ts") or 0))
 
-    leads: list[dict] = []
-    for row in candidates:
-        ts = int(row.get("last_message_ts") or 0)
-        hours = max(0, (now - ts) // 3600)
-        reason, calendar_url = _unanswered_lead_reason(
-            row.get("last_reply_text") or "",
-            row.get("last_sentiment") or "",
-            row.get("next_action") or "",
-            hours,
+    for row in live:
+        hours = max(0, (now - int(row.get("last_message_ts") or 0)) // 3600)
+        sentiment = str(row.get("last_sentiment") or "")
+        if row["kind"] == HOLD and str(row["outreach_id"]) in held_only and sentiment != "negative":
+            # Held before Needs attention's own query would admit it: say
+            # what it is, not a sentiment the lane did not act on.
+            row["reason"] = f"Held for you, unanswered {format_wait_age(hours)}"
+            row["prospect_calendar_url"] = ""
+            continue
+        row["reason"], row["prospect_calendar_url"] = _unanswered_lead_reason(
+            str(row.get("last_reply_text") or ""), sentiment,
+            str(row.get("next_action") or ""), hours,
         )
-        leads.append({
-            "outreach_id": row["outreach_id"],
-            "campaign_id": row.get("campaign_id") or "",
-            "campaign_name": row.get("campaign_name") or "",
-            "contact_name": row.get("contact_name") or "",
-            "company": row.get("company") or "",
-            "title": row.get("title") or "",
-            "linkedin_url": row.get("linkedin_url") or "",
-            "status": row.get("status") or "",
-            "last_sentiment": row.get("last_sentiment") or "",
-            "last_message_ts": ts,
-            "last_message_preview": (row.get("last_reply_text") or "")[:200],
-            "hours_unanswered": hours,
-            "reason": reason,
-            "prospect_calendar_url": calendar_url,
-        })
-    return leads
+    return live
+
+
+def get_unanswered_leads(min_age_seconds: int | None = None) -> list[dict]:
+    """Needs attention: the people waiting on the user, as the list's rows.
+
+    A view of services.waiting_on_you.who_is_waiting (25 Sep 2026), so
+    show_status, the unanswered-lead alert, the daily digest,
+    inspect(action='waiting'), inspect(action='holds') and check_replies
+    name the same people. It holds no query of its own
+    (tests/test_one_reader_says_who_is_waiting.py).
+    """
+    from ..services.waiting_on_you import needs_attention
+
+    return needs_attention(min_age_seconds=min_age_seconds)
 
 
 def was_unanswered_lead_alerted(outreach_id: str, since: int) -> bool:

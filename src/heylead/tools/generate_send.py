@@ -17,7 +17,7 @@ from typing import Any
 
 from ..ai.copywriter import provenance as copy_provenance
 from ..ai.message_fixer import fix_message
-from ..ai.message_generator import generate_message
+from ..ai.message_generator import check_job_search_draft, generate_message
 from ..ai.message_improver import improve_message
 from ..ai.message_validator import is_evaluator_refusal, validate_message
 from ..ai.llm_validator import llm_validate
@@ -1256,6 +1256,26 @@ async def run_generate_and_send(
         await _release_claim()
         return f"❌ Failed to generate message: {e}"
 
+    # The job-search writer refused its own draft twice (api #1416). Held,
+    # not handed to Fix: Fix would write a message from nothing.
+    if result.get("held"):
+        await adb.log_action("validation_blocked", outreach_id=outreach_id, result="blocked",
+                   details={"issues": [result["held"]]})
+        await _release_claim()
+        return (
+            f"⚠️ Message for {prospect.get('name', 'Unknown')} was held: "
+            f"{result['held']}\n\nThe message was NOT sent."
+        )
+
+    def _validate(text: str):
+        """validate_message, plus the job-search presumption check (api #1416)."""
+        checked = validate_message(text, voice_signature, note_max)
+        check_job_search_draft(
+            checked, text, prospect=prospect_data, campaign_config=campaign_context,
+            campaign_ctx=campaign_ctx, analysis=prospect_analysis,
+        )
+        return checked
+
     # Log reasoning for debugging/quality analysis
     if reasoning:
         await adb.log_action("message_reasoning", outreach_id=outreach_id,
@@ -1294,7 +1314,7 @@ async def run_generate_and_send(
         logger.warning(f"Improve stage failed, using raw message: {e}")
 
     # Validate (rule-based)
-    validation = validate_message(message, voice_signature, note_max)
+    validation = _validate(message)
 
     # LLM validation — context-sensitive checks (guardrails, company names, etc.)
     if validation.is_valid:
@@ -1330,7 +1350,7 @@ async def run_generate_and_send(
                 intent=campaign_intent,
                 brief=message_brief,
             )
-            validation = validate_message(message, voice_signature, note_max)
+            validation = _validate(message)
         except Exception as e:
             logger.warning(f"Fix stage failed: {e}")
 
@@ -1357,7 +1377,7 @@ async def run_generate_and_send(
                 intent=campaign_intent,
                 brief=message_brief,
             )
-            validation = validate_message(message, voice_signature, note_max)
+            validation = _validate(message)
         except Exception as e:
             logger.error(f"Regeneration failed: {e}")
 

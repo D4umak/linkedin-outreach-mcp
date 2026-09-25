@@ -43,6 +43,36 @@ from ..linkedin import (
 logger = logging.getLogger(__name__)
 
 
+def _followup_cap(campaign: dict[str, Any], tier: str) -> int:
+    """The follow-ups this campaign may send one person, as its plan promises.
+
+    campaign_plan.effective_max_followups: the campaign's max_followups under
+    the tier ceiling, 0 when follow-ups are off. This read the tier ceiling
+    alone, so a manual follow-up went past a campaign's own lower setting and
+    its off switch (#1414).
+    """
+    from ..services.campaign_plan import effective_max_followups
+
+    return effective_max_followups(campaign.get("config_json"), tier)
+
+
+def _cap_refusal(max_followups: int, followup_count: int, tier: str) -> str:
+    """The refusal when no follow-up may go out; "" when one may."""
+    if max_followups <= 0:
+        return (
+            "Follow-ups are off for this campaign.\n"
+            "Turn them on with edit_campaign(enable_followups='on')."
+        )
+    if followup_count < max_followups:
+        return ""
+    upgrade = tier != TIER_PRO and max_followups >= FREE_MAX_FOLLOWUPS
+    return (
+        f"Max follow-ups reached ({max_followups}) for this outreach.\n"
+        + (f"Upgrade to Pro for up to {PRO_MAX_FOLLOWUPS} follow-ups." if upgrade
+           else "Maximum follow-ups sent.")
+    )
+
+
 async def run_send_followup(
     campaign_id: str = "",
     outreach_id: str = "",
@@ -81,7 +111,8 @@ async def run_send_followup(
 
     # ── Step 1: Find campaign + follow-up candidate ──
     tier = get_tier()
-    max_followups = PRO_MAX_FOLLOWUPS if tier == TIER_PRO else FREE_MAX_FOLLOWUPS
+    # Each campaign's own count, set once its campaign is known below (#1414).
+    max_followups = 0
 
     if outreach_id:
         # Specific outreach requested
@@ -95,17 +126,16 @@ async def run_send_followup(
                 f"Outreach status is '{outreach['status']}', not 'connected'.\n"
                 "Follow-ups can only be sent to connected prospects."
             )
-        if outreach.get("followup_count", 0) >= max_followups:
-            await client.close()
-            return (
-                f"Max follow-ups reached ({max_followups}) for this outreach.\n"
-                f"{'Upgrade to Pro for up to 5 follow-ups.' if tier != TIER_PRO else 'Maximum follow-ups sent.'}"
-            )
         campaign = await db.get_campaign(outreach["campaign_id"])
         if not campaign:
             await client.close()
             return "Campaign not found for this outreach."
         campaign_id = campaign["id"]
+        max_followups = _followup_cap(campaign, tier)
+        refused = _cap_refusal(max_followups, outreach.get("followup_count", 0), tier)
+        if refused:
+            await client.close()
+            return refused
 
         from ..services.project_brief import refuse_without_project_brief
         missing = refuse_without_project_brief(campaign)
@@ -153,6 +183,12 @@ async def run_send_followup(
                 "No messages will be sent while the campaign is paused.\n"
                 "Use resume_campaign() to resume outreach."
             )
+
+        max_followups = _followup_cap(campaign, tier)
+        refused = _cap_refusal(max_followups, 0, tier)
+        if refused:
+            await client.close()
+            return refused
 
         # Find next follow-up candidate
         candidates = await db.get_followup_candidates(campaign_id, max_followups)

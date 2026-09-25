@@ -25,7 +25,6 @@ from ..author_identity import contact_provider_id
 from ..db.queries import (
     get_inbound_signal_by_sender,
     get_messages_for_outreach,
-    get_outreach,
     get_setting,
     save_setting,
     increment_accepted,
@@ -49,6 +48,7 @@ from ..linkedin import (
 from ..constants import AUTO_REPLY_MAX_AGE_DAYS
 from ..linkedin.circuit_breaker import CircuitBreakerOpen, CollectorCircuitBreaker
 from ..services.inbox_match import index_contacts_for_inbox
+from ..services.waiting_on_you import HOLD, Waiting, render_waiting, who_is_waiting
 from ..timeutil import to_epoch
 
 logger = logging.getLogger(__name__)
@@ -703,6 +703,29 @@ async def _collect_new_prospect_turns(
     return out
 
 
+async def _who_is_waiting() -> list[Waiting] | None:
+    """The people waiting on the user after this check stored what it found,
+    or None when they cannot be read (the check's own answer still stands)."""
+    try:
+        return await run_db(who_is_waiting)
+    except Exception as e:  # noqa: BLE001 -- a read beside the check must not fail it
+        logger.warning("check_replies: who is waiting could not be read: %s", e)
+        return None
+
+
+def _waiting_first(text: str, people: list[Waiting] | None) -> str:
+    """Who is waiting on you, above whatever this check found.
+
+    Until 25 Sep 2026 check_replies named only the people whose message
+    arrived in this run, so "No new messages found" hid everyone still
+    waiting. The list is services.waiting_on_you's, the one Needs attention
+    and inspect read.
+    """
+    if people is None:
+        return text
+    return render_waiting(people) + "\n\n" + text
+
+
 async def run_check_replies() -> str:
     """Check for new replies across all active campaigns.
 
@@ -799,12 +822,14 @@ async def run_check_replies() -> str:
             if len(profile_viewers) > 10:
                 extra_output.append(f"   ... and {len(profile_viewers) - 10} more")
             extra_output.append("   💡 These people checked out your profile — consider reaching out!")
+        waiting = await _who_is_waiting()
         if extra_output:
-            return "📭 No new messages found.\n\n" + "\n".join(extra_output)
-        return (
+            return _waiting_first("📭 No new messages found.\n\n" + "\n".join(extra_output), waiting)
+        return _waiting_first(
             "📭 No new messages found.\n\n"
             "Tip: Replies usually take 1-3 days after invitations are accepted.\n"
-            "Use show_status to see your campaign progress."
+            "Use show_status to see your campaign progress.",
+            waiting,
         )
 
     # ── Match messages to outreach contacts ──
@@ -1594,11 +1619,13 @@ async def run_check_replies() -> str:
         pass  # Non-critical — inbox hygiene
 
     # ── Format output ──
+    waiting = await _who_is_waiting()
     if not matched_replies and not silent_connections:
-        return (
+        return _waiting_first(
             f"📬 Checked {len(messages)} messages — none from campaign contacts.\n\n"
             "Replies from non-campaign contacts are not tracked.\n"
-            "Use show_status to see campaign progress."
+            "Use show_status to see campaign progress.",
+            waiting,
         )
 
     if not matched_replies and silent_connections:
@@ -1617,13 +1644,14 @@ async def run_check_replies() -> str:
         if sc_count > 5:
             output.append(f"   ... and {sc_count - 5} more")
         output.append('   → Use send_message(action="followup") to reach out!')
-        return "\n".join(output)
+        return _waiting_first("\n".join(output), waiting)
 
     # Sort: hot leads first, then questions, then rest
     priority_order = {"positive": 0, "engaged": 1, "question": 2, "neutral": 3, "negative": 4, "out_of_office": 5, "opt_out": 6}
     matched_replies.sort(key=lambda r: priority_order.get(r["sentiment"], 99))
 
     output = [f"📬 {len(matched_replies)} new repl{'y' if len(matched_replies) == 1 else 'ies'}:\n"]
+    held_now = {w.outreach_id: w for w in (waiting or []) if w.kind == HOLD}
 
     for i, reply in enumerate(matched_replies):
         is_seller = reply.get("is_seller", False)
@@ -1640,15 +1668,12 @@ async def run_check_replies() -> str:
             icon = SENTIMENT_ICONS.get(reply["sentiment"], "💬")
             action = SENTIMENT_ACTIONS.get(reply["sentiment"], "")
 
+        # Only a fresh hold: a reply that arrived after it made it stale and
+        # the lane answers it (until 25 Sep 2026 any hold on the row printed).
         hold_note = ""
-        oid = reply.get("outreach_id") or ""
-        if oid:
-            rec = await run_db(get_outreach, oid)
-            if rec:
-                from ..services.reply_agent import parse_operator_hold
-                hold = parse_operator_hold(rec.get("next_action") or "")
-                if hold:
-                    hold_note = f"HELD FOR OPERATOR — {hold.get('reason') or 'needs a human'}"
+        held = held_now.get(reply.get("outreach_id") or "")
+        if held is not None:
+            hold_note = f"HELD FOR OPERATOR — {held.held_because}"
 
         name = reply["name"]
         role = reply.get("title", "")
@@ -1802,7 +1827,7 @@ async def run_check_replies() -> str:
             output.append("")
             output.append(f"📊 Inbound Pipeline: {', '.join(pipeline_parts)}")
 
-    return "\n".join(output)
+    return _waiting_first("\n".join(output), waiting)
 
 
 async def _dispatch_hot_lead_alert(

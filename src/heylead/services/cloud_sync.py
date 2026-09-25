@@ -232,7 +232,10 @@ def get_push_log() -> dict[str, Any]:
     }
 
 
-def _record_push(campaign_ids: list[str], error: str = "") -> None:
+def _record_push(
+    campaign_ids: list[str], error: str = "", *, org_id: str = "",
+    refused: list[str] | tuple[str, ...] = (),
+) -> None:
     """Stamp the outcome of one completed push.
 
     Campaigns absent from ``campaign_ids`` keep whatever stamp they had — that
@@ -261,6 +264,11 @@ def _record_push(campaign_ids: list[str], error: str = "") -> None:
         log["ts"] = now
         log["error"] = None
     queries.save_setting(_PUSH_LOG_SETTING, log)
+    if not error:
+        # Which workspace each campaign landed in: the brand plan of a
+        # workspace is built from its campaigns only (brand_service).
+        from .brand_service import place_campaigns
+        place_campaigns(list(campaign_ids), org_id, refused)
 
 
 # The other half of the sync, and until now the unreported one. A push that
@@ -584,8 +592,8 @@ def _campaign_has_unmessaged_connected(campaign_id: str) -> bool:
 def _campaign_has_due_followup(campaign_id: str) -> bool:
     """A connected or messaged person whose next scheduled touch is due."""
     from ..config import get_tier
-    from ..constants import FREE_MAX_FOLLOWUPS, PRO_MAX_FOLLOWUPS
     from ..scheduler.planner import _is_followup_due
+    from .campaign_plan import effective_max_followups
 
     campaign = queries.get_campaign(campaign_id)
     try:
@@ -594,10 +602,15 @@ def _campaign_has_due_followup(campaign_id: str) -> bool:
         if custom and not isinstance(custom, list):
             custom = None
     except (TypeError, ValueError, json.JSONDecodeError):
-        custom = None
+        cfg, custom = {}, None
 
     tier = get_tier()
-    max_fu = PRO_MAX_FOLLOWUPS if tier == "pro" else FREE_MAX_FOLLOWUPS
+    # The count the planner plans against (#1414): the campaign's own
+    # max_followups under the tier ceiling, 0 when follow-ups are off. The
+    # tier ceiling alone found work the planner would never plan.
+    max_fu = effective_max_followups(cfg, tier)
+    if max_fu <= 0:
+        return False
     for candidate in queries.get_followup_candidates(campaign_id, max_fu):
         if _is_followup_due(candidate, tier, custom_schedule=custom):
             return True
@@ -1751,11 +1764,10 @@ async def sync_to_cloud(
     from ..tier import INMAIL_CAPABILITY_KEY
     inmail_capability = await run_db(queries.get_setting, INMAIL_CAPABILITY_KEY, "") or ""
 
-    # Brand strategy data for cloud scheduler
-    brand_analysis = await run_db(queries.get_setting, "brand_analysis")
-    brand_strategy = await run_db(queries.get_setting, "brand_strategy")
-    brand_baseline = await run_db(queries.get_setting, "brand_baseline")
-    brand_actions_completed = await run_db(queries.get_setting, "brand_actions_completed")
+    # Brand strategy data for the cloud scheduler: this workspace's, named with
+    # it, never the machine's one plan (brand_service.WORKSPACE_KEYS).
+    from .brand_service import blobs_for_push
+    brand = await run_db(blobs_for_push)
     headline_ab = await run_db(queries.get_setting, "headline_ab")
 
     # Outreach rows hard-deleted here (the sendable-queue repair) leave a
@@ -1796,10 +1808,11 @@ async def sync_to_cloud(
                 None if has_premium is None else _as_bool(has_premium)
             ),
             "inmail_send_capability": inmail_capability or None,
-            "brand_analysis": brand_analysis,
-            "brand_strategy": brand_strategy,
-            "brand_baseline": brand_baseline,
-            "brand_actions_completed": brand_actions_completed,
+            "brand_analysis": brand.get("brand_analysis"),
+            "brand_strategy": brand.get("brand_strategy"),
+            "brand_baseline": brand.get("brand_baseline"),
+            "brand_actions_completed": brand.get("brand_actions_completed"),
+            "brand_org_id": brand.get("brand_org_id") or None,
             "headline_ab": headline_ab,
             "always_on": config.is_scheduler_always_on(),
             # The backend executes outreach every 5 minutes with the laptop
@@ -1981,6 +1994,8 @@ async def sync_to_cloud(
     await run_db(
         _record_push,
         [c["id"] for c in sync_campaigns if c["id"] not in refused],
+        org_id=config.get_active_org_id(),
+        refused=sorted(refused),
     )
     result = totals
     # Client-side, set after the merge so the caller can say what was held back
@@ -3165,14 +3180,14 @@ async def pull_changes(since: int) -> dict[str, Any]:
             messages_skipped,
         )
 
-    # Apply brand strategy updates from backend
+    # Apply brand strategy updates from backend, filed under the workspace
+    # they name (brand_service.store_from_cloud).
     brand_updates = changes.get("brand_updates", {})
-    if brand_updates.get("brand_strategy"):
-        await run_db(queries.save_setting, "brand_strategy", brand_updates["brand_strategy"])
-        logger.debug("Applied brand strategy update from cloud")
-    if brand_updates.get("brand_analysis"):
-        await run_db(queries.save_setting, "brand_analysis", brand_updates["brand_analysis"])
-        logger.debug("Applied brand analysis update from cloud")
+    if brand_updates:
+        from .brand_service import store_from_cloud
+        saved = await run_db(store_from_cloud, brand_updates)
+        if saved:
+            logger.debug("Applied brand updates from cloud: %s", ", ".join(saved))
 
     # Sync new engagements from backend
     new_engagements = changes.get("new_engagements", [])
@@ -4039,21 +4054,153 @@ async def _campaign_scope_request_full(
         return "not_found", "", 404
 
 
+async def _find_hosted_campaign(campaign_id: str) -> tuple[str, dict]:
+    """Read a campaign back from the hosted workspaces.
+
+    Returns ("found", payload), ("absent", {}) when no workspace the account
+    can reach holds it, or ("unknown", {}) when that cannot be told (a
+    workspace or the org list did not answer).
+    """
+    url = f"{_base_url()}/api/v1/campaigns/{campaign_id}"
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        try:
+            resp = await client.get(url, headers=_headers())
+        except httpx.HTTPError:
+            return "unknown", {}
+        if resp.status_code < 400:
+            return "found", _json_or_empty(resp)
+        if resp.status_code != 404:
+            return "unknown", {}
+        try:
+            orgs_resp = await client.get(
+                f"{_base_url()}/api/v1/orgs", headers=_scope_headers(""),
+            )
+            if orgs_resp.status_code >= 400:
+                return "unknown", {}
+            org_ids = [
+                str(o.get("id") or "")
+                for o in (orgs_resp.json().get("orgs") or [])
+            ]
+        except (httpx.HTTPError, ValueError, AttributeError):
+            return "unknown", {}
+        active = config.get_active_org_id()
+        unknown = False
+        for scope in [""] + [i for i in org_ids if i]:
+            if scope == active:
+                continue
+            try:
+                resp = await client.get(url, headers=_scope_headers(scope))
+            except httpx.HTTPError:
+                unknown = True
+                continue
+            if resp.status_code < 400:
+                return "found", _json_or_empty(resp)
+            if resp.status_code != 404:
+                unknown = True
+        return ("unknown", {}) if unknown else ("absent", {})
+
+
+def _json_or_empty(resp: Any) -> dict:
+    try:
+        body = resp.json()
+    except Exception:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+# What each hosted lifecycle write is, and the status that proves it landed
+# (None: the campaign must be gone).
+_HOSTED_LIFECYCLE = {
+    "delete": ("delete", "", None),
+    "archive": ("post", "/archive", "archived"),
+}
+
+
+async def hosted_campaign_lifecycle(action: str, campaign_id: str) -> tuple[str, str]:
+    """Delete or archive a campaign in the hosted workspace, then read it back.
+
+    Returns (kind, detail):
+      "done"    the workspace did it (read back: gone, or archived);
+      "absent"  no workspace holds the campaign (a draft never pushed), so
+                there is nothing to change there;
+      "failed"  the workspace still holds it as it was, or could not be
+                reached or read; detail says which, in words for the user.
+
+    Why the read-back: the api answers 404 both for "not in this workspace"
+    and for ANY exception inside the delete or archive (analytics.py wraps
+    both in HTTPException(404)). A 404 from every workspace therefore does
+    not prove the campaign is gone. On 24 Sep 2026 it was read that way: the
+    tool said "permanently deleted" and the hosted draft stayed, with its 16
+    prospects (heylead-api #1415).
+
+    Callers change this computer's copy only after "done" or "absent".
+    """
+    if action not in _HOSTED_LIFECYCLE:
+        raise ValueError(f"no hosted lifecycle action {action!r}")
+    if not config.is_backend_mode():
+        return "absent", ""
+    method, suffix, landed_status = _HOSTED_LIFECYCLE[action]
+    outcome, detail, status = await _campaign_scope_request_full(
+        method, f"/api/v1/campaigns/{campaign_id}{suffix}",
+    )
+    if outcome == "error":
+        if status is None:
+            return "failed", detail or "the HeyLead workspace could not be reached"
+        return "failed", detail or f"the workspace answered HTTP {status}"
+
+    seen, payload = await _find_hosted_campaign(campaign_id)
+    if seen == "unknown":
+        return "failed", (
+            "the workspace could not be read back to confirm the "
+            f"{action}"
+        )
+    if seen == "absent":
+        if action == "delete":
+            await run_db(_clear_delete_tombstone, campaign_id)
+        kind = "done" if outcome == "ok" else "absent"
+        logger.info("Hosted %s of campaign %s: %s", action, campaign_id, kind)
+        return kind, ""
+    hosted_status = str(payload.get("status") or "")
+    if landed_status and hosted_status == landed_status:
+        logger.info("Hosted %s of campaign %s: done", action, campaign_id)
+        return "done", ""
+    logger.warning(
+        "Hosted %s of campaign %s did not land: answered %s, still %s",
+        action, campaign_id, outcome, hosted_status or "present",
+    )
+    return "failed", (
+        f"the workspace did not {action} it"
+        + (f" and it is still {hosted_status} there" if hosted_status else "")
+    )
+
+
+def hosted_queue_refusal(action: str) -> str:
+    """The answer for a queue repair the hosted workspace has no route for.
+
+    retry_failed and repair_queue rewrite outreach rows. On a hosted account
+    whose workspace sends (sending_host=cloud) the queue that sends is the
+    workspace's, and this client pushes no outreach funnel state (14 Sep
+    2026), so a local rewrite changed nothing that sends while the reply said
+    it had. Returns "" when this computer's queue is the one that sends.
+    """
+    if not config.is_backend_mode() or config.get_sending_host() != "cloud":
+        return ""
+    return (
+        f"{action} was not run. On a hosted account your HeyLead workspace "
+        "sends from its own copy of the queue, and there is no route yet for "
+        "this client to change it there. Nothing was changed."
+    )
+
+
 async def sync_campaign_archive(campaign_id: str) -> bool:
     """Push a campaign archive to the backend.
 
-    Returns True if sync succeeded.
+    Returns True when no workspace holds the campaign un-archived.
     """
     if not config.is_backend_mode():
         return False
-
-    outcome, _detail = await _campaign_scope_request(
-        "post", f"/api/v1/campaigns/{campaign_id}/archive"
-    )
-    if outcome == "ok":
-        logger.info("Synced campaign %s archive to backend", campaign_id)
-        return True
-    return False
+    kind, _detail = await hosted_campaign_lifecycle("archive", campaign_id)
+    return kind in ("done", "absent")
 
 
 # One entry per campaign whose backend delete has not landed yet:
@@ -4108,13 +4255,9 @@ async def sync_campaign_delete(campaign_id: str) -> bool:
     if not config.is_backend_mode():
         return False
 
-    outcome, _detail = await _campaign_scope_request(
-        "delete", f"/api/v1/campaigns/{campaign_id}"
-    )
-    if outcome in ("ok", "not_found"):
-        if outcome == "ok":
-            logger.info("Synced campaign %s deletion to backend", campaign_id)
-        await run_db(_clear_delete_tombstone, campaign_id)
+    # Read back, not "404 everywhere means gone": see hosted_campaign_lifecycle.
+    kind, _detail = await hosted_campaign_lifecycle("delete", campaign_id)
+    if kind in ("done", "absent"):
         return True
     await run_db(_record_delete_tombstone, campaign_id)
     return False

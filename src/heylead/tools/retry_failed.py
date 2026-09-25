@@ -31,6 +31,12 @@ async def run_retry_failed(campaign_id: str = "") -> str:
             "Please run setup_profile first."
         )
 
+    from ..services.cloud_sync import hosted_queue_refusal
+
+    refusal = hosted_queue_refusal("retry_failed")
+    if refusal:
+        return refusal
+
     # Validate campaign if specified
     if campaign_id:
         campaign = await run_db(get_campaign, campaign_id)

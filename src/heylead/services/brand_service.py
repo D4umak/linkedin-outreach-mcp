@@ -11,6 +11,7 @@ import logging
 import time
 from typing import Any
 
+from .. import config
 from ..db.queries import get_setting, list_campaigns, save_setting
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,87 @@ _KEY_PLAN = "brand_strategy"
 _KEY_BASELINE = "brand_baseline"
 _KEY_ACTIONS_LOG = "brand_actions_completed"
 
+# One set of brand keys per workspace (25 Sep 2026). There used to be one set
+# for the machine: whatever workspace was active, the same analysis and plan
+# were read, pushed and overwritten by every pull, and the plan was built from
+# every active campaign on the machine. A person who edits a customer's
+# workspace from here carried the customer's themes into their own brand plan,
+# and the cloud drafted posts from it. With no active workspace (local-only,
+# or a client that never picked one) the unscoped keys are used, as before.
+WORKSPACE_KEYS = (_KEY_ANALYSIS, _KEY_PLAN, _KEY_BASELINE, _KEY_ACTIONS_LOG)
+# {campaign_id: workspace} for campaigns a push landed, written by cloud_sync.
+_CAMPAIGN_WORKSPACES = "campaign_workspaces"
+
+
+def _workspace() -> str:
+    try:
+        return str(config.get_active_org_id() or "").strip()
+    except Exception:
+        return ""
+
+
+def scoped_key(base: str, org_id: str | None = None) -> str:
+    """The settings key for ``base`` in this (or the named) workspace."""
+    org = _workspace() if org_id is None else org_id
+    return f"{base}@{org}" if org else base
+
+
+def blobs_for_push() -> dict[str, Any]:
+    """This workspace's brand data for a sync push, named with its workspace.
+
+    The backend takes brand keys only when ``brand_org_id`` is the workspace
+    the push lands in (or, unnamed, when the user has one workspace).
+    """
+    org = _workspace()
+    out: dict[str, Any] = {k: get_setting(scoped_key(k, org)) for k in WORKSPACE_KEYS}
+    out["brand_org_id"] = org
+    return out
+
+
+def store_from_cloud(brand_updates: dict[str, Any]) -> list[str]:
+    """File a pull's brand updates under the workspace they name. Returns the keys saved.
+
+    Inside a workspace, updates for another workspace or for none are not
+    this workspace's and are dropped. With no active workspace the client
+    only ever pulls its one default workspace, so the updates are its own.
+    """
+    if not isinstance(brand_updates, dict):
+        return []
+    org = _workspace()
+    named = str(brand_updates.get("org_id") or "")
+    if org and named != org:
+        if any(brand_updates.get(k) for k in (_KEY_PLAN, _KEY_ANALYSIS)):
+            logger.warning(
+                "brand updates for workspace %s not saved in workspace %s",
+                named[:8] or "(unnamed)", org[:8],
+            )
+        return []
+    saved = []
+    for key in (_KEY_PLAN, _KEY_ANALYSIS):
+        if brand_updates.get(key):
+            save_setting(scoped_key(key, org), brand_updates[key])
+            saved.append(key)
+    return saved
+
+
+def place_campaigns(campaign_ids: list[str], org_id: str, refused: list[str] | tuple[str, ...] = ()) -> None:
+    """Record which workspace a push landed each campaign in.
+
+    Only accepted campaigns are placed; a refused one that was placed in this
+    workspace is taken out (the backend says it lives elsewhere).
+    """
+    if not org_id:
+        return
+    placed = get_setting(_CAMPAIGN_WORKSPACES, {}) or {}
+    if not isinstance(placed, dict):
+        placed = {}
+    for cid in campaign_ids:
+        placed[str(cid)] = org_id
+    for cid in refused:
+        if placed.get(str(cid)) == org_id:
+            placed.pop(str(cid), None)
+    save_setting(_CAMPAIGN_WORKSPACES, placed)
+
 
 # ──────────────────────────────────────────────
 # Analysis persistence
@@ -30,11 +112,11 @@ _KEY_ACTIONS_LOG = "brand_actions_completed"
 
 def save_brand_analysis(analysis: dict[str, Any]) -> None:
     analysis["analyzed_at"] = int(time.time())
-    save_setting(_KEY_ANALYSIS, analysis)
+    save_setting(scoped_key(_KEY_ANALYSIS), analysis)
 
 
 def load_brand_analysis() -> dict[str, Any] | None:
-    return get_setting(_KEY_ANALYSIS)
+    return get_setting(scoped_key(_KEY_ANALYSIS))
 
 
 # ──────────────────────────────────────────────
@@ -44,11 +126,11 @@ def load_brand_analysis() -> dict[str, Any] | None:
 
 def save_brand_plan(plan: dict[str, Any]) -> None:
     plan["created_at"] = int(time.time())
-    save_setting(_KEY_PLAN, plan)
+    save_setting(scoped_key(_KEY_PLAN), plan)
 
 
 def load_brand_plan() -> dict[str, Any] | None:
-    return get_setting(_KEY_PLAN)
+    return get_setting(scoped_key(_KEY_PLAN))
 
 
 # ──────────────────────────────────────────────
@@ -75,11 +157,11 @@ def capture_baseline(
 
 
 def save_brand_baseline(baseline: dict[str, Any]) -> None:
-    save_setting(_KEY_BASELINE, baseline)
+    save_setting(scoped_key(_KEY_BASELINE), baseline)
 
 
 def load_brand_baseline() -> dict[str, Any] | None:
-    return get_setting(_KEY_BASELINE)
+    return get_setting(scoped_key(_KEY_BASELINE))
 
 
 # ──────────────────────────────────────────────
@@ -187,10 +269,10 @@ def mark_action_completed(action_id: str, result: str = "") -> None:
                 action["completed_at"] = int(time.time())
                 break
 
-    save_setting(_KEY_PLAN, plan)
+    save_setting(scoped_key(_KEY_PLAN), plan)
 
     # Append to completed actions log
-    log: list[dict] = get_setting(_KEY_ACTIONS_LOG, [])
+    log: list[dict] = get_setting(scoped_key(_KEY_ACTIONS_LOG), [])
     if not isinstance(log, list):
         log = []
     log.append({
@@ -198,7 +280,7 @@ def mark_action_completed(action_id: str, result: str = "") -> None:
         "completed_at": int(time.time()),
         "result": result,
     })
-    save_setting(_KEY_ACTIONS_LOG, log)
+    save_setting(scoped_key(_KEY_ACTIONS_LOG), log)
 
 
 def count_plan_progress(plan: dict[str, Any]) -> tuple[int, int]:
@@ -266,6 +348,13 @@ def get_active_icp_context() -> dict[str, Any]:
     recommendations to the actual target audience.
     """
     campaigns = list_campaigns(status="active")
+    org = _workspace()
+    if org:
+        # Only the campaigns a push landed in this workspace. The local table
+        # holds every workspace's campaigns and says nothing about which.
+        placed = get_setting(_CAMPAIGN_WORKSPACES, {}) or {}
+        placed = placed if isinstance(placed, dict) else {}
+        campaigns = [c for c in campaigns if placed.get(str(c.get("id"))) == org]
 
     all_titles: list[str] = []
     all_industries: list[str] = []

@@ -275,7 +275,9 @@ async def _brand_automation_section(
     """
     from ..formatter import progress_bar
 
-    brand_plan = await db.get_setting("brand_strategy")
+    from ..db.async_bridge import run_db
+    from ..services.brand_service import load_brand_plan
+    brand_plan = await run_db(load_brand_plan)
     if not brand_plan or not isinstance(brand_plan, dict) or not brand_plan.get("weeks"):
         return ""
 
@@ -1279,6 +1281,33 @@ def _format_backend_activity(data: dict, hours: int) -> str:
     return "\n".join(lines)
 
 
+async def _followup_cap(campaign: dict[str, Any]) -> int:
+    """The follow-ups this campaign can send one person, as the plan quotes it.
+
+    ``campaign_plan.effective_max_followups`` over the campaign's config and
+    this install's tier: the stored max_followups under the tier ceiling, 0
+    when follow-ups are off. The api's diagnostics payload carries no config,
+    so a hosted row falls back to the pulled local copy. This used to read the
+    stored value with a default of 5, so "Eligible" and "Maxed" counted
+    against a number no scheduler keeps (#1414).
+    """
+    from ..services.campaign_plan import effective_max_followups, local_tier
+
+    raw = campaign.get("config_json")
+    if not raw and campaign.get("id"):
+        try:
+            row = await db.get_campaign(campaign["id"])
+            raw = (row or {}).get("config_json")
+        except Exception as exc:
+            logger.debug("Campaign %s config unreadable for diagnostics: %s", campaign.get("id"), exc)
+    try:
+        tier = local_tier()
+    except Exception as exc:
+        logger.debug("Tier unreadable for diagnostics: %s", exc)
+        tier = ""  # effective_max_followups reads blank as Free
+    return effective_max_followups(raw, tier)
+
+
 async def run_scheduler_diagnostics(campaign_id: str = "") -> str:
     """Full diagnostics: activity breakdown, funnel, campaign state, health.
 
@@ -1418,21 +1447,14 @@ async def _format_diagnostics_backend(data: dict[str, Any], campaign_id: str) ->
         for c in campaigns:
             cid = c.get("id", "")
             name = (c.get("name") or "Unnamed")[:25]
-            try:
-                cfg = c.get("config_json") or {}
-                if isinstance(cfg, str):
-                    import json as _json
-                    cfg = _json.loads(cfg)
-                max_fu = cfg.get("max_followups", 5)
-            except Exception:
-                max_fu = 5
+            max_fu = await _followup_cap(c)
             bd = await db.get_followup_breakdown(cid, max_fu)
             connected = bd["by_status"].get("connected", 0)
             messaged = bd["by_status"].get("messaged", 0)
             dist_parts = [f"#{k}:{v}" for k, v in sorted(bd["distribution"].items())]
             lines.append(
                 f"| {name} | {connected} | {messaged} | "
-                f"{bd['eligible']} | {bd['maxed_out']} | "
+                f"{bd['eligible'] if max_fu else 'off'} | {bd['maxed_out']} | "
                 f"{', '.join(dist_parts) or '-'} |"
             )
         lines.append("")
@@ -1635,21 +1657,14 @@ async def _format_diagnostics_local(campaign_id: str) -> str:
         for c in campaigns:
             cid = c["id"]
             name = (c.get("name") or "Unnamed")[:25]
-            try:
-                cfg = c.get("config_json") or {}
-                if isinstance(cfg, str):
-                    import json as _json
-                    cfg = _json.loads(cfg)
-                max_fu = cfg.get("max_followups", 5)
-            except Exception:
-                max_fu = 5
+            max_fu = await _followup_cap(c)
             bd = await db.get_followup_breakdown(cid, max_fu)
             conn = bd["by_status"].get("connected", 0)
             msg = bd["by_status"].get("messaged", 0)
             dist_parts = [f"#{k}:{v}" for k, v in sorted(bd["distribution"].items())]
             lines.append(
                 f"| {name} | {conn} | {msg} | "
-                f"{bd['eligible']} | {bd['maxed_out']} | "
+                f"{bd['eligible'] if max_fu else 'off'} | {bd['maxed_out']} | "
                 f"{', '.join(dist_parts) or '-'} |"
             )
         lines.append("")

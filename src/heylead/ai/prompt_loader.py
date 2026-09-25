@@ -813,8 +813,10 @@ def build_context_block(
         f"HARD FACTS ABOUT THE SENDER: {_constraints}" if _constraints else ""
     )
     _js_offerings = _js_case_studies = ""
+    from ..services import job_search_copy as _job_search_copy
     from ..services.job_search_guard import is_job_search_campaign
-    if is_job_search_campaign(campaign_config):
+    _job_search = is_job_search_campaign(campaign_config)
+    if _job_search:
         _core = (_em.get("core") or "").strip()
         _context = (_em.get("industry_context") or "").strip()
         if _core or _context:
@@ -827,11 +829,28 @@ def build_context_block(
     variables: dict[str, str] = {
         # Prospect info
         "contact_info": _format_contact_info(prospect),
-        # Trigger / relevance — enriched with signal hook when available
-        "trigger_info": _enrich_trigger_info(
-            campaign_config.get("relevance_hook", "")
-            or campaign_config.get("target_description", ""),
-            analysis,
+        # Trigger / relevance — enriched with signal hook when available.
+        # A job search never gets the target description here: it says whom
+        # the sender searched for, and read as the reader's own opening
+        # ("On your search for...", api #1416).
+        "trigger_info": (
+            _job_search_copy.job_search_trigger(campaign_config, ctx, analysis)
+            if _job_search else _enrich_trigger_info(
+                campaign_config.get("relevance_hook", "")
+                or campaign_config.get("target_description", ""),
+                analysis,
+            )
+        ),
+        # Job search only: the evidence that licenses "you are hiring", and
+        # the close picked from the reader's title (api #1416).
+        "hiring_signal": (
+            _job_search_copy.hiring_signal_for(
+                prospect, {**campaign_config, **ctx}, analysis,
+            ) or _job_search_copy.NO_HIRING_SIGNAL
+        ) if _job_search else "",
+        "ask_instruction": (
+            _job_search_copy.ask_instruction_for(prospect.get("title"))
+            if _job_search else ""
         ),
         # Campaign context (new fields from context_json)
         "offerings": (
