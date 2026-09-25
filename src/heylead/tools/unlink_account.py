@@ -31,13 +31,18 @@ async def run_unlink_account() -> str:
         )
 
     if is_backend_mode():
+        # The backend's answer IS the answer. On 25 Sep 2026 a 409 ("this
+        # workspace's seat is not yours to unlink here") was logged and the
+        # tool went on to clear the local id and report "disconnected" while
+        # the server, rightly, still held the seat. A refusal is returned as
+        # it was said, and nothing local changes.
         try:
             client = get_linkedin_client()
             if isinstance(client, BackendClient):
                 await client.unlink_account()
         except Exception as e:
-            logger.warning(f"Backend unlink failed (clearing local anyway): {e}")
-            # Still clear local so user isn't stuck
+            logger.warning(f"Backend unlink refused or failed; nothing changed locally: {e}")
+            return _refusal_text(e)
 
     await run_db(set_account_id, None)
     logger.info("Unlinked LinkedIn account (local account_id cleared)")
@@ -47,6 +52,27 @@ async def run_unlink_account() -> str:
         "Your campaigns and data are still in HeyLead. "
         "To connect again (same or different LinkedIn), run setup_profile()."
         + _daemon_warning()
+    )
+
+
+def _refusal_text(exc: BaseException) -> str:
+    """What the backend said, in the tool's voice, with the seat left alone."""
+    said = str(exc or "").strip()
+    detail = said
+    if "—" in said:
+        detail = said.split("—", 1)[1].strip()
+    try:
+        import json as _json
+        parsed = _json.loads(detail)
+        if isinstance(parsed, dict) and parsed.get("detail"):
+            detail = str(parsed["detail"])
+    except Exception:  # noqa: BLE001 - not JSON: keep the text as it was
+        pass
+    if not detail:
+        detail = "the backend could not be reached"
+    return (
+        f"⏭️ Not unlinked: {detail}\n\n"
+        "Your LinkedIn account is still connected; nothing was changed."
     )
 
 

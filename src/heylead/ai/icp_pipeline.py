@@ -458,6 +458,12 @@ async def _step_enrich_linkedin(state: PipelineState) -> None:
     # Build the get_params_fn closure based on client type
     from ..linkedin.backend_client import BackendClient
 
+    search_seat_has_sales_nav: bool | None = None
+    if not isinstance(client, BackendClient):
+        stored_sn = await run_db(get_setting, "has_sales_navigator", None)
+        if stored_sn is not None:
+            search_seat_has_sales_nav = str(stored_sn).strip().lower() in ("1", "true", "yes")
+
     if isinstance(client, BackendClient):
         async def get_params_fn(type: str, keywords: str) -> list[dict[str, str]]:
             return await client.get_search_params(type=type, keywords=keywords)
@@ -472,6 +478,7 @@ async def _step_enrich_linkedin(state: PipelineState) -> None:
         try:
             icp.linkedin_enriched_params = await enrich_icp_linkedin_params(
                 icp, get_params_fn,
+                search_seat_has_sales_nav=search_seat_has_sales_nav,
             )
             enriched_count += 1
         except Exception as e:

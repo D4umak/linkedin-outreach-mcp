@@ -35,7 +35,7 @@ _DB_RETRY_BACKOFF = 0.1  # seconds, doubles each attempt
 #    dedup read it as "already in a campaign" and never let the person back in.
 # 7: outreaches.chat_id (and headline A/B columns) — a v6 stamp skipped the
 #    ALTER, so planning died with `no such column: o.chat_id`.
-SCHEMA_VERSION = 14  # 14: contacts.why_json (the fit breakdown kept at enrolment); 13: inbound_signals.sent_at (the provider's send time); 12: connections.connected_at/removed_at; 11: outreach_tombstones; 10: agent_commons (beats + notes); 9: contacts.timezone (per-prospect planning windows); 8: versioned outreach sync
+SCHEMA_VERSION = 16  # 16: agent_decisions, agent_decision_outcomes, outreaches.decision_id (heylead-api#1209); 15: messages.prompt_name/prompt_version/model/variant (heylead-api#1210); 14: contacts.why_json (the fit breakdown kept at enrolment); 13: inbound_signals.sent_at (the provider's send time); 12: connections.connected_at/removed_at; 11: outreach_tombstones; 10: agent_commons (beats + notes); 9: contacts.timezone (per-prospect planning windows); 8: versioned outreach sync
 
 # Singleton connection — avoids opening multiple connections per process
 # which causes "database is locked" errors with WAL mode.
@@ -1679,6 +1679,21 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         _reraise_if_migration_interrupted(e)
         pass  # Column already exists
 
+    # Where each message came from (heylead-api#1210): the prompt, its
+    # version, the model and the A/B variant. NOT NULL DEFAULT '' so a row
+    # written before this reads as "" everywhere, never NULL.
+    for provenance_column in ("prompt_name", "prompt_version", "model", "variant"):
+        try:
+            conn.execute(
+                f"ALTER TABLE messages ADD COLUMN {provenance_column} "
+                "TEXT NOT NULL DEFAULT ''"
+            )
+            conn.commit()
+            logger.info("Migration: added %s to messages", provenance_column)
+        except sqlite3.OperationalError as e:
+            _reraise_if_migration_interrupted(e)
+            pass  # Column already exists
+
     # Fix: convert empty-string campaign_id to NULL in scheduler_jobs
     # (global jobs used "" which violated FK constraint)
     try:
@@ -2423,6 +2438,9 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
     _migrate_inbound_v2_and_delete_support(conn)
     # SCHEMA_VERSION 11: outreach tombstones so a local hard delete reaches the cloud
     _migrate_outreach_tombstones(conn)
+    # SCHEMA_VERSION 16: the agent decision ledger (heylead-api#1209)
+    from .agent_decisions_schema import install as _install_agent_decisions
+    _install_agent_decisions(conn)
 
     # v0.10.131: Deduplicate outreaches — keep oldest per (campaign_id, contact_id),
     # delete duplicates, then add unique index to prevent future duplicates.

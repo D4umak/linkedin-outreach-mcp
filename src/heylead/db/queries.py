@@ -13,6 +13,9 @@ from collections.abc import Sequence
 from typing import Any, Optional
 
 from .schema import get_db
+from .message_rows import insert_message_row
+from ..ai.copywriter import provenance as copy_provenance
+from ..ai.copywriter.provenance import Provenance
 from ..constants import (
     ENGAGEMENT_RESERVATION_TTL_SECONDS,
     INMAIL_FALLBACK_MAX_AGE_DAYS,
@@ -1109,6 +1112,7 @@ _VALID_OUTREACH_COLS = frozenset({
     "headline_variant", "headline_test_id",
     "chat_id",
     "cloud_status_version", "local_news",
+    "decision_id",
 })
 
 # Status sets that trigger event timestamps
@@ -2408,8 +2412,13 @@ def save_message(
     timestamp: int | None = None,
     external_message_id: str | None = None,
     message_id: str | None = None,
+    provenance: Provenance | None = None,
 ) -> str:
     """Persist a message.
+
+    An outbound row records where its words came from (heylead-api#1210):
+    ``provenance`` when the caller knows (the cloud pull mirrors the hosted
+    row's), else the draft the task's last message template wrote.
 
     ``timestamp`` is when the message was actually sent/received on the
     provider, NOT when we ingested it — pass it whenever the provider reports
@@ -2448,13 +2457,12 @@ def save_message(
         db.close()
         return existing[0] if isinstance(existing, (tuple, list)) else existing["id"]
     msg_id = message_id or str(uuid.uuid4())
-    db.execute(
-        """INSERT INTO messages (id, outreach_id, role, text, sentiment, format,
-                                 timestamp, external_message_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (msg_id, outreach_id, role, text, sentiment, format,
-         timestamp if timestamp is not None else int(time.time()),
-         external_message_id),
+    insert_message_row(
+        db, id=msg_id, outreach_id=outreach_id, role=role, text=text,
+        sentiment=sentiment, format=format,
+        timestamp=timestamp if timestamp is not None else int(time.time()),
+        external_message_id=external_message_id,
+        provenance=copy_provenance.for_outbound(text, provenance) if role == "sdr" else None,
     )
     db.commit()
     db.close()

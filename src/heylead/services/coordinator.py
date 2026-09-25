@@ -21,6 +21,8 @@ from ..constants import (
 from ..db.async_bridge import run_db
 from ..db.queries import get_campaign
 from ..flags import flag_enabled
+from . import agent_decisions
+from .agent_context import numbers_for
 from .agent_commons import (
     DIGEST_MAX_CHARS,
     beat_is_stale,
@@ -223,13 +225,14 @@ async def _run(
 
     tools = async_commons_tools(agent="coordinator", campaign_id=cid)
     digest_row = await run_db(get_digest, cid)
+    numbers = await numbers_for(cid, actor="coordinator")
 
     def read_digest() -> str:
         return (digest_row or {}).get("body") or "(no digest)"
 
     result = await run_agent_loop(
         system=COORDINATOR_SYSTEM,
-        context=build_coordinator_context(trigger_agent=trigger_agent, campaign_id=cid),
+        context=build_coordinator_context(trigger_agent=trigger_agent, campaign_id=cid, numbers=numbers),
         tools={**tools, "read_digest": read_digest},
         schema=COORDINATOR_AGENT_STEP,
         budget=AgentBudget(
@@ -256,6 +259,12 @@ async def _run(
     )
     if not cid:
         return
+    # A hold is about the whole campaign, so it is scored on every row of it.
+    await run_db(
+        agent_decisions.record_decision, actor="coordinator", kind=result.decision,
+        campaign_id=cid, applied=mode == "act" and result.decision == "hold", numbers=numbers,
+        scope=agent_decisions.SCOPE_CAMPAIGN,
+    )
     if mode == "act" and result.decision == "hold":
         await run_db(
             upsert_campaign_row,

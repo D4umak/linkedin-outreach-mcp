@@ -26,6 +26,7 @@ def _retry_after_seconds(resp: httpx.Response, default: float) -> float:
     return default
 
 from .. import config, constants
+from .copywriter import provenance as copy_provenance
 
 logger = logging.getLogger(__name__)
 
@@ -186,9 +187,11 @@ class LLMClient:
         the next provider may well be able to serve.
         """
         async def attempt(provider: str) -> str:
-            return await self._call_provider(
+            text = await self._call_provider(
                 provider, prompt, system, temperature, max_tokens, tier, schema
             )
+            copy_provenance.note_model(self._model_for(provider, tier))
+            return text
 
         return await self._try_providers(attempt, tier)
 
@@ -279,6 +282,7 @@ class LLMClient:
             missing = [k for k in schema.get("required", []) if k not in data]
             if missing:
                 raise LLMError(f"JSON response is missing required key(s): {missing}")
+            copy_provenance.note_model(self._model_for(provider, tier))
             return data
 
         return await self._try_providers(attempt, tier)

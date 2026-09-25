@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from ..services.agent_context import numbers_block
+
 COORDINATOR_SYSTEM = """You coordinate HeyLead in-process agents.
 Read the commons digest, then decide.
 
@@ -20,6 +24,12 @@ Do not write LinkedIn messages. Do not turn other agents on or off.
 Default to none when nothing is wrong."""
 
 
-def build_coordinator_context(*, trigger_agent: str, campaign_id: str) -> str:
+def build_coordinator_context(
+    *, trigger_agent: str, campaign_id: str, numbers: dict[str, Any] | None,
+) -> str:
+    """``numbers`` is ``agent_context.numbers_for``; rendered only there (heylead-api#1209)."""
     camp = campaign_id or "(account)"
-    return f"Trigger: {trigger_agent}\nCampaign: {camp}\nRead tools if you need the digest."
+    return (
+        f"Trigger: {trigger_agent}\nCampaign: {camp}\n\n{numbers_block(numbers)}\n\n"
+        "Read tools if you need the digest."
+    )

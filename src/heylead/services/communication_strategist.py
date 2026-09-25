@@ -99,6 +99,13 @@ async def run_daily_strategy() -> dict[str, Any]:
         "errors": [],
     }
 
+    # Phase 0: score the agent decisions that turned 48 h old (heylead-api#1209).
+    try:
+        from .agent_decisions import score_due
+        summary["decisions_scored"] = await run_db(score_due)
+    except Exception as e:
+        logger.warning("Agent decision scoring failed: %s", e)
+
     # Phase 1: Evaluate yesterday's plans (feedback loop)
     try:
         evaluated = await _evaluate_yesterday_plans()
@@ -169,6 +176,9 @@ async def _plan_campaign_prospects(campaign: dict, summary: dict) -> int:
 
     # Prepare campaign context (ICP, voice) — once per campaign
     campaign_context = await _build_campaign_context(campaign)
+    from .agent_context import numbers_for
+    campaign_context["numbers"] = await numbers_for(campaign_id, actor="daily_strategy")
+    planned_ids: list[str] = []
 
     # Detect DM-only campaign (connections-only, no invitations)
     try:
@@ -230,6 +240,7 @@ async def _plan_campaign_prospects(campaign: dict, summary: dict) -> int:
                 )
 
                 await run_db(save_daily_plan, outreach_id, campaign_id, today, actions, "llm")
+                planned_ids.append(outreach_id)
                 created += 1
 
         except Exception as e:
@@ -249,9 +260,18 @@ async def _plan_campaign_prospects(campaign: dict, summary: dict) -> int:
                     fallback_actions,
                     "fallback",
                 )
+                planned_ids.append(prospect["outreach_id"])
                 created += 1
                 summary["fallback_used"] += 1
 
+    if planned_ids:
+        from . import agent_decisions
+        decision_id = await run_db(
+            agent_decisions.record_decision, actor="daily_strategy", kind="daily_plan",
+            campaign_id=campaign_id, outreach_ids=planned_ids, applied=True,
+            numbers=campaign_context.get("numbers"),
+        )
+        await run_db(agent_decisions.stamp_rows, planned_ids, decision_id)
     return created
 
 
@@ -298,6 +318,8 @@ async def _batch_plan_actions(
         prospect_count=len(prospects),
         prospects_section=prospects_section,
     ) + dm_only_section
+    from .agent_context import numbers_block
+    prompt += "\n\n" + numbers_block(campaign_context.get("numbers"))
 
     # Try backend LLM proxy
     from ..config import is_backend_mode, has_local_llm_key

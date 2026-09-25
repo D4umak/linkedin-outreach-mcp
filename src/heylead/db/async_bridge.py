@@ -14,6 +14,7 @@ the connection).
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import concurrent.futures
 import sys
 import threading
@@ -86,4 +87,7 @@ async def run_db(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         finally:
             _call_source.value = ""
 
-    return await loop.run_in_executor(_get_executor(), _call)
+    # The caller's context rides along (contextvars), so a DB function sees
+    # what the task it serves knows: the draft save_message stamps
+    # (ai/copywriter/provenance.py) is one such thing.
+    return await loop.run_in_executor(_get_executor(), contextvars.copy_context().run, _call)

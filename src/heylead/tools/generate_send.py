@@ -15,6 +15,7 @@ import logging
 import time
 from typing import Any
 
+from ..ai.copywriter import provenance as copy_provenance
 from ..ai.message_fixer import fix_message
 from ..ai.message_generator import generate_message
 from ..ai.message_improver import improve_message
@@ -1044,6 +1045,7 @@ async def run_generate_and_send(
 
     # ── A/B Test Variant: inject variant instructions if test is running ──
     outreach_variant = prospect.get("variant") if prospect else None
+    copy_provenance.note_variant("")  # only an applied instruction is an arm
     if outreach_variant and campaign_id:
         try:
             running_tests = await adb.list_ab_tests(campaign_id, status="running")
@@ -1062,6 +1064,7 @@ async def run_generate_and_send(
                 campaign_ctx = campaign_ctx or {}
                 existing_prefs = campaign_ctx.get("campaign_preferences", "")
                 campaign_ctx["campaign_preferences"] = (existing_prefs + variant_instruction).strip()
+                copy_provenance.note_variant(outreach_variant)
                 logger.info("Applied A/B variant %s instruction for outreach", outreach_variant)
         except Exception as e:
             logger.debug("A/B variant injection failed (non-critical): %s", e)

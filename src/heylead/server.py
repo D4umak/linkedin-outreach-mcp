@@ -33,6 +33,14 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.400 (2026-09-25)
+- the decision ledger lands at SCHEMA_VERSION 16
+- Fix: skip Sales Navigator fields on a Premium search seat
+- Fix: a refused backend unlink is reported and changes nothing locally
+- New: the local campaign agents read the numbers, and each decision is scored
+- New: every message row knows its prompt, version, model and variant; an A/B winner passes a test
+- New: hosted show_status and signals read the cloud's learning loops (#1211)
+
 ## v0.10.399 (2026-09-25)
 - Fix: a job-search ICP never targets the role the user wants; the title goes to every persona's exclude list (#1338)
 - Fix: 'unsafe for your account' is not a safe claim

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from ..services.agent_context import numbers_block
+
 REPLAN_AGENT_SYSTEM = """You rewrite leftover LinkedIn outreach actions for ONE prospect after a new signal, acceptance, or first reply.
 
 Morning actions that already ran stay on the ledger. You only decide the remaining unexecuted slots.
@@ -25,10 +29,14 @@ Never re-queue an action that already executed. Max 3 actions today including on
 If the status is a live human conversation (replied, hot_lead), leftover must be skip_today."""
 
 
-def build_replan_context(*, name: str, status: str, trigger: str) -> str:
+def build_replan_context(
+    *, name: str, status: str, trigger: str, numbers: dict[str, Any] | None,
+) -> str:
+    """``numbers`` is ``agent_context.numbers_for``; rendered only there (heylead-api#1209)."""
     return (
         f"Prospect: {name or 'Unknown'}\n"
         f"Outreach status: {status or 'unknown'}\n"
-        f"Trigger: {trigger or 'unknown'}\n"
+        f"Trigger: {trigger or 'unknown'}\n\n"
+        f"{numbers_block(numbers)}\n\n"
         "Read tools if you need context, then decide the leftover plan."
     )

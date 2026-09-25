@@ -93,7 +93,10 @@ def persist_operator_hold(
     message_ts: int = 0,
     message_id: str = "",
     extra: dict[str, Any] | None = None,
+    decision_id: str = "",
 ) -> dict[str, Any]:
+    """Park the thread for a person. ``decision_id`` names the agent decision
+    that parked it (heylead-api#1209); a hold from anything else clears it."""
     payload: dict[str, Any] = {
         "type": HOLD_FOR_OPERATOR,
         "reason": (reason or "needs a human")[:240],
@@ -105,7 +108,7 @@ def persist_operator_hold(
         for key in ("prospect_calendar_url", "calendar_url"):
             if extra.get(key):
                 payload[key] = extra[key]
-    update_outreach(outreach_id, next_action=json.dumps(payload))
+    update_outreach(outreach_id, next_action=json.dumps(payload), decision_id=decision_id or None)
     return payload
 
 
@@ -249,6 +252,11 @@ async def maybe_run_reply_agent(
         extra: dict[str, Any] = {}
         if prospect_calendar_url:
             extra["prospect_calendar_url"] = prospect_calendar_url
+        from .agent_decisions import record_decision
+        decision_id = await run_db(
+            record_decision, actor="reply", kind="hold",
+            campaign_id=str((campaign or {}).get("id") or ""), outreach_ids=[outreach_id], applied=True,
+        )
         await run_db(
             persist_operator_hold,
             outreach_id,
@@ -256,6 +264,7 @@ async def maybe_run_reply_agent(
             int(last_prospect_msg.get("timestamp") or 0),
             str(last_prospect_msg.get("id") or ""),
             extra or None,
+            decision_id=decision_id,
         )
     return outcome
 

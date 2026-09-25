@@ -288,8 +288,19 @@ async def _handle_website_stats(days: int = 30) -> str:
 # ──────────────────────────────────────────────
 
 
+# Hosted: the optimiser runs once a day in the cloud (heylead-api#1211) and
+# the local optimiser's tables are not the account's.
+_HOSTED_OPTIMISER = (
+    "Your signals are optimised in the cloud once a day. "
+    "See what changed with signals(action='optimize_history')."
+)
+
+
 async def _handle_optimize() -> str:
     """Manually trigger the signal optimization loop."""
+    from .. import config
+    if config.is_backend_mode():
+        return _HOSTED_OPTIMISER
     from ..services.signal_optimizer import run_signal_optimization
 
     result = await run_signal_optimization()
@@ -313,6 +324,12 @@ async def _handle_optimize() -> str:
 
 async def _handle_optimize_history(signal_type: str = "", limit: int = 30) -> str:
     """Show optimization history log."""
+    from .. import config
+    if config.is_backend_mode():
+        from ..services import cloud_learning
+        data = await cloud_learning.fetch_learning(limit)
+        return cloud_learning.format_history(data) if data else cloud_learning.UNREACHABLE
+
     from ..db.async_bridge import run_db
     from ..db.signal_queries import list_optimization_history
 
@@ -353,6 +370,9 @@ async def _handle_optimize_history(signal_type: str = "", limit: int = 30) -> st
 
 async def _handle_optimize_rollback(entry_id: str) -> str:
     """Rollback a specific optimization change."""
+    from .. import config
+    if config.is_backend_mode():
+        return _HOSTED_OPTIMISER
     if not entry_id:
         return "Provide the entry ID via signal_id parameter. Use `signals(action='optimize_history')` to see IDs."
 
@@ -387,6 +407,9 @@ async def _handle_optimize_rollback(entry_id: str) -> str:
 
 async def _handle_optimize_weights() -> str:
     """Show all signal types with default vs effective weights."""
+    from .. import config
+    if config.is_backend_mode():
+        return _HOSTED_OPTIMISER
     from ..db.async_bridge import run_db
     from ..db.signal_queries import get_weight_overrides, get_threshold_overrides
     from ..services.signal_scorer import SIGNAL_WEIGHTS

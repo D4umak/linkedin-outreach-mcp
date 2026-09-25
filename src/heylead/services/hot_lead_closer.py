@@ -23,7 +23,9 @@ from ..db.async_bridge import run_db
 from ..db.queries import get_messages_for_outreach, get_outreach_with_contact, log_action
 from ..db.schema import get_db
 from ..flags import flag_enabled
+from . import agent_decisions
 from .agent_commons import async_commons_tools
+from .agent_context import numbers_for
 from .coordinator import after_sibling_loop
 from ..services.prospect_email import extract_profile_email
 
@@ -185,10 +187,12 @@ async def maybe_run_hot_lead_closer(
                 prospect_calendar_url,
             )
         known_email = extract_profile_email(contact, contact.get("profile_json") or "")
+        numbers = await numbers_for(campaign_id, actor="closer")
         context = build_closer_context(
             name=str(contact.get("name") or ""),
             sentiment=sentiment,
             reply_text=reply_text,
+            numbers=numbers,
         )
 
         async def read_thread() -> str:
@@ -256,6 +260,10 @@ async def maybe_run_hot_lead_closer(
         if decision == "book" and not grounded:
             decision = "hold"
             reason = "email or ISO start not in evidence"
+        decision_id = await run_db(
+            agent_decisions.record_decision, actor="closer", kind=decision, campaign_id=campaign_id,
+            outreach_ids=[outreach_id], applied=decision == "book" and mode == "act", numbers=numbers,
+        )
 
         if decision == "book" and mode == "act":
             booked = await _place_booking(
@@ -277,6 +285,7 @@ async def maybe_run_hot_lead_closer(
                     outreach_id, booked[:240], last_message_ts, last_message_id,
                     prospect_calendar_url,
                 )
+            await run_db(agent_decisions.stamp_rows, [outreach_id], decision_id)
             await run_db(
                 log_action, "hot_lead_closer_decision",
                 outreach_id=outreach_id,

@@ -1352,7 +1352,7 @@ async def _show_overview_from_backend(data: dict) -> str:
         output.append(f"└── Reactions: {eng_reactions}")
         output.append("")
 
-    # ── Local-only sections (ICPs, signals, brand, strategy — still from local DB) ──
+    # ── Local-only sections (ICPs, contacts, posts — still from local DB) ──
     try:
         icps = await db.list_icps(status="active")
         if icps:
@@ -1372,14 +1372,17 @@ async def _show_overview_from_backend(data: dict) -> str:
     except Exception:
         pass
 
-    # ── Signal Intelligence ──
+    # ── Learning loops (cloud) ──
+    # This is the hosted overview, and signals, strategy actions, A/B tests
+    # and signal optimisation all live in the cloud (heylead-api#1211). The
+    # local signal dashboard read tables no hosted engine writes.
     try:
-        from ..services.signal_service import format_signal_dashboard
-        signal_section = await run_db(format_signal_dashboard, days=7)
-        if signal_section:
-            output.append(signal_section)
+        from ..services import cloud_learning
+        learning = await cloud_learning.fetch_learning(limit=5)
+        if learning:
+            output.extend(cloud_learning.status_section(learning))
     except Exception:
-        pass
+        logger.debug("Learning loops section failed", exc_info=True)
 
     # ── Contact Base ──
     try:

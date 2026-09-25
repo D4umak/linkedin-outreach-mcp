@@ -459,6 +459,17 @@ async def _enrich_result(result: IcpResult) -> None:
     _search_override = premium_acct if premium_acct and premium_acct != account_id else None
     if _search_override:
         logger.info("ICP enrichment routed through premium account %s", _search_override[:8])
+    # None: the hosted balancer may still find an SN seat. False: this call
+    # will use a seat we already know has no Sales Navigator.
+    search_seat_has_sales_nav: bool | None = None
+    if _search_override:
+        stored_sn = await run_db(get_setting, "premium_search_has_sn", None)
+        if stored_sn is not None:
+            search_seat_has_sales_nav = str(stored_sn).strip().lower() in ("1", "true", "yes")
+    elif not isinstance(client, BackendClient):
+        stored_sn = await run_db(get_setting, "has_sales_navigator", None)
+        if stored_sn is not None:
+            search_seat_has_sales_nav = str(stored_sn).strip().lower() in ("1", "true", "yes")
 
     if isinstance(client, BackendClient):
         async def get_params_fn(type: str, keywords: str) -> list[dict[str, str]]:
@@ -479,6 +490,7 @@ async def _enrich_result(result: IcpResult) -> None:
             try:
                 icp.linkedin_enriched_params = await enrich_icp_linkedin_params(
                     icp, get_params_fn,
+                    search_seat_has_sales_nav=search_seat_has_sales_nav,
                 )
                 enriched_count += 1
             except Exception as e:

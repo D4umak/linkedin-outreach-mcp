@@ -31,6 +31,14 @@ async def run_signal_report(
     Returns:
         Formatted signal analytics report.
     """
+    # Hosted: signals are collected, scored and optimised in the cloud
+    # (heylead-api#1211); the local signal tables are not the account's.
+    from .. import config
+    if config.is_backend_mode():
+        from ..services import cloud_learning
+        data = await cloud_learning.fetch_learning()
+        return cloud_learning.format_history(data) if data else cloud_learning.UNREACHABLE
+
     from ..db.async_bridge import run_db
     from ..services.signal_analytics import generate_signal_report
 

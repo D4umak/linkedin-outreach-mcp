@@ -40,6 +40,7 @@ from ..db.queries import (
     save_setting,
 )
 from ..formatter import format_duration
+from . import ab_stats
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +242,38 @@ def _last_sent_dm_format(outreach_id: str) -> str | None:
     return "voice" if (row["format"] or "text") == "voice" else "text"
 
 
+def _significant_winner(
+    va: dict[str, Any], vb: dict[str, Any],
+) -> tuple[str, str, dict[str, Any]] | None:
+    """The arm that won, why, and the test that says so; None to keep running.
+
+    Reply rate (replied of connected) first, acceptance (connected of invited)
+    second. Either needs a two-proportion z-test at p < 0.05 with both arms at
+    the sample size the observed effect needs (services/ab_stats.py). Until
+    24 Sep 2026 a fixed 2-point reply gap crowned a winner: 3 replies in 10
+    against 5 in 10 completed the test for B at p = 0.36.
+    """
+    metrics = (
+        ("reply rate", "replied", "connected"),
+        ("acceptance", "connected", "invited"),
+    )
+    for label, success, trials in metrics:
+        a_s, a_n = int(va.get(success, 0) or 0), int(va.get(trials, 0) or 0)
+        b_s, b_n = int(vb.get(success, 0) or 0), int(vb.get(trials, 0) or 0)
+        winner = ab_stats.winner(a_s, a_n, b_s, b_n)
+        if winner is None:
+            continue
+        t = ab_stats.two_proportion_test(a_s, a_n, b_s, b_n)
+        reason = (
+            f"Variant {winner} has the higher {label}: A={a_s}/{a_n} "
+            f"({t.a_rate:.0%}) vs B={b_s}/{b_n} ({t.b_rate:.0%}), "
+            f"p={t.p:.3f}, each arm needed {t.min_n}"
+        )
+        test = {"metric": label, "z": round(t.z, 4), "p": round(t.p, 6), "min_n": t.min_n}
+        return winner, reason, test
+    return None
+
+
 def evaluate_ab_tests() -> list[str]:
     """Auto-evaluate running A/B tests that have enough data.
 
@@ -264,40 +297,16 @@ def evaluate_ab_tests() -> list[str]:
         if a_n < _MIN_PER_VARIANT or b_n < _MIN_PER_VARIANT:
             continue  # Not enough data
 
-        # Compare on primary metric: reply_rate (most meaningful for SDR)
-        a_reply = va.get("reply_rate", 0)
-        b_reply = vb.get("reply_rate", 0)
-        a_accept = va.get("acceptance_rate", 0)
-        b_accept = vb.get("acceptance_rate", 0)
-
-        # Winner is the variant with higher reply rate.
-        # If reply rates are within 2pp, use acceptance rate as tiebreaker.
-        # If both are within 2pp, declare inconclusive.
-        if abs(a_reply - b_reply) > 2:
-            winner = "A" if a_reply > b_reply else "B"
-            reason = (
-                f"Variant {winner} has higher reply rate: "
-                f"A={a_reply}% vs B={b_reply}%"
-            )
-        elif abs(a_accept - b_accept) > 3:
-            winner = "A" if a_accept > b_accept else "B"
-            reason = (
-                f"Reply rates similar (A={a_reply}%, B={b_reply}%), "
-                f"but Variant {winner} has better acceptance: "
-                f"A={a_accept}% vs B={b_accept}%"
-            )
-        else:
-            winner = "inconclusive"
-            reason = (
-                f"No significant difference: "
-                f"A={a_reply}% reply/{a_accept}% accept vs "
-                f"B={b_reply}% reply/{b_accept}% accept"
-            )
+        decided = _significant_winner(va, vb)
+        if decided is None:
+            continue  # Not significant yet, or an arm is below its minimum n
+        winner, reason, test = decided
 
         result_data = {
             "reason": reason,
             "variant_a_stats": va,
             "variant_b_stats": vb,
+            "test": test,
         }
         complete_ab_test(t["id"], winner, json.dumps(result_data))
         results.append(

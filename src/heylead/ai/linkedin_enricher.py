@@ -28,6 +28,23 @@ from .prompt_loader import get_prompt_temperature, has_prompt, render_prompt
 
 logger = logging.getLogger(__name__)
 
+# Unipile types only a Sales Navigator seat can answer. Same list as
+# heylead-api network_router.SALES_NAV_ONLY_PARAMETER_TYPES.
+SALES_NAV_ONLY_PARAMETER_TYPES = frozenset({
+    "DEPARTMENT",
+    "SALES_INDUSTRY",
+    "PERSONA",
+    "ACCOUNT_LISTS",
+    "LEAD_LISTS",
+    "TECHNOLOGIES",
+    "SAVED_ACCOUNTS",
+    "SAVED_SEARCHES",
+    "RECENT_SEARCHES",
+    "REGION",
+    "POSTAL_CODE",
+    "GROUPS",
+})
+
 # Field name → Unipile search parameter type
 _FIELD_TO_TYPE: dict[str, str] = {
     "job_titles": "JOB_TITLE",
@@ -124,9 +141,22 @@ _INDUSTRY_ALIASES: dict[str, set[str]] = {
 }
 
 
+def _seat_cannot_lookup(field_name: str, search_seat_has_sales_nav: bool | None) -> bool:
+    """True when this field needs Sales Navigator and the resolved seat has none.
+
+    None means the seat is unknown (the hosted balancer picks). False is a
+    resolved Premium-only seat: asking would 401.
+    """
+    if search_seat_has_sales_nav is not False:
+        return False
+    return _FIELD_TO_TYPE.get(field_name, "") in SALES_NAV_ONLY_PARAMETER_TYPES
+
+
 async def enrich_icp_linkedin_params(
     icp: SingleIcp,
     get_params_fn: Any,
+    *,
+    search_seat_has_sales_nav: bool | None = None,
 ) -> EnrichedIcpParams:
     """Resolve ICP field values to LinkedIn search parameter codes.
 
@@ -180,13 +210,21 @@ async def enrich_icp_linkedin_params(
         )
         _store_field(result, previous, "company_locations", enriched, failed)
 
-    # Departments
+    # Departments. Sales Navigator only: a Premium seat is not asked.
     if icp.departments and icp.departments.include:
-        enriched, failed = await _enrich_field(
-            "departments", icp.departments.include, icp.departments.exclude,
-            get_params_fn, icp_name,
-        )
-        _store_field(result, previous, "departments", enriched, failed)
+        if _seat_cannot_lookup("departments", search_seat_has_sales_nav):
+            logger.warning(
+                "Enrichment for '%s': departments skipped — the search seat "
+                "has no Sales Navigator",
+                icp_name,
+            )
+            _store_field(result, previous, "departments", EnrichedField(), True)
+        else:
+            enriched, failed = await _enrich_field(
+                "departments", icp.departments.include, icp.departments.exclude,
+                get_params_fn, icp_name,
+            )
+            _store_field(result, previous, "departments", enriched, failed)
 
     if result.failed_fields:
         logger.warning(

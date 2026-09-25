@@ -21,7 +21,9 @@ from ..constants import (
     STRATEGIST_REPLAN_VALID_DECISIONS,
 )
 from ..db.async_bridge import run_db
+from . import agent_decisions
 from .agent_commons import async_commons_tools
+from .agent_context import numbers_for
 from .coordinator import after_sibling_loop
 from ..db.queries import (
     get_campaign,
@@ -204,15 +206,17 @@ async def maybe_run_strategist_replan(
         if not trigger:
             return StrategistReplanOutcome(decision="keep", reason="no trigger")
 
+        campaign_id = str(outreach.get("campaign_id") or "")
+        numbers = await numbers_for(campaign_id, actor="strategist")
         context = build_replan_context(
             name=str(outreach.get("name") or ""),
             status=str(outreach.get("status") or ""),
             trigger=trigger,
+            numbers=numbers,
         )
         async def read_thread() -> str:
             return await run_db(_format_thread_sync, outreach_id)
 
-        campaign_id = str(outreach.get("campaign_id") or "")
         tools = {
             "read_plan": lambda: _format_plan(plan),
             "read_signals": lambda: _format_signals(signals),
@@ -243,7 +247,7 @@ async def maybe_run_strategist_replan(
             reason=result.reason,
             config=config,
         )
-        return await _apply_decision(outreach_id, plan, outreach, result, mode=mode)
+        return await _apply_decision(outreach_id, plan, outreach, result, mode=mode, numbers=numbers)
     except Exception as e:
         logger.warning("Strategist replan failed: %s", e)
         return StrategistReplanOutcome(
@@ -316,6 +320,7 @@ async def _apply_decision(
     result: AgentResult,
     *,
     mode: str,
+    numbers: dict[str, Any] | None = None,
 ) -> StrategistReplanOutcome:
     decision = result.decision if result.decision in {"keep", "revise", "hold"} else "keep"
     reason = result.reason or ("replan could not decide" if result.decision == "none" else "")
@@ -370,6 +375,13 @@ async def _apply_decision(
     else:
         summary = f"keep — {reason}" if reason else "keep"
 
+    decision_id = await run_db(
+        agent_decisions.record_decision, actor="strategist", kind=decision,
+        campaign_id=str(outreach.get("campaign_id") or ""), outreach_ids=[outreach_id],
+        applied=applied, numbers=numbers,
+    )
+    if applied:
+        await run_db(agent_decisions.stamp_rows, [outreach_id], decision_id)
     return StrategistReplanOutcome(
         decision=decision, reason=reason, applied=applied, summary=summary,
     )

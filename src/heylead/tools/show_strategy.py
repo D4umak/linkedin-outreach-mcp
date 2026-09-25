@@ -7,7 +7,17 @@ from typing import Any
 
 
 async def run_show_strategy(campaign_id: str = "") -> str:
-    """Build the strategy dashboard output."""
+    """Build the strategy dashboard output.
+
+    Hosted: the cloud runs the strategy loop (heylead-api#1211), so read it
+    there; the local tables are never written for a hosted account.
+    """
+    from .. import config
+    if config.is_backend_mode():
+        from ..services import cloud_learning
+        data = await cloud_learning.fetch_learning()
+        return cloud_learning.format_strategy(data) if data else cloud_learning.UNREACHABLE
+
     from ..services.strategy_engine import get_strategy_insights
 
     insights = await get_strategy_insights()

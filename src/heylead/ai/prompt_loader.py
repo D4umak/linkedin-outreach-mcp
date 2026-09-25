@@ -16,6 +16,7 @@ from __future__ import annotations
 from ..textutil import first_name
 from .voice_block import voice_prompt_block
 from .copywriter import rules_for
+from .copywriter import provenance as copy_provenance
 
 import json
 import logging
@@ -136,6 +137,7 @@ def render_prompt(name: str, variables: dict[str, Any]) -> str:
         FileNotFoundError: If prompt file doesn't exist
     """
     prompt_data = load_prompt(name)
+    copy_provenance.note_template(name, prompt_data)
     return _render_content(prompt_data["content"], variables)
 
 

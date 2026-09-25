@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 
 from .. import config, constants
+from ..ai.copywriter.provenance import Provenance
 from ..db import queries, signal_queries
 from ..db.async_bridge import run_db
 
@@ -1708,6 +1709,8 @@ async def sync_to_cloud(
                     # opening DM (_INVITE_NOTE_SQL); without it every synced
                     # note counts as the first message.
                     "format": msg.get("format") or "text",
+                    # Where the words came from (heylead-api#1210).
+                    **Provenance.from_row(msg).as_row(),
                 })
 
         # Engagements
@@ -3131,6 +3134,8 @@ async def pull_changes(since: int) -> dict[str, Any]:
                 format=cloud_format,
                 timestamp=int(sent_at) if sent_at else None,
                 message_id=str(msg.get("id") or "") or None,
+                # The hosted row's own provenance, never this task's draft.
+                provenance=Provenance.from_row(msg),
             )
             messages_applied += 1
             logger.debug("Saved cloud message for outreach %s", outreach_id)
