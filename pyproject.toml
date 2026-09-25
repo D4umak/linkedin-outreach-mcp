@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "heylead"
-version = "0.10.400"
-description = "MCP-native autonomous LinkedIn SDR. Your AI sales rep, one command to fill your pipeline."
+version = "0.10.401"
+description = "AI agent for LinkedIn outreach: finds the right people, writes in your voice, follows up and handles replies. From Claude Code, Cursor, any MCP client or a web dashboard."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

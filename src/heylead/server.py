@@ -21,7 +21,7 @@ from mcp.types import ToolAnnotations
 
 import os as _os
 
-from . import __version__, config, facts, tool_profiles
+from . import __version__, config, facts, tool_profiles, tool_telemetry
 from .logging_setup import setup_logging
 from .ops_log import run_traced
 
@@ -32,6 +32,15 @@ from .ops_log import run_traced
 
 _CHANGELOG = """\
 # HeyLead Changelog
+
+## v0.10.401 (2026-09-25)
+- Fix: directories stop advertising voice memos and a sales-only SDR
+- New: a queued PR hears what would park it before its turn
+- Fix: keep the restatement rule on one line
+- New: the session names a user idea's stage in notes the user can read
+- New: a won close records its deal value; crm_sync pulls closed-won deals from HubSpot
+- Fix: the flush holds its own BackendClient instead of the swappable linkedin factory
+- New: every MCP tool call on the client is a tool.called record, batched to the workspace
 
 ## v0.10.400 (2026-09-25)
 - the decision ledger lands at SCHEMA_VERSION 16
@@ -1715,7 +1724,6 @@ mcp = FastMCP(
         "    This does NOT send anything — the campaign is saved as a draft so the user\n"
         "    can review the prospects first. Show them the result, then start outreach with\n"
         "    campaign(action='launch') once they confirm. Never launch without being asked.\n"
-        "    Voice memos are OFF by default (voice_mode='text_only'). Pass voice_mode='mixed' only if the user asks for voice memos.\n"
         "    For a user's FIRST campaign, always ask for project_brief (what they are building, go-live, volume, what a vendor must confirm). A homepage or company_context paste is a fallback, not the whole brief.\n"
         "    If the user says 'existing connections', 'DM my network', 'message my connections', or similar,\n"
         "    pass connections_only='on'. This filters for 1st-degree connections only and sends DMs directly.\n"
@@ -1748,7 +1756,6 @@ mcp = FastMCP(
         "  - generate_and_send() — manually trigger a single message\n"
         "  - send_message(action='followup') to send follow-up DMs after connection accepted\n"
         "  - send_message(action='reply') to reply to prospects who have messaged you\n"
-        "  - send_message(action='voice') to send a voice memo on LinkedIn\n"
         "  - send_message(action='inmail', outreach_id='...') to InMail a non-connection (pending invite OK)\n"
         "  - send_email(to=..., subject=..., body=...) to send mail via Unipile "
         "(Gmail/Outlook). NEVER use Mail.app, osascript, or a local SMTP client.\n"
@@ -2246,8 +2253,7 @@ async def create_campaign(
         company_url: Optional LinkedIn company URL for account-based targeting.
             Searches for employees at that specific company matching the ICP.
             Example: "https://www.linkedin.com/company/google"
-        voice_mode: Voice memo mode for follow-ups and replies. "text_only"
-            (default), "mixed" (alternates text and voice), "voice_only", or "ab_test".
+        voice_mode: "text_only". Messages are text.
         connections_only: "on" to create a DM-only campaign targeting existing
             LinkedIn connections. Skips invitations and warm-up — sends DMs
             directly to people you're already connected with. Use when user says
@@ -2522,7 +2528,7 @@ async def _campaign_impl(
 # Tool: send_message (consolidated)
 # ──────────────────────────────────────────────
 
-@mcp.tool(annotations=_acts("Send a LinkedIn follow-up, reply, voice memo or InMail"))
+@mcp.tool(annotations=_acts("Send a LinkedIn follow-up, reply or InMail"))
 async def send_message(
     action: str = "followup",
     campaign_id: str = "",
@@ -2530,13 +2536,12 @@ async def send_message(
     format: str = "text",
     text: str = "",
 ) -> str:
-    """Send follow-ups, replies, voice memos, or InMail to prospects.
+    """Send follow-ups, replies, or InMail to prospects.
 
     Args:
         action: What to do:
             "followup" — Send a follow-up DM after connection accepted
             "reply"    — Reply to a prospect who has messaged you
-            "voice"    — Send a voice memo on LinkedIn
             "delete"   — Delete a recently sent message (within 60 min on LinkedIn)
             "inmail"   — Send an InMail to a NON-connection. Preconditions
                          (each fails closed with no send): prospect has a
@@ -2547,8 +2552,8 @@ async def send_message(
                          — that is the escalation path. Requires outreach_id.
         campaign_id: Which campaign to send from. Uses active if empty.
         outreach_id: Specific outreach to target. Required for inmail.
-        format: 'text' (default) or 'voice' (audio via Hume TTS). For followup/reply.
-        text: Custom text for voice memo. Auto-generates if empty.
+        format: 'text'. For followup/reply.
+        text: Custom message text. Auto-generates if empty.
             For delete: optionally pass a Unipile message_id directly.
     """
     from .tools.send_message import run_send_message
@@ -2792,12 +2797,7 @@ async def edit_campaign(
         go_live: Optional structured fact: go-live date.
         volume: Optional structured fact: volume model.
         must_confirm: Optional comma-separated questions a vendor must confirm.
-        voice_mode: Voice memo mode: "text_only", "voice_only", "mixed", or "ab_test".
-            Leave empty to keep current value.
-        voice_noise: Ambient noise type for voice memos: "office", "cafe", "street",
-            "quiet", "none", "auto". Leave empty to keep current value.
-        voice_humanize: Voice text humanization: "on" or "off".
-            Leave empty to keep current value.
+        voice_mode: "text_only". Messages are text. Leave empty to keep current value.
         enable_profile_views: View prospect profiles before following: "on" or "off".
         enable_follows: Follow prospects before inviting: "on" or "off".
         enable_endorsements: Endorse skills before inviting: "on" or "off".
@@ -2922,6 +2922,8 @@ async def _prospect_impl(
     confirm: bool = False,
     reason_code: str = "",
     reason_note: str = "",
+    deal_value: float | None = None,
+    deal_currency: str = "",
 ) -> str:
     """Manage prospects — skip, close, dismiss, view conversation, or timeline.
 
@@ -2954,6 +2956,8 @@ async def _prospect_impl(
             Only the first two are evidence about targeting; the rest are
             facts about that one person and never move a segment's ranking.
         reason_note: Free text alongside the code.
+        deal_value: What the won deal is worth (for 'close' with outcome='won').
+        deal_currency: Three-letter code, e.g. USD (defaults to the last deal's).
     """
     from .tools.prospect import run_prospect
 
@@ -2964,6 +2968,7 @@ async def _prospect_impl(
             run_prospect(
                 action, outreach_id, campaign_id, outcome, reason,
                 meeting_link, confirm, reason_code, reason_note,
+                deal_value=deal_value, deal_currency=deal_currency,
             ),
             action=action,
             outreach_id=outreach_id,
@@ -3475,8 +3480,9 @@ async def crm_sync(
     campaign_id: str = "",
     filter: str = "won",
     hubspot_api_key: str = "",
+    action: str = "push",
 ) -> str:
-    """Sync campaign contacts and deals to HubSpot CRM.
+    """Sync campaign contacts and deals with HubSpot CRM, both ways.
 
     Pushes won deals, hot leads, or all contacts to HubSpot as contacts + deals.
     Tracks sync status to avoid duplicates. Includes conversation history as notes.
@@ -3491,6 +3497,10 @@ async def crm_sync(
         filter: Which contacts to sync: "won" (default), "hot_leads", or "all".
         hubspot_api_key: Optional — your HubSpot Private App access token.
             Only needed on first use; saved for future syncs.
+        action: "push" (default) sends contacts and deals to HubSpot. "pull"
+            reads deals back for contacts already sent: a closed-won deal
+            records its amount and marks the outreach won. A pull never
+            un-wins an outreach.
     """
     from .tools.crm_sync import run_crm_sync
 
@@ -3498,7 +3508,7 @@ async def crm_sync(
     try:
         return await run_traced(
             "crm_sync",
-            run_crm_sync(campaign_id, filter, hubspot_api_key),
+            run_crm_sync(campaign_id, filter, hubspot_api_key, action),
             campaign_id=campaign_id,
         )
     except Exception as e:
@@ -4260,6 +4270,8 @@ async def prospect(
     confirm: bool = False,
     reason_code: str = "",
     reason_note: str = "",
+    deal_value: float | None = None,
+    deal_currency: str = "",
 ) -> str:
     """Skip a prospect, close one with an outcome, or dismiss it.
 
@@ -4276,6 +4288,8 @@ async def prospect(
         confirm: Required where the action cannot be undone.
         reason_code: A coded reason, for reporting.
         reason_note: A free note alongside the code.
+        deal_value: What the won deal is worth (close with outcome="won").
+        deal_currency: Three-letter code, e.g. USD. Defaults to the last deal's.
     """
     if moved := _moved("prospect", action):
         return moved
@@ -4283,6 +4297,7 @@ async def prospect(
         action=action, outreach_id=outreach_id, campaign_id=campaign_id, outcome=outcome,
         reason=reason, meeting_link=meeting_link, confirm=confirm,
         reason_code=reason_code, reason_note=reason_note,
+        deal_value=deal_value, deal_currency=deal_currency,
     )
 
 
@@ -4576,6 +4591,8 @@ TOOL_PROFILE: str = tool_profiles.profile_from_env(_os.environ)
 for _hidden in ALL_TOOL_NAMES:
     if not tool_profiles.keep(_hidden, TOOL_PROFILE):
         mcp.remove_tool(_hidden)
+
+tool_telemetry.instrument(mcp)  # every served tool call is a tool.called record (api #1204)
 
 # The instructions name every tool, in an order somebody chose. Narrow that
 # sentence to what this process serves, rather than keeping a second hand-

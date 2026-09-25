@@ -13,6 +13,7 @@ import time as _time
 from ..db import aio as db
 from ..db.async_bridge import run_db
 from ..constants import SOURCE_LABELS
+from ..services.revenue import is_won
 from ..formatter import (
     conversion_rate_display,
     format_duration,
@@ -189,7 +190,7 @@ async def run_campaign_report(
     output.append("")
 
     # ── Section 4: Won deals detail ──
-    won_deals = [o for o in outcomes.get("outcomes", []) if o["status"] == "closed_happy"]
+    won_deals = [o for o in outcomes.get("outcomes", []) if is_won(o["status"])]
     deal_timelines = {t["name"]: t for t in velocity.get("per_deal_timelines", [])}
     if won_deals:
         output.append("Won deals:")

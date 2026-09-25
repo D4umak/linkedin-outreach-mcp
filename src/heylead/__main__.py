@@ -37,6 +37,7 @@ def _parse_serve_args(args: list[str]) -> dict:
 
 USAGE = """usage: heylead [--transport stdio|sse|streamable-http] [--host H] [--port P]
        heylead init | version | reset
+       heylead config telemetry on|off|status
        heylead daemon [--install [--load] | --uninstall | --status]
 
 With no command, heylead starts the MCP server. `heylead daemon` with no
@@ -91,6 +92,19 @@ def main() -> None:
                 print(f"{k}: {v}")
         else:
             sys.exit(run_daemon())
+
+    elif cmd == "config":
+        # Only one setting has a command so far: tool-call telemetry (api #1204).
+        rest = [a.lower() for a in args[1:]]
+        if len(rest) != 2 or rest[0] != "telemetry" or rest[1] not in ("on", "off", "status"):
+            print("usage: heylead config telemetry on|off|status", file=sys.stderr)
+            sys.exit(2)
+        from . import config
+        if rest[1] != "status":
+            config.set_telemetry(rest[1] == "on")
+        state = "on" if config.telemetry_enabled() else "off"
+        print(f"Tool-call telemetry is {state}. It sends the tool name, whether it worked "
+              "and how long it took. Never what you or your prospects wrote.")
 
     elif cmd == "init":
         from . import config

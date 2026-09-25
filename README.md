@@ -1,8 +1,6 @@
 <!-- mcp-name: io.github.D4umak/heylead -->
 # HeyLead
 
-**Your AI sales rep. One command to fill your pipeline.**
-
 HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. Sign in on the web, then talk to your AI and say "find me leads."
 
 ## Use cases
@@ -216,6 +214,7 @@ Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 e
 - AI calls — routed through HeyLead's backend or your own key
 - Cloud MCP — your data is processed server-side but never shared with third parties
 - Local mode — contacts and messages stay on your machine in a local SQLite database
+- Tool-call telemetry — when you are signed in, your HeyLead workspace records each tool call: the tool, whether it worked, the error type, how long it took and the app that called it (Claude, ChatGPT, Cursor…). Never the arguments, the results, a prospect's name, a link or a message. Turn it off with `heylead config telemetry off` or `DO_NOT_TRACK=1`
 
 > **Power users:** Pass your own LLM key (Gemini/Claude/OpenAI) during setup to use your own AI. Completely optional.
 

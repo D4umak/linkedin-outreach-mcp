@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://api.hubapi.com"
 _TIMEOUT = 30.0
 _EXISTING_ID = re.compile(r"Existing ID:\s*(\d+)", re.I)
+# hs_is_closed_won is HubSpot's own flag, true for the won stage of any
+# pipeline; dealstage 'closedwon' is the default pipeline's won stage.
+DEAL_PROPERTIES = (
+    "dealname", "dealstage", "amount", "deal_currency_code", "closedate", "hs_is_closed_won",
+)
 
 
 class HubSpotClient:
@@ -176,6 +181,32 @@ class HubSpotClient:
 
         logger.info("Created HubSpot deal %s: %s", deal_id, deal_name)
         return deal_id
+
+    # ── Deals read-back (crm_sync action='pull', heylead-api#1212) ──
+
+    async def get_contact_deal_ids(self, contact_id: str) -> list[str]:
+        """Ids of the deals associated with a HubSpot contact."""
+        result = await self._request(
+            "GET", f"/crm/v3/objects/contacts/{contact_id}/associations/deals"
+        )
+        return [str(r.get("id") or r.get("toObjectId") or "") for r in result.get("results", [])
+                if r.get("id") or r.get("toObjectId")]
+
+    async def get_deals(self, deal_ids: list[str]) -> list[dict[str, Any]]:
+        """Batch-read deals with the properties a pull needs."""
+        ids = [d for d in dict.fromkeys(deal_ids) if d]
+        out: list[dict[str, Any]] = []
+        for start in range(0, len(ids), 100):
+            result = await self._request(
+                "POST",
+                "/crm/v3/objects/deals/batch/read",
+                {
+                    "properties": list(DEAL_PROPERTIES),
+                    "inputs": [{"id": d} for d in ids[start:start + 100]],
+                },
+            )
+            out.extend(result.get("results", []))
+        return out
 
     # ── Notes/Activities ──
 

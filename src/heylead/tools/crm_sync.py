@@ -1,7 +1,9 @@
-"""Tool: crm_sync — Sync campaign contacts and deals to HubSpot CRM.
+"""Tool: crm_sync — Sync campaign contacts and deals with HubSpot CRM.
 
-Pushes won deals, hot leads, or all contacts to HubSpot as contacts + deals.
-Tracks sync status to avoid duplicates.
+action='push' (the default) sends won deals, hot leads, or all contacts to
+HubSpot as contacts + deals, tracking what was sent to avoid duplicates.
+action='pull' reads deals back for mapped contacts: a closed-won deal records
+its amount and marks the outreach won (services/crm_pull.py, heylead-api#1212).
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from ..db.queries import (
 )
 from ..formatter import table
 from ..db.async_bridge import run_db
+from ..services import revenue
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +33,20 @@ async def run_crm_sync(
     campaign_id: str = "",
     filter: str = "won",
     hubspot_api_key: str = "",
+    action: str = "push",
 ) -> str:
-    """Sync campaign contacts/deals to HubSpot CRM.
+    """Sync campaign contacts/deals with HubSpot CRM.
 
     Args:
-        campaign_id: Campaign to sync. Uses the most recent if empty.
-        filter: Which contacts to sync: "won" (default), "hot_leads", or "all".
+        campaign_id: Campaign to sync. Uses the most recent if empty (push);
+            every campaign if empty (pull).
+        filter: Which contacts to push: "won" (default), "hot_leads", or "all".
         hubspot_api_key: Optional — override the saved API key.
+        action: "push" (default) or "pull".
     """
+    action = (action or "push").strip().lower()
+    if action not in ("push", "pull"):
+        return f"Unknown action '{action}'. Use 'push' or 'pull'."
     from ..services.hubspot_service import HubSpotClient, HubSpotError
 
     # Check setup
@@ -62,6 +71,9 @@ async def run_crm_sync(
     if hubspot_api_key:
         from ..db.queries import save_setting
         await run_db(save_setting, "hubspot_api_key", hubspot_api_key)
+
+    if action == "pull":
+        return await _run_pull(api_key, campaign_id)
 
     # Resolve campaign
     campaign, err = await run_db(find_active_campaign, campaign_id)
@@ -142,12 +154,15 @@ async def run_crm_sync(
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-            is_won = outreach.get("status", "") == "closed_happy" if "status" in outreach else bool(outcome)
-            if is_won or outcome.get("reason"):
+            won = revenue.is_won(outreach["status"]) if "status" in outreach else bool(outcome)
+            if won or outcome.get("reason"):
                 deal_name = f"{name} — {campaign_name}"  # nosemgrep: person-line-without-link -- a HubSpot deal title (person + campaign), not a chat line
+                stored = await run_db(revenue.get_deal, outreach["outreach_id"]) or {}
+                amount = stored.get("deal_value")
                 hs_deal_id = await hs.create_deal(
                     deal_name=deal_name,
-                    stage="closedwon" if is_won else "qualifiedtobuy",
+                    stage="closedwon" if won else "qualifiedtobuy",
+                    amount=f"{amount:.2f}" if won and amount is not None else "",
                     contact_id=hs_contact_id,
                 )
                 synced_deals += 1
@@ -210,4 +225,51 @@ async def run_crm_sync(
     parts.append("")
     parts.append("Contacts are now in HubSpot with LinkedIn data and conversation history.")
 
+    return "\n".join(parts)
+
+
+async def _run_pull(api_key: str, campaign_id: str = "") -> str:
+    """crm_sync(action='pull'): read closed-won deals and their amounts back."""
+    from ..services.crm_pull import pull_deals
+    from ..services.hubspot_service import HubSpotClient
+
+    hs = HubSpotClient(api_key)
+    try:
+        if not await hs.test_connection():
+            return "HubSpot API key is invalid. Check your token and try again."
+    except Exception as e:
+        return f"HubSpot connection failed: {e}"
+
+    summary = await pull_deals(hs, campaign_id)
+    if not summary["checked"]:
+        return (
+            "No HubSpot contacts to read yet.\n\n"
+            "Push first with crm_sync(action='push'); a pull reads the deals of "
+            "contacts HeyLead has already sent to HubSpot."
+        )
+    parts = [
+        "## HubSpot pull",
+        f"Checked {summary['checked']} contacts: {summary['marked_won']} newly won, "
+        f"{summary['amount_updated']} amounts updated, {summary['open']} with no closed-won deal.",
+    ]
+    if summary["changed"]:
+        rows = [
+            [
+                str(c["name"])[:25],
+                revenue.format_amount(float(c["amount"]), c["currency"]) if c["amount"] is not None else "no amount",
+                "marked won" if c["marked_won"] else "amount updated",
+            ]
+            for c in summary["changed"]
+        ]
+        parts += ["", table(["Name", "Deal", "Change"], rows)]
+    totals = await run_db(revenue.revenue_by_currency, campaign_id)
+    if totals:
+        parts += ["", "Revenue won: " + ", ".join(
+            revenue.format_amount(v, k) for k, v in sorted(totals.items(), key=lambda kv: -kv[1])
+        )]
+    if summary["cloud_synced"]:
+        parts.append(f"Sent {summary['cloud_synced']} deals to your hosted workspace.")
+    if summary["errors"]:
+        parts += ["", f"{len(summary['errors'])} errors:"] + [f"  - {e}" for e in summary["errors"][:5]]
+    parts += ["", "An open or reopened deal never un-wins an outreach."]
     return "\n".join(parts)

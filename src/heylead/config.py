@@ -74,7 +74,9 @@ _DEFAULT_CONFIG: dict[str, Any] = {
     "unipile_api_url": "",
     "unipile_api_key": "",
     "tier": constants.TIER_FREE,
-    "telemetry": False,
+    # Tool-call telemetry (api #1204): "on" unless the user ran
+    # `heylead config telemetry off`. See telemetry_enabled().
+    "telemetry": "on",
     "scheduler_enabled": False,
     "scheduler_always_on": False,
     # Hosted default is cloud. Unset reads as cloud in backend mode so every
@@ -307,6 +309,32 @@ def get_active_org_id() -> str:
 def set_active_org_id(org_id: str) -> None:
     cfg = load_config()
     cfg["active_org_id"] = org_id.strip()
+    save_config(cfg)
+
+
+_TELEMETRY_OFF = frozenset({"off", "false", "0", "no"})
+
+
+def telemetry_enabled() -> bool:
+    """Whether tool-call telemetry (names, outcome, latency) may be sent.
+
+    Off when the config says "off" (``heylead config telemetry off``) or
+    ``DO_NOT_TRACK`` is set. A boolean ``false`` is the pre-#1204 default
+    that every saved config carried and nothing ever read or set, so it is
+    not a choice anybody made and reads as the default, on.
+    """
+    if str(os.environ.get("DO_NOT_TRACK") or "").strip() not in ("", "0"):
+        return False
+    value = load_config().get("telemetry", "on")
+    if isinstance(value, bool):
+        return True
+    return str(value).strip().lower() not in _TELEMETRY_OFF
+
+
+def set_telemetry(enabled: bool) -> None:
+    """Record the user's telemetry choice as "on" or "off"."""
+    cfg = load_config()
+    cfg["telemetry"] = "on" if enabled else "off"
     save_config(cfg)
 
 

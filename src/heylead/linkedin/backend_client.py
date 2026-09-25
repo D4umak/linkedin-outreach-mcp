@@ -5831,3 +5831,18 @@ class BackendClient:
             raise UnipileAuthError("Backend JWT expired or invalid.")
         resp.raise_for_status()
         return resp.json()
+
+    # ── Tool-call telemetry (api #1204) ──
+
+    async def post_tool_calls(self, calls: list[dict[str, Any]]) -> int:
+        """Post up to 50 ``tool.called`` records; returns the HTTP status.
+
+        Only ``heylead.tool_telemetry`` calls this, with records it built from
+        names, outcome and latency. Never retried and never raised: telemetry
+        must not cost a tool call anything.
+        """
+        url = f"{self.base_url}/api/v1/product-events/tool-calls"
+        resp = await self._post(
+            url, json={"calls": calls}, headers=self._headers(), timeout=10.0,
+        )
+        return resp.status_code

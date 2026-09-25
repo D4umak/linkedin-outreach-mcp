@@ -20,6 +20,8 @@ async def run_prospect(
     confirm: bool = False,
     reason_code: str = "",
     reason_note: str = "",
+    deal_value: float | None = None,
+    deal_currency: str = "",
 ) -> str:
     """Manage a prospect's outreach status.
 
@@ -80,6 +82,8 @@ async def run_prospect(
             meeting_link=meeting_link,
             reason_code=reason_code,
             reason_note=reason_note,
+            deal_value=deal_value,
+            deal_currency=deal_currency,
         )
 
     if action == "dismiss":

@@ -21,6 +21,7 @@ from ..db.queries import (
 )
 from ..formatter import outcome_icon, outcome_label
 from ..db.async_bridge import run_db
+from ..services import revenue
 from ..services.cloud_sync import sync_outreach_close
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,8 @@ async def run_close_outreach(
     meeting_link: str = "",
     reason_code: str = "",
     reason_note: str = "",
+    deal_value: float | str | None = None,
+    deal_currency: str = "",
 ) -> str:
     """Close an outreach with outcome tracking.
 
@@ -54,6 +57,10 @@ async def run_close_outreach(
             evidence about targeting; the rest are facts about that one
             person and never move a segment's ranking.
         reason_note: Free text alongside the code.
+        deal_value: What the won deal is worth (for 'won'). Summed per
+            currency into the campaign's revenue; never converted.
+        deal_currency: Three-letter code, e.g. USD. Defaults to the currency
+            of the last deal recorded here, else USD.
     """
 
     # ── Pre-checks ──
@@ -75,6 +82,10 @@ async def run_close_outreach(
         )
 
     new_status = _OUTCOME_MAP[outcome]
+    try:
+        amount = revenue.parse_deal_value(deal_value)
+    except ValueError as e:
+        return f"Invalid deal_value: {e}"
 
     # ── Resolve outreach ──
     if outreach_id:
@@ -136,6 +147,11 @@ async def run_close_outreach(
         status=new_status,
         outcome_json=json.dumps(outcome_data),
         next_action=None,)
+    deal_currency_stored = ""
+    if revenue.is_won(new_status):
+        deal_currency_stored = await run_db(
+            revenue.stamp_won, outreach_id, amount, deal_currency,
+        )
 
     await run_db(log_action, "outreach_closed",
         outreach_id=outreach_id,
@@ -154,6 +170,12 @@ async def run_close_outreach(
     )
     if not synced:
         logger.warning("Could not sync close for outreach %s to backend", outreach_id)
+    elif amount is not None and revenue.is_won(new_status):
+        from ..services.crm_pull import push_deal_to_cloud
+        await push_deal_to_cloud(
+            outreach_id, closed_won=True, deal_value=amount,
+            deal_currency=deal_currency_stored, closed_at=None, source="close",
+        )
 
     # ── Archive chat on LinkedIn (non-blocking) ──
     try:
@@ -212,6 +234,7 @@ async def run_close_outreach(
                     hs_deal_id = await hs.create_deal(
                         deal_name=deal_name,
                         stage="closedwon",
+                        amount=f"{amount:.2f}" if amount is not None else "",
                         contact_id=hs_contact_id,
                     )
                     # Add conversation notes
@@ -257,6 +280,8 @@ async def run_close_outreach(
         output.append(f"   Reason: {reason}")
     if meeting_link and outcome == "won":
         output.append(f"   Meeting: {meeting_link}")
+    if amount is not None and revenue.is_won(new_status):
+        output.append(f"   Deal: {revenue.format_amount(amount, deal_currency_stored)}")
 
     if hubspot_synced:
         output.append("")
