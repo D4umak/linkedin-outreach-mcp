@@ -1178,7 +1178,7 @@ async def _handle_progress(account_id: str) -> str:
     baseline = await run_db(load_brand_baseline)
     plan = await run_db(load_brand_plan)
 
-    if not baseline or not plan:
+    if not plan:
         return (
             "No brand strategy in progress.\n\n"
             'Run brand_strategy(action="analyze") first, then brand_strategy(action="plan").'
@@ -1198,6 +1198,17 @@ async def _handle_progress(account_id: str) -> str:
     campaign_stats = await _aggregate_campaign_stats()
     hs = await _compute_current_health(ssi_data, campaign_stats)
 
+    # A plan the cloud drafted arrives without a baseline: only a local "plan"
+    # records one, and the brand keys are per workspace since 25 Sep 2026, so
+    # the old machine-wide baseline is not this workspace's. Record one now
+    # from the metrics just read, rather than answer "no strategy" beside a
+    # plan (outcome D4umak/heylead-api#1440).
+    recorded_now = not baseline
+    if recorded_now:
+        profile = await run_db(get_setting, "profile", {})
+        baseline = capture_baseline(profile or {}, ssi_data, hs.total, campaign_stats.get("acceptance_rate", 0))
+        await run_db(save_brand_baseline, baseline)
+
     progress = await run_db(
         compute_progress,
         baseline,
@@ -1208,7 +1219,13 @@ async def _handle_progress(account_id: str) -> str:
         ssi_available=ssi_available,
     )
 
-    return await run_db(_format_progress, progress, plan)
+    report = await run_db(_format_progress, progress, plan)
+    if recorded_now:
+        report = (
+            "Baseline recorded today: this plan came without one, so the before and "
+            "after columns start from now.\n\n" + report
+        )
+    return report
 
 
 def _format_progress(progress: dict[str, Any], plan: dict[str, Any]) -> str:

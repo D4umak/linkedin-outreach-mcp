@@ -162,7 +162,15 @@ async def _handle_status(client: Any) -> str:
     lines.append(f"**Active accounts:** {data.get('active_accounts', 0)}/{data.get('total_accounts', 0)}")
     lines.append(f"**Healthy:** {data.get('healthy_accounts', 0)}")
     lines.append(f"**Total 1st-degree connections:** {data.get('total_connections', 0):,}")
-    lines.append(f"**API usage today:** {data.get('global_usage_today', 0)}/{data.get('global_daily_cap', 500)}")
+    # The pool's daily cap is on profile lookups; the all-calls sum also holds
+    # campaign searches and message reads, which it does not count. Printed
+    # as "N/500" it read 664/500 on 25 Sep 2026 (D4umak/heylead-api#1487).
+    # A backend that sends no lookup count gets no cap printed at all.
+    if "global_lookups_today" in data:
+        lines.append(
+            f"**Profile lookups today:** {data.get('global_lookups_today', 0)}/{data.get('global_lookup_cap', 500)}"
+        )
+    lines.append(f"**Pool calls today (all kinds):** {data.get('global_usage_today', 0)}")
 
     # Three states, not two. `my_participation` is the only membership fact the
     # client is ever handed, and an absent key is not a "no" — reading it as one

@@ -33,6 +33,12 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.403 (2026-09-26)
+- Fix: progress for a plan that came from the cloud
+- Fix: the status line counts lookups against the cap, and calls apart
+- a step says whether you act, even with an empty note
+- the application matches production and the current submission rules
+
 ## v0.10.402 (2026-09-25)
 - Fix: the campaign plan says follow-ups are off when they are, lists only the warm-up touches that are on, and no longer promises to leave existing connections alone when the campaign includes them (#1414)
 - Fix: show_status and scheduler diagnostics quote the follow-up count the plan quotes (the tier-capped setting, or off), and a stored "off" switch shows as disabled (#1414)
