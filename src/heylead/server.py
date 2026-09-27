@@ -33,6 +33,11 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.404 (2026-09-27)
+- New: HeyLead installs into Claude as one plugin, the hosted connector plus seven skills
+- New: voice memos are off for everyone: text only in every tool, the planner and the senders
+- New: the first message a person receives from a self-hosted campaign says an AI assistant helped send it
+
 ## v0.10.403 (2026-09-26)
 - Fix: progress for a plan that came from the cloud
 - Fix: the status line counts lookups against the cap, and calls apart

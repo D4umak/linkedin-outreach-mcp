@@ -60,7 +60,8 @@ _HUMAN_OWNED_STATUSES = frozenset({
     "skipped", "opted_out", "closed_happy", "closed_unhappy",
 })
 _AUTONOMOUS_TOUCH_ACTIONS = frozenset({
-    "followup", "send_dm", "invite", "inmail", "email", "voice_memo",
+    "followup", "send_dm", "invite", "inmail", "email",
+    "voice_memo",  # plans written before voice memos were turned off (heylead-api #1527)
     "profile_view", "follow", "endorse", "engage_comment", "engage_react",
 })
 

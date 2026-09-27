@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "heylead": {
+      "type": "http",
+      "url": "https://heylead.dev/mcp"
+    }
+  }
+}

@@ -2248,61 +2248,16 @@ class UnipileClient:
         audio_path: str,
         text: str = "",
     ) -> dict[str, Any]:
-        """Send a voice message in an existing LinkedIn chat via multipart upload.
+        """Refuse: voice memos are off for every user (heylead-api #1527).
 
-        Args:
-            account_id: The Unipile account ID.
-            chat_id: The chat/conversation ID.
-            audio_path: Local path to the MP3 audio file.
-            text: Optional accompanying text message.
-
-        Returns:
-            {"success": bool, "error": str}
+        This and ``send_new_voice_message`` were how this machine handed
+        LinkedIn a voice note. They now refuse without a request, so a caller
+        that still asks for audio falls back to text.
         """
-        result: dict[str, Any] = {"success": False, "error": ""}
-        url = f"{self.base_url}/api/v1/chats/{chat_id}/messages"
-        form_data = {"account_id": account_id}
-        if text:
-            form_data["text"] = text
-        try:
-            with open(audio_path, "rb") as f:
-                files = {"voice_message": ("voice.mp3", f, "audio/mpeg")}
-                resp = await self._retry_request(
-                    "POST", url, data=form_data, files=files, no_retry=True,
-                )
-            if resp.status_code in (200, 201):
-                result["success"] = True
-                try:
-                    body = resp.json()
-                    result["message_id"] = body.get("message_id") or body.get("id") or ""
-                except Exception:
-                    pass
-            elif resp.status_code in (401, 403):
-                result.update(_classify_http_auth_error(resp.status_code, resp.text[:500]))
-            elif resp.status_code == 429:
-                retry_after = resp.headers.get("Retry-After", "")
-                wait_msg = f" Retry after {retry_after}s." if retry_after else ""
-                result["error"] = f"Rate limited by LinkedIn.{wait_msg}"
-                result["blocked"] = True
-                if retry_after:
-                    try:
-                        result["retry_after_seconds"] = int(retry_after)
-                    except ValueError:
-                        pass
-            else:
-                body = resp.text[:200]
-                result["error"] = f"Unipile returned {resp.status_code}: {body}"
-        except FileNotFoundError:
-            result["error"] = f"Audio file not found: {audio_path}"
-        except httpx.TimeoutException:
-            result["error"] = "Request timed out after retries."
-        except Exception as e:
-            result["error"] = f"Voice send failed: {e}"
-        if result.get("success"):
-            logger.info("send_voice_message: success chat_id=%s", chat_id)
-        elif result.get("error"):
-            logger.warning("send_voice_message: %s chat_id=%s", result["error"], chat_id)
-        return result
+        from ..constants import VOICE_MEMOS_OFF
+
+        logger.warning("send_voice_message refused: voice memos are off (chat_id=%s)", chat_id)
+        return {"success": False, "error": VOICE_MEMOS_OFF}
 
     async def send_new_voice_message(
         self,
@@ -2311,64 +2266,11 @@ class UnipileClient:
         audio_path: str,
         text: str = "",
     ) -> dict[str, Any]:
-        """Start a new DM with a voice message via multipart upload.
+        """Refuse: voice memos are off for every user. See ``send_voice_message``."""
+        from ..constants import VOICE_MEMOS_OFF
 
-        Creates a new chat via POST /api/v1/chats and sends a voice note.
-        Use when no existing chat exists (e.g., first follow-up after connection).
-
-        Args:
-            account_id: The Unipile account ID.
-            provider_id: LinkedIn provider_id of the recipient.
-            audio_path: Local path to the MP3 audio file.
-            text: Optional accompanying text message.
-
-        Returns:
-            {"success": bool, "error": str, "chat_id": str}
-        """
-        result: dict[str, Any] = {"success": False, "error": "", "chat_id": ""}
-        url = f"{self.base_url}/api/v1/chats"
-        form_data = {
-            "account_id": account_id,
-            "attendees_ids": provider_id,
-        }
-        if text:
-            form_data["text"] = text
-        try:
-            with open(audio_path, "rb") as f:
-                files = {"voice_message": ("voice.mp3", f, "audio/mpeg")}
-                resp = await self._retry_request(
-                    "POST", url, data=form_data, files=files, no_retry=True,
-                )
-            if resp.status_code in (200, 201):
-                data = resp.json()
-                result["success"] = True
-                result["chat_id"] = data.get("chat_id") or data.get("id") or ""
-            elif resp.status_code in (401, 403):
-                result.update(_classify_http_auth_error(resp.status_code, resp.text[:500]))
-            elif resp.status_code == 429:
-                retry_after = resp.headers.get("Retry-After", "")
-                wait_msg = f" Retry after {retry_after}s." if retry_after else ""
-                result["error"] = f"Rate limited by LinkedIn.{wait_msg}"
-                result["blocked"] = True
-                if retry_after:
-                    try:
-                        result["retry_after_seconds"] = int(retry_after)
-                    except ValueError:
-                        pass
-            else:
-                body = resp.text[:200]
-                result["error"] = f"Unipile returned {resp.status_code}: {body}"
-        except FileNotFoundError:
-            result["error"] = f"Audio file not found: {audio_path}"
-        except httpx.TimeoutException:
-            result["error"] = "Request timed out after retries."
-        except Exception as e:
-            result["error"] = f"Send new voice message failed: {e}"
-        if result.get("success"):
-            logger.info("send_new_voice_message: success provider_id=%s", provider_id)
-        elif result.get("error"):
-            logger.warning("send_new_voice_message: %s provider_id=%s", result["error"], provider_id)
-        return result
+        logger.warning("send_new_voice_message refused: voice memos are off (provider_id=%s)", provider_id)
+        return {"success": False, "error": VOICE_MEMOS_OFF, "chat_id": ""}
 
     async def get_chat_messages(
         self,

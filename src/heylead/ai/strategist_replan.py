@@ -23,7 +23,7 @@ Decisions:
 - none: you cannot decide
 
 remaining_json is a JSON array of objects: action_type, timing_preference, rationale.
-Valid action_type values: profile_view, follow, endorse, engage_comment, engage_react, invite, inmail, send_dm, followup, voice_memo, email, skip_today.
+Valid action_type values: profile_view, follow, endorse, engage_comment, engage_react, invite, inmail, send_dm, followup, email, skip_today.
 Empty remaining_json on revise means skip the rest of the day.
 Never re-queue an action that already executed. Max 3 actions today including ones already done.
 If the status is a live human conversation (replied, hot_lead), leftover must be skip_today."""

@@ -1,6 +1,6 @@
 """Tool: edit_campaign — Edit campaign settings after creation.
 
-Allows changing the campaign name, mode, voice settings, warm-up sequence,
+Allows changing the campaign name, mode, warm-up sequence,
 follow-up cadence, engagement behavior, and timing preferences.
 """
 
@@ -10,6 +10,7 @@ import json
 import logging
 
 from ..config import is_backend_mode
+from ..constants import VALID_VOICE_MODES, VOICE_MEMOS_OFF
 from ..db import aio as db
 from ..services.cloud_sync import sync_campaign_settings
 
@@ -107,9 +108,8 @@ async def run_edit_campaign(
         go_live: Optional structured fact: go-live date.
         volume: Optional structured fact: volume model.
         must_confirm: Optional comma-separated list of questions a vendor must confirm.
-        voice_mode: Voice memo mode: "text_only", "voice_only", "mixed", or "ab_test".
-        voice_noise: Ambient noise type: "office", "cafe", "street", "quiet", "none", "auto".
-        voice_humanize: Voice text humanization: "on" or "off".
+        voice_mode: Only "text_only". Voice memos are off; any other value,
+            and any voice_noise or voice_humanize, is refused.
         open_to_work_mode: OTW badge control: "off", "on_for_inbound", "off_for_outbound".
         enable_follows: Follow prospects before inviting: "on" or "off".
         enable_endorsements: Endorse skills before inviting: "on" or "off".
@@ -162,6 +162,11 @@ async def run_edit_campaign(
             "observe". Empty keeps the current value.
     """
 
+    # Voice memos are off for every user (heylead-api #1527): refused before
+    # any read, so a voice setting never half-applies.
+    if (voice_mode and voice_mode not in VALID_VOICE_MODES) or voice_noise or voice_humanize:
+        return VOICE_MEMOS_OFF
+
     # ── Pre-checks ──
     setup_done = await db.get_setting("setup_complete", False)
     if not setup_done:
@@ -174,7 +179,6 @@ async def run_edit_campaign(
         offerings, case_studies, social_proofs, campaign_preferences,
         project_brief, product, go_live, volume, must_confirm,
     ])
-    has_voice_settings = any([voice_noise, voice_humanize])
     has_toggle_settings = any([
         enable_follows, enable_endorsements, enable_engagements, enable_followups,
         enable_auto_replies, enable_invitations, enable_discovery,
@@ -201,7 +205,7 @@ async def run_edit_campaign(
 
     has_any = (
         name or mode or booking_link or voice_mode
-        or has_context_fields or has_voice_settings or open_to_work_mode
+        or has_context_fields or open_to_work_mode
         or has_toggle_settings or has_engagement_settings
         or has_followup_settings or has_invite_settings or has_inmail_settings
         or has_timing_settings or campaign_intent or wanted_type or goal.strip()
@@ -220,9 +224,6 @@ async def run_edit_campaign(
             "  campaign_intent: sell, buy, partner, or recruit\n"
             "  campaign_type: outbound or job_search\n"
             "  goal: sell, job_search, hire, partner, buy, or research\n"
-            "  voice_mode: text_only, voice_only, mixed, or ab_test\n"
-            "  voice_noise: office, cafe, street, quiet, none, auto\n"
-            "  voice_humanize: on or off\n"
             "\n"
             "  Warm-up sequence:\n"
             "  enable_follows: on or off\n"
@@ -270,31 +271,6 @@ async def run_edit_campaign(
         return (
             f"Invalid mode: '{mode}'\n\n"
             "Must be 'copilot' or 'autopilot'."
-        )
-
-    # ── Validate voice_mode ──
-    if voice_mode:
-        from ..constants import VALID_VOICE_MODES
-        if voice_mode not in VALID_VOICE_MODES:
-            return (
-                f"Invalid voice_mode: '{voice_mode}'\n\n"
-                "Must be one of: text_only, voice_only, mixed, ab_test"
-            )
-
-    # ── Validate voice_noise ──
-    if voice_noise:
-        from ..constants import VALID_NOISE_TYPES
-        if voice_noise not in VALID_NOISE_TYPES:
-            return (
-                f"Invalid voice_noise: '{voice_noise}'\n\n"
-                "Must be one of: office, cafe, street, quiet, none, auto"
-            )
-
-    # ── Validate voice_humanize ──
-    if voice_humanize and voice_humanize not in ("on", "off"):
-        return (
-            f"Invalid voice_humanize: '{voice_humanize}'\n\n"
-            "Must be 'on' or 'off'."
         )
 
     # ── Validate on/off toggles ──
@@ -435,19 +411,6 @@ async def run_edit_campaign(
         if voice_mode != old_voice:
             config["voice_mode"] = voice_mode
             change_descriptions.append(f"Voice mode: {old_voice} -> {voice_mode}")
-
-    if voice_noise:
-        old_noise = config.get("voice_noise_type", "auto")
-        if voice_noise != old_noise:
-            config["voice_noise_type"] = voice_noise
-            change_descriptions.append(f"Voice noise: {old_noise} -> {voice_noise}")
-
-    if voice_humanize:
-        humanize_bool = voice_humanize == "on"
-        old_humanize = config.get("voice_humanize", True)
-        if humanize_bool != old_humanize:
-            config["voice_humanize"] = humanize_bool
-            change_descriptions.append(f"Voice humanize: {'on' if old_humanize else 'off'} -> {voice_humanize}")
 
     if open_to_work_mode:
         valid_otw = {"off", "on_for_inbound", "off_for_outbound"}
@@ -828,10 +791,6 @@ async def run_edit_campaign(
         sync_settings["active_days"] = active_days
     if voice_mode:
         sync_settings["voice_mode"] = voice_mode
-    if voice_noise:
-        sync_settings["voice_noise"] = voice_noise
-    if voice_humanize:
-        sync_settings["voice_humanize"] = voice_humanize
     if wanted_type:
         # Already validated and normalised above.
         sync_settings["campaign_type"] = wanted_type

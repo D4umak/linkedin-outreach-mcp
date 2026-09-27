@@ -1457,7 +1457,6 @@ STRATEGIST_AVAILABLE_ACTIONS = frozenset({
     "inmail",
     "send_dm",
     "followup",
-    "voice_memo",
     "email",
     "skip_today",
 })
@@ -1480,15 +1479,18 @@ VOICE_MEMO_MAX_TEXT_CHARS = 500           # Keep voice messages concise
 VOICE_MEMO_MAX_DURATION_SECONDS = 60     # LinkedIn voice message limit
 VOICE_MEMO_DIR = "voice_memos"          # Subdir under ~/.heylead/
 
-# Voice mode options for campaigns
-VOICE_MODE_TEXT_ONLY = "text_only"       # Default: all messages as text
-VOICE_MODE_VOICE_ONLY = "voice_only"     # All follow-ups/replies as voice (text fallback)
-VOICE_MODE_MIXED = "mixed"               # Alternate between text and voice
-VOICE_MODE_AB_TEST = "ab_test"           # A/B test voice vs text
-VALID_VOICE_MODES = frozenset({
-    VOICE_MODE_TEXT_ONLY, VOICE_MODE_VOICE_ONLY,
-    VOICE_MODE_MIXED, VOICE_MODE_AB_TEST,
-})
+# Voice mode options for campaigns. Voice memos are off for every user
+# (heylead-api #1527, 26 Sep 2026): text_only is the only mode a tool accepts.
+# The other names stay so campaigns stored before then still read cleanly.
+VOICE_MODE_TEXT_ONLY = "text_only"       # All messages as text
+VOICE_MODE_VOICE_ONLY = "voice_only"     # Retired 26 Sep 2026
+VOICE_MODE_MIXED = "mixed"               # Retired 26 Sep 2026
+VOICE_MODE_AB_TEST = "ab_test"           # Retired 26 Sep 2026
+VALID_VOICE_MODES = frozenset({VOICE_MODE_TEXT_ONLY})
+VOICE_MEMOS_OFF = (
+    "Voice memos are off in HeyLead: prospects recognise them as AI, so every "
+    "message is sent as text. voice_mode accepts only 'text_only'."
+)
 
 # Voice Memo Enhancement (v0.10)
 VALID_NOISE_TYPES = frozenset({"office", "cafe", "street", "quiet", "none", "auto"})

@@ -176,70 +176,13 @@ def format_experiment_report(analysis: dict[str, Any]) -> str:
 def get_voice_format_for_outreach(
     campaign_id: str, outreach_id: str, planned_format: str | None = None,
 ) -> str:
-    """Determine the message format (text/voice) for an outreach.
+    """Always "text": voice memos are off for every user (heylead-api #1527).
 
-    The campaign's voice_mode is the user's explicit choice and bounds the
-    answer: text_only and voice_only are absolute. Inside "mixed" the daily
-    planner's request (``planned_format``) wins when given; otherwise we
-    alternate against the format of the last DM that was *actually sent*,
-    so a voice attempt that fell back to text is followed by voice, not by
-    a second text. "ab_test" uses the existing variant assignment.
-    Returns "text" or "voice".
+    It used to honour a campaign's voice_mode ("voice_only", "mixed",
+    "ab_test") and the planner's voice_memo requests. Campaigns stored before
+    26 Sep 2026 can still carry those modes; they now send text.
     """
-    import json as _json
-
-    from ..db.queries import get_campaign
-
-    campaign = get_campaign(campaign_id)
-    if not campaign:
-        return "text"
-
-    config = {}
-    try:
-        config = _json.loads(campaign.get("config_json", "{}") or "{}")
-    except (_json.JSONDecodeError, TypeError):
-        pass
-
-    voice_mode = config.get("voice_mode", "text_only")
-
-    if voice_mode == "text_only":
-        return "text"
-    if voice_mode == "voice_only":
-        return "voice"
-    if voice_mode == "mixed":
-        if planned_format in ("text", "voice"):
-            return planned_format
-        last = _last_sent_dm_format(outreach_id)
-        if last is None:
-            return "text"  # first DM in the thread is text
-        return "text" if last == "voice" else "voice"
-    if voice_mode == "ab_test":
-        # Use existing A/B variant assignment: A=text, B=voice
-        from ..db.queries import get_outreach
-
-        outreach = get_outreach(outreach_id)
-        variant = (outreach.get("variant") or "A") if outreach else "A"
-        return "voice" if variant == "B" else "text"
     return "text"
-
-
-def _last_sent_dm_format(outreach_id: str) -> str | None:
-    """Format of the most recent SDR message on this outreach, or None."""
-    from ..db.schema import get_db
-
-    db = get_db()
-    try:
-        row = db.execute(
-            """SELECT format FROM messages
-               WHERE outreach_id = ? AND role = 'sdr'
-               ORDER BY timestamp DESC, rowid DESC LIMIT 1""",
-            (outreach_id,),
-        ).fetchone()
-    finally:
-        db.close()
-    if not row:
-        return None
-    return "voice" if (row["format"] or "text") == "voice" else "text"
 
 
 def _significant_winner(

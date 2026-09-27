@@ -31,6 +31,7 @@ from ..constants import (
     TIER_PRO,
     VALID_CAMPAIGN_TYPES,
     VALID_VOICE_MODES,
+    VOICE_MEMOS_OFF,
     VOICE_MODE_TEXT_ONLY,
 )
 from ..db.queries import (
@@ -139,7 +140,7 @@ def build_campaign_config(
         "target_description": target_description,
         "prospect_count": prospect_count,
         "booking_link": "",
-        "voice_mode": voice_mode,
+        "voice_mode": VOICE_MODE_TEXT_ONLY,  # voice memos are off (heylead-api #1527)
         "voice_noise_type": DEFAULT_NOISE_TYPE,
         "voice_humanize": DEFAULT_VOICE_HUMANIZE,
         # Warm-up sequence toggles
@@ -225,8 +226,8 @@ async def run_create_campaign(
         company_url: Optional LinkedIn company URL for account-based targeting.
             When provided, searches for employees at that specific company matching
             the ICP title filters. Example: "https://www.linkedin.com/company/google"
-        voice_mode: Voice memo mode for follow-ups/replies. "text_only"
-            (default), "mixed" (alternates text and voice), "voice_only", or "ab_test".
+        voice_mode: Always "text_only": voice memos are off, and any other
+            value is refused.
         people: Optional LinkedIn profile URLs or public identifiers, comma
             or newline separated. When given, the campaign is seeded from
             exactly these people and no LinkedIn search runs.
@@ -258,7 +259,7 @@ async def run_create_campaign(
 
     # Validate voice_mode
     if voice_mode and voice_mode not in VALID_VOICE_MODES:
-        return f"❌ Invalid voice_mode '{voice_mode}'. Must be one of: {', '.join(sorted(VALID_VOICE_MODES))}."
+        return f"❌ {VOICE_MEMOS_OFF}"
     if not voice_mode:
         voice_mode = VOICE_MODE_TEXT_ONLY
 
@@ -1294,11 +1295,6 @@ async def run_create_campaign(
         "├── edit_campaign() — adjust targeting, messaging, or follow-up settings",
         "└── show_status() — review the queued prospects",
     ])
-
-    # Voice mode info
-    if voice_mode != "text_only":
-        voice_label = {"mixed": "Mixed (alternating text & voice)", "voice_only": "Voice only", "ab_test": "A/B testing text vs voice"}.get(voice_mode, voice_mode)
-        output_lines.extend(["", f"🎤 **Voice memos: {voice_label}** — edit_campaign(voice_mode='text_only') to disable"])
 
     # Goal and campaign type info
     output_lines.extend(["", f"🎯 Goal: {_goals.GOALS[config['campaign_goal']].label}"])

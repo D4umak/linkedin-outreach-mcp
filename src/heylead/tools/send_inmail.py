@@ -421,6 +421,14 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
         sender_profile = await adb.get_setting("profile", {}) or {}
         voice_signature = await adb.get_setting("voice_signature", {}) or {}
 
+        # An InMail to someone who has seen nothing from us is the first thing
+        # they see: it ends with the AI disclosure (D4umak/heylead-api#1481),
+        # and the copy is written into 1900 less the sentence.
+        from ..db.queries import person_already_in_conversation
+        from ..guardrails import disclose, first_touch_budget
+        first_touch = not await run_db(person_already_in_conversation, outreach_id)
+        body_max = first_touch_budget(INMAIL_BODY_MAX, first_touch=first_touch)
+
         prompt_name = select_prompt("outreach_inmail", campaign_intent)
         system_name = select_prompt("outreach_system", campaign_intent)
         ctx = build_context_block(
@@ -431,7 +439,7 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
             voice=voice_signature,
             campaign_context=campaign_ctx,
             analysis=analysis,
-            max_chars=INMAIL_BODY_MAX,
+            max_chars=body_max,
             brief=message_brief,
             expertise_map=await load_expertise_map(),
         )
@@ -477,14 +485,14 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
                 draft=body,
                 voice_signature=voice_signature,
                 message_type="inmail",
-                max_chars=INMAIL_BODY_MAX,
+                max_chars=body_max,
                 intent=campaign_intent,
                 brief=message_brief,
             )
         except Exception as e:
             logger.warning("InMail improve stage failed, using draft: %s", e)
 
-        validation = validate_message(body, voice_signature, INMAIL_BODY_MAX)
+        validation = validate_message(body, voice_signature, body_max)
         if validation.is_valid:
             try:
                 llm_result = await llm_validate(
@@ -493,7 +501,7 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
                     company=sender_profile.get("company", ""),
                     message_type="inmail",
                     prospect_company=prospect_data.get("company", ""),
-                    max_chars=INMAIL_BODY_MAX,
+                    max_chars=body_max,
                     intent=campaign_intent,
                 )
                 if not llm_result.is_valid:
@@ -509,11 +517,11 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
                     issues=validation.issues,
                     voice_signature=voice_signature,
                     message_type="inmail",
-                    max_chars=INMAIL_BODY_MAX,
+                    max_chars=body_max,
                     intent=campaign_intent,
                     brief=message_brief,
                 )
-                validation = validate_message(body, voice_signature, INMAIL_BODY_MAX)
+                validation = validate_message(body, voice_signature, body_max)
             except Exception as e:
                 logger.warning("InMail fix stage failed: %s", e)
 
@@ -534,6 +542,10 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
                 f"InMail for {prospect_name} skipped after validation "
                 f"(invite can follow).\n{issues_text}"
             )
+
+        # Validated first, disclosed after.
+        if first_touch:
+            body = disclose(body, kind="dm")
 
         from ..ops_log import log_outbound_send
         log_outbound_send(

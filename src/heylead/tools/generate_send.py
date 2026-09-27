@@ -1218,7 +1218,15 @@ async def run_generate_and_send(
     reasoning = ""
     validation = None
     from ..tier import get_caps
-    note_max = (await get_caps()).invite_note_max_chars
+    from ..db.queries import person_already_in_conversation
+    from ..guardrails import disclose, first_touch_budget
+    # The first thing this person sees from us carries the AI disclosure
+    # (D4umak/heylead-api#1481), appended after every model pass below; the
+    # copy is written into what is left of the budget so it is never cut.
+    first_touch = not await run_db(person_already_in_conversation, outreach_id)
+    note_max = first_touch_budget(
+        (await get_caps()).invite_note_max_chars, first_touch=first_touch,
+    )
 
     # Build the message brief — WHAT this message must say (ai/brief_builder)
     from ..ai.brief_builder import build_message_brief
@@ -1418,8 +1426,11 @@ async def run_generate_and_send(
             client, account_id, outreach_id, prospect, prospect_data,
             prospect_name, role_str, message, voice_signature,
             campaign_context, campaign_ctx, prospect_analysis,
-            release_claim=_release_claim,
+            release_claim=_release_claim, first_touch=first_touch,
         )
+
+    # Validated copy first, the sentence after: no validator is asked about it.
+    message = disclose(message, kind="dm" if channel == "dm" else "invite") if first_touch else message
 
     # ── DM CHANNEL PATH (connections-only campaigns) ──
     if channel == "dm":
@@ -1897,6 +1908,7 @@ async def _send_email_outreach(
     campaign_ctx: dict | None,
     prospect_analysis: dict | None,
     release_claim: Any,
+    first_touch: bool = False,
 ) -> str:
     """Send outreach via email channel instead of LinkedIn.
 
@@ -1992,6 +2004,13 @@ async def _send_email_outreach(
         return (
             f"❌ Email draft for {prospect_name} failed quality checks and was not sent."
         )
+
+    if first_touch:
+        # The first thing this person gets from us: it ends with the AI
+        # disclosure as its own paragraph (D4umak/heylead-api#1481).
+        from ..guardrails import disclose
+
+        body = disclose(body, kind="email")
 
     # Send via Unipile email API. Keep the client open through the SENT
     # check — a 502/timeout is unknown, and the only safe next read is the

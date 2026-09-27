@@ -587,11 +587,12 @@ def set_hume_api_key(key: str) -> None:
 
 
 def is_voice_memo_enabled() -> bool:
-    """Check if voice memos are configured (Hume API key or backend mode)."""
-    if get_hume_api_key():
-        return True
-    if is_backend_mode():
-        return True  # Backend proxies Hume calls
+    """Voice memos are off for every user (heylead-api #1527, 26 Sep 2026).
+
+    Prospects recognise them as AI. Every audio path (follow-ups, replies,
+    send_message) asks this gate first and sends text when it says no, so it
+    says no whatever key or login the machine has.
+    """
     return False
 
 

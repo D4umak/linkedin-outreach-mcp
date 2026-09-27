@@ -5670,6 +5670,41 @@ def _is_invite_note(msg: Any, invited_at: int | None, accepted_at: int | None) -
     return abs((msg["timestamp"] or 0) - invited_at) <= _INVITE_NOTE_WINDOW_SECONDS
 
 
+def person_already_in_conversation(outreach_id: str) -> bool:
+    """Has this install already shown this person a message, or heard from them?
+
+    The AI disclosure (D4umak/heylead-api#1481) rides on the first thing a
+    person sees, exactly once. Derived from the messages recorded as sent: a
+    row of ours with words in it (a note, a DM, an InMail, an email) means the
+    person has seen us, and since the disclosure shipped the first such row
+    carries the sentence. An invitation that went without a note is stored
+    empty and does not count, so the first DM after it discloses. A message
+    FROM the person means the conversation is theirs and ours is a reply.
+    The person, not the outreach: the same linkedin_id in another campaign of
+    this install counts. Mirrors the hosted store's function of the same name.
+    """
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT c.linkedin_id FROM outreaches o JOIN contacts c ON c.id = o.contact_id "
+            "WHERE o.id = ?",
+            (outreach_id,),
+        ).fetchone()
+        linkedin_id = str((row["linkedin_id"] if row else "") or "").strip()
+        hit = db.execute(
+            "SELECT 1 FROM messages m WHERE m.deleted_at IS NULL AND ("
+            "m.outreach_id = ? OR (? != '' AND m.outreach_id IN ("
+            "SELECT o.id FROM outreaches o JOIN contacts c ON c.id = o.contact_id "
+            "WHERE c.linkedin_id = ?))) "
+            "AND ((m.role = 'sdr' AND TRIM(COALESCE(m.text, '')) != '') "
+            "OR m.role = 'prospect') LIMIT 1",
+            (outreach_id, linkedin_id, linkedin_id),
+        ).fetchone()
+    finally:
+        db.close()
+    return hit is not None
+
+
 def outreach_has_invite_note(outreach_id: str) -> bool:
     """Was this person invited WITH a note?
 

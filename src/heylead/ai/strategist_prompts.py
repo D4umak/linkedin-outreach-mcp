@@ -25,7 +25,6 @@ Available actions:
 - send_dm: Send a DM to an existing 1st-degree connection
 - email: Continue the same story by email after a quiet LinkedIn first touch (never day-0)
 - followup: Send a follow-up DM (only for connected prospects who already received a first message)
-- voice_memo: Send a LinkedIn voice memo (only for connected prospects)
 - skip_today: Do nothing today (rest, let previous actions breathe)
 
 Rules:
@@ -67,7 +66,7 @@ Return ONLY valid JSON:
             "outreach_id": "the_outreach_id",
             "actions": [
                 {{
-                    "action_type": "profile_view | follow | endorse | engage_comment | engage_react | invite | inmail | send_dm | email | followup | voice_memo | skip_today",
+                    "action_type": "profile_view | follow | endorse | engage_comment | engage_react | invite | inmail | send_dm | email | followup | skip_today",
                     "priority": 1,
                     "timing_preference": "morning | afternoon | evening | anytime",
                     "params": {{}},
@@ -154,16 +153,5 @@ def format_feedback_section(feedback_data: dict[str, Any]) -> str:
             title = p.get("title", "?")
             score = p.get("feedback_score", 0)
             lines.append(f"  {title}: {' → '.join(action_types)} → score={score}")
-
-    vs = feedback_data.get("voice_stats") or {}
-    if vs.get("voice_sent") or vs.get("text_sent"):
-        lines.append(
-            "### Channel format (this campaign): "
-            f"voice memos {int(vs.get('voice_sent') or 0)} sent, "
-            f"{(vs.get('voice_reply_rate') or 0) * 100:.0f}% reply rate; "
-            f"text DMs {int(vs.get('text_sent') or 0)} sent, "
-            f"{(vs.get('text_reply_rate') or 0) * 100:.0f}% reply rate. "
-            "Prefer the format that is earning replies; use voice_memo where it wins."
-        )
 
     return "\n".join(lines) if lines else "No feedback data available yet."

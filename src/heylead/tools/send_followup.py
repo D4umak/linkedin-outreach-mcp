@@ -296,7 +296,13 @@ async def run_send_followup(
     MIN_MESSAGE_GAP_DAYS = 1
     followup_count = candidate.get("followup_count", 0)
     this_followup = followup_count + 1
-    max_chars = followup_char_limit(this_followup)
+    # A follow-up after an invitation that went without a note is the first
+    # thing the person sees: it carries the AI disclosure
+    # (D4umak/heylead-api#1481), written into what is left of the budget.
+    from ..db.queries import person_already_in_conversation
+    from ..guardrails import first_touch_budget
+    first_touch = not await run_db(person_already_in_conversation, outreach_id)
+    max_chars = first_touch_budget(followup_char_limit(this_followup), first_touch=first_touch)
 
     # Check last actual message timestamp from DB (more reliable than updated_at)
     last_sdr_ts = 0
@@ -749,7 +755,8 @@ async def run_send_followup(
         )
 
     from ..guardrails import prepare_outbound_text
-    message = prepare_outbound_text(message, kind="dm")
+    # After every model pass and validator: the sentence is not their copy.
+    message = prepare_outbound_text(message, kind="dm", first_touch=first_touch)
 
     # ── Step 7: Send ──
     prospect_name = candidate.get("name", "Unknown")
@@ -901,7 +908,7 @@ async def run_send_followup(
     # ── LINKEDIN DM PATH ──
     actual_format = "text"
     audio_path = ""
-    if format == "voice":
+    if format == "voice" and not first_touch:  # a first touch is text: the disclosure is a sentence
         try:
             from ..ai.voice_memo_generator import generate_voice_memo, cleanup_voice_memo
             from ..config import is_voice_memo_enabled

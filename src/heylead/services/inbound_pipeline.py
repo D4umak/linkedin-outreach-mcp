@@ -1447,6 +1447,14 @@ async def _send_discovery_dm(
         if not can:
             return "capped"
 
+        # The discovery DM to someone who sent us an invitation is the first
+        # thing they get from us: it carries the AI disclosure
+        # (D4umak/heylead-api#1481). Not a reply to a message they wrote.
+        if signal.get("signal_type", "invitation") == "invitation":
+            from ..guardrails import disclose
+
+            dm_text = disclose(dm_text, kind="dm")
+
         if chat_id:
             result = await client.send_message(
                 account_id=account_id,

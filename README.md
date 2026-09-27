@@ -26,7 +26,20 @@ MCP (Model Context Protocol) lets AI assistants use external tools. HeyLead give
 
 ### Step 1: Install HeyLead
 
-HeyLead runs locally over stdio. You need [uv](https://docs.astral.sh/uv/):
+**Claude Code, as a plugin (hosted, nothing to install):**
+```
+/plugin marketplace add D4umak/linkedin-outreach-mcp
+/plugin install heylead@heylead
+```
+
+Then run `/mcp`, pick `heylead` and choose Authenticate to sign in to your
+HeyLead account. The plugin connects the hosted server at
+`https://heylead.dev/mcp` and adds skills for starting a campaign, approving
+waiting messages, answering replies, a weekly review, pausing, and adding a
+list of people. Its source is in
+[plugins/heylead](https://github.com/D4umak/linkedin-outreach-mcp/tree/main/plugins/heylead).
+
+**Or run the client locally over stdio.** You need [uv](https://docs.astral.sh/uv/):
 
 **Claude Code:**
 ```bash

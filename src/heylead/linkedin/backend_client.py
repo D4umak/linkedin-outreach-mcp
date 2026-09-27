@@ -1946,47 +1946,16 @@ class BackendClient:
         audio_path: str,
         text: str = "",
     ) -> dict[str, Any]:
-        """Send a voice message in an existing LinkedIn chat via backend proxy.
+        """Refuse: voice memos are off for every user (heylead-api #1527).
 
-        Reads the audio file, base64-encodes it, and sends to the backend
-        ``POST /api/v1/voice/send`` endpoint which decodes and forwards to
-        Unipile as multipart/form-data.
-
-        Returns:
-            {"success": bool, "error": str}
+        This and ``send_new_voice_message`` were how this machine handed
+        LinkedIn a voice note. They now refuse without a request, so a caller
+        that still asks for audio falls back to text.
         """
-        import base64
+        from ..constants import VOICE_MEMOS_OFF
 
-        result: dict[str, Any] = {"success": False, "error": ""}
-        url = f"{self.base_url}/api/v1/voice/send"
-        try:
-            with open(audio_path, "rb") as f:
-                audio_b64 = base64.b64encode(f.read()).decode()
-        except FileNotFoundError:
-            result["error"] = f"Audio file not found: {audio_path}"
-            return result
-        payload = {
-            "chat_id": chat_id,
-            "audio_base64": audio_b64,
-            "text": text,
-        }
-        try:
-            resp = await self._retry_request("POST", url, json=payload, no_retry=True)
-            if resp.status_code == 401:
-                result["error"] = "Backend JWT expired."
-                return result
-            refusal = _proxy_refusal_message(resp)
-            if refusal is not None:
-                result["error"] = refusal
-                return result
-            resp.raise_for_status()
-            data = _ensure_dict(resp.json())
-            _classify_nested_response(data, result)
-        except (httpx.TimeoutException, httpx.ConnectError) as e:
-            result["error"] = str(_wrap_connection_error(e, self.base_url))
-        except Exception as e:
-            result["error"] = f"Voice send failed: {e}"
-        return result
+        logger.warning("send_voice_message refused: voice memos are off (chat_id=%s)", chat_id)
+        return {"success": False, "error": VOICE_MEMOS_OFF}
 
     async def send_new_voice_message(
         self,
@@ -1995,45 +1964,11 @@ class BackendClient:
         audio_path: str,
         text: str = "",
     ) -> dict[str, Any]:
-        """Start a new DM with a voice message via backend proxy.
+        """Refuse: voice memos are off for every user. See ``send_voice_message``."""
+        from ..constants import VOICE_MEMOS_OFF
 
-        Returns:
-            {"success": bool, "error": str, "chat_id": str}
-        """
-        import base64
-
-        result: dict[str, Any] = {"success": False, "error": "", "chat_id": ""}
-        url = f"{self.base_url}/api/v1/voice/send"
-        try:
-            with open(audio_path, "rb") as f:
-                audio_b64 = base64.b64encode(f.read()).decode()
-        except FileNotFoundError:
-            result["error"] = f"Audio file not found: {audio_path}"
-            return result
-        payload = {
-            "provider_id": provider_id,
-            "audio_base64": audio_b64,
-            "text": text,
-        }
-        try:
-            resp = await self._retry_request("POST", url, json=payload, no_retry=True)
-            if resp.status_code == 401:
-                result["error"] = "Backend JWT expired."
-                return result
-            refusal = _proxy_refusal_message(resp)
-            if refusal is not None:
-                result["error"] = refusal
-                return result
-            resp.raise_for_status()
-            data = _ensure_dict(resp.json())
-            _classify_nested_response(data, result)
-            if result["success"]:
-                result["chat_id"] = data.get("chat_id") or ""
-        except (httpx.TimeoutException, httpx.ConnectError) as e:
-            result["error"] = str(_wrap_connection_error(e, self.base_url))
-        except Exception as e:
-            result["error"] = f"Send new voice message failed: {e}"
-        return result
+        logger.warning("send_new_voice_message refused: voice memos are off (provider_id=%s)", provider_id)
+        return {"success": False, "error": VOICE_MEMOS_OFF, "chat_id": ""}
 
     async def get_chat_messages(
         self,
@@ -3768,35 +3703,14 @@ class BackendClient:
         noise_type: str = "auto",
         noise_volume: str = "subtle",
     ) -> tuple[str, float]:
-        """Generate voice memo audio via backend enhanced voice pipeline.
+        """Refuse: voice memos are off for every user (heylead-api #1527).
 
-        The backend runs text humanization, multi-utterance splitting,
-        Hume TTS, and ambient noise overlay in a single request.
-
-        Returns:
-            Tuple of (audio_base64: str, duration_seconds: float).
+        The backend's voice-generation route answers 410 since then; this
+        raises before asking it.
         """
-        url = f"{self.base_url}/api/v1/voice/generate"
-        payload: dict[str, Any] = {
-            "text": text,
-            "voice_config": voice_config,
-            "humanize": humanize,
-            "noise_type": noise_type,
-            "noise_volume": noise_volume,
-        }
-        if voice_signature:
-            payload["voice_signature"] = voice_signature
-        try:
-            resp = await self._post(url, json=payload, headers=self._headers())
-        except (httpx.ConnectError, httpx.TimeoutException) as e:
-            raise _wrap_connection_error(e, self.base_url)
-        if resp.status_code == 401:
-            raise UnipileAuthError("Backend JWT expired or invalid.")
-        if resp.status_code >= 400:
-            detail = resp.text[:200] if resp.text else f"HTTP {resp.status_code}"
-            raise UnipileError(f"Voice memo generation failed: {detail}")
-        data = _ensure_dict(resp.json())
-        return data.get("audio_base64", ""), data.get("duration_seconds", 0.0)
+        from ..constants import VOICE_MEMOS_OFF
+
+        raise UnipileError(VOICE_MEMOS_OFF)
 
     # ── LLM Proxy Methods ──
 

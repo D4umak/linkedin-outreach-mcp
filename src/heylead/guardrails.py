@@ -11,6 +11,7 @@ em-dash style tell.
 
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
 
@@ -61,15 +62,80 @@ def break_dm_sentences(text: str) -> str:
     return _SENTENCE_GAP.sub("\n\n", text)
 
 
-def prepare_outbound_text(text: str, *, kind: str = "dm") -> str:
+# ── AI disclosure on the first message (D4umak/heylead-api#1481) ──
+#
+# Article 50 of the EU AI Act (in force since 2 Aug 2026): a person must be
+# told they are interacting with an AI system. The first thing a person
+# receives from a HeyLead sender says so, in this one fixed sentence (decided
+# 25 Sep 2026). It is appended after every model pass (improve, fix, the
+# validators), so no model can drop or reword it, and it is never shown to a
+# validator as part of the copy. No brand name, so no name check rejects it.
+# Mirrors heylead-api app/services/message_guardrails.py; keep the two equal.
+AI_DISCLOSURE = "Sent with my AI assistant."
+
+# One kill switch, read at send time. No per-workspace opt-out.
+AI_DISCLOSURE_ENV = "AI_DISCLOSURE_ENABLED"
+
+# An invitation note stays one block; a DM, an InMail and an email end with the
+# sentence as its own paragraph.
+_DISCLOSURE_SEPARATOR = {"invite": " ", "dm": "\n\n", "email": "\n\n"}
+
+# What a first touch leaves free for the sentence: the sentence plus the widest
+# separator. Taken off the generator's max_chars, so a note written to the cap
+# is not cut to make room.
+AI_DISCLOSURE_RESERVE = len(AI_DISCLOSURE) + max(len(s) for s in _DISCLOSURE_SEPARATOR.values())
+
+
+def disclosure_enabled() -> bool:
+    """The kill switch. Default on; read on every call, never cached."""
+    raw = os.environ.get(AI_DISCLOSURE_ENV, "")
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def first_touch_budget(max_chars: int, *, first_touch: bool = True) -> int:
+    """The generator's budget on a message that will carry the sentence."""
+    if not first_touch or not disclosure_enabled():
+        return int(max_chars)
+    return max(int(max_chars) - AI_DISCLOSURE_RESERVE, 10)
+
+
+def _split_disclosure(text: str) -> tuple[str, bool]:
+    stripped = (text or "").rstrip()
+    if stripped.endswith(AI_DISCLOSURE):
+        return stripped[: -len(AI_DISCLOSURE)].rstrip(), True
+    return text or "", False
+
+
+def disclose(text: str, *, kind: str = "dm") -> str:
+    """``text`` ending with the sentence, exactly once.
+
+    Idempotent: text that already carries it is returned unchanged. An empty
+    invitation note stays empty; the first DM then carries the sentence.
+    """
+    body = (text or "").strip()
+    if not body or not disclosure_enabled() or AI_DISCLOSURE in body:
+        return text or ""
+    return body + _DISCLOSURE_SEPARATOR.get(kind, "\n\n") + AI_DISCLOSURE
+
+
+def prepare_outbound_text(text: str, *, kind: str = "dm", first_touch: bool = False) -> str:
     """Normalise copy the moment before it goes on the wire.
 
     Invitation notes stay one block — they already sit on a 200-char budget.
     DMs get a blank line between sentences so mobile can scan them.
+
+    ``first_touch`` appends AI_DISCLOSURE (see ``disclose``). A sentence
+    already at the end is kept as its own paragraph and never doubled.
     """
-    prepared = normalize_outbound_spaces(text or "")
+    body, had = _split_disclosure(normalize_outbound_spaces(text or ""))
+    prepared = normalize_outbound_spaces(body)
     if kind == "dm":
         prepared = break_dm_sentences(prepared)
+    if had:
+        sep = _DISCLOSURE_SEPARATOR.get(kind, "\n\n")
+        return prepared + sep + AI_DISCLOSURE if prepared else AI_DISCLOSURE
+    if first_touch:
+        return disclose(prepared, kind=kind)
     return prepared
 
 
