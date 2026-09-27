@@ -129,11 +129,14 @@ async def generate_icp_result_for_campaign(
     # or generate_icp_v2 — the stored seniority is canonical, and by default
     # names only levels that hold budget authority. A prompt is a request; this
     # is the guarantee (9 Sep 2026).
-    from ..services.seniority import apply_seniority_policy
+    from ..services.seniority import DECISION_MAKER_LEVELS, apply_seniority_policy, levels_named
 
-    apply_seniority_policy(
-        result, decision_makers_only=decision_makers_only and goals.seniority_floor_applies(goal),
-    )
+    floor = decision_makers_only and goals.seniority_floor_applies(goal)
+    # The level the brief named stays beside the decision makers: "Bid
+    # managers in the UK" came back from the backend with managers kept and
+    # was stripped of them again here (D4umak/heylead-api#1566).
+    keep = [lvl for lvl in levels_named(target_description) if lvl not in DECISION_MAKER_LEVELS] if floor else []
+    apply_seniority_policy(result, decision_makers_only=floor, keep=keep)
     attach_signals_to_icp_result(result, target_description)
 
     # Goal <-> ICP audit (9 Sep 2026: campaign be5f78ff targeted an

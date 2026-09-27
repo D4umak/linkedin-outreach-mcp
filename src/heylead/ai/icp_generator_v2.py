@@ -17,7 +17,7 @@ import time
 from typing import Any
 
 from ..db.async_bridge import run_db
-from ..services.seniority import apply_seniority_policy
+from ..services.seniority import DECISION_MAKER_LEVELS, apply_seniority_policy, levels_named
 from .icp_schemas import (
     HeadcountParam,
     IcpResult,
@@ -303,6 +303,8 @@ async def generate_icp_v2(
     start_time = time.time()
     goal_key = goals.normalize_goal(goal) or goals.DEFAULT_GOAL
     floor = decision_makers_only and goals.seniority_floor_applies(goal_key)
+    # The level the brief named stays beside the decision makers (D4umak/heylead-api#1566).
+    keep = [lvl for lvl in levels_named(target_description) if lvl not in DECISION_MAKER_LEVELS] if floor else []
 
     # Route through backend if in backend mode and no local LLM key
     from ..config import has_local_llm_key, is_backend_mode
@@ -312,7 +314,7 @@ async def generate_icp_v2(
             goal=goal_key,
         )
         result.processing_time = time.time() - start_time
-        apply_seniority_policy(result, decision_makers_only=floor)
+        apply_seniority_policy(result, decision_makers_only=floor, keep=keep)
         # Enrich with LinkedIn codes
         await _enrich_result(result)
         return result
@@ -378,7 +380,7 @@ async def generate_icp_v2(
             best = max(all_icps, key=lambda x: x.overall_confidence)
             result.icps = [best]
 
-    apply_seniority_policy(result, decision_makers_only=floor)
+    apply_seniority_policy(result, decision_makers_only=floor, keep=keep)
 
     # Enrich with LinkedIn codes
     await _enrich_result(result)

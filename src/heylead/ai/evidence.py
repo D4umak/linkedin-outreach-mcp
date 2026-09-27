@@ -12,11 +12,50 @@ import logging
 import re
 from typing import Any
 
+from ..textutil import contains_term
 from .context_summarizer import CompressedEvidence
 from .icp_schemas import Citation, FieldEvidence, SingleIcp
 from .vector_search import SearchResult
 
 logger = logging.getLogger(__name__)
+
+# Words that say nothing about a field value. Until heylead-api #1570 any 3+
+# letter word of a value counted as a citation by substring, so "and" or
+# "the" in any sentence cited every pain point, and "bid" inside "forbidden"
+# cited "Bid Director".
+_STOPWORDS = frozenset({
+    "and", "the", "for", "with", "from", "that", "this", "these", "those", "are",
+    "was", "were", "has", "have", "had", "their", "they", "them", "our", "your",
+    "its", "into", "onto", "over", "under", "who", "whom", "what", "when", "where",
+    "which", "while", "all", "any", "not", "but", "can", "per", "via", "out",
+    "off", "too", "very", "more", "most", "less", "than", "then", "also", "such",
+    "each", "every", "other", "about", "across", "after", "before", "between",
+    "within", "without", "will", "would", "should", "could", "may", "might",
+    "must", "been", "being", "does", "did", "done", "get", "gets", "got",
+})
+_VALUE_WORD = re.compile(r"[a-z0-9][a-z0-9+&'.-]*")
+
+
+def _value_words(value: str) -> list[str]:
+    return [w for w in _VALUE_WORD.findall(value.lower()) if len(w) > 2 and w not in _STOPWORDS]
+
+
+def _cites(value: str, text: str) -> bool:
+    """Whether *text* names *value*: the whole value, or one of its words, as whole words.
+
+    A plural counts either way ("CTOs" cites "CTO", "bids" cites "bid").
+    Matching goes through contains_term, never substring containment.
+    """
+    if not value or not text:
+        return False
+    if contains_term(text, value):
+        return True
+    for word in _value_words(value):
+        forms = {word, f"{word}s", word[:-1] if word.endswith("s") and len(word) > 3 else word}
+        if any(contains_term(text, form) for form in forms):
+            return True
+    return False
+
 
 # Fields to generate citations for
 _CITATION_FIELDS = [
@@ -201,14 +240,9 @@ def _find_citations(
     citations: list[Citation] = []
 
     for value in values:
-        value_lower = value.lower()
-        # Split multi-word values into tokens for flexible matching
-        tokens = [t for t in value_lower.split() if len(t) > 2]
-
         for snippet in evidence:
-            text_lower = snippet.evidence_snippet.lower()
-            # Check if any token appears in the evidence
-            if any(token in text_lower for token in tokens) or value_lower in text_lower:
+            # Whole words, never substrings (D4umak/heylead-api#1570).
+            if _cites(str(value), snippet.evidence_snippet):
                 citations.append(Citation(
                     source_url=snippet.source_uri,
                     header_path=snippet.header_path,
@@ -220,8 +254,7 @@ def _find_citations(
         # Also check KB results
         if kb_results:
             for result in kb_results:
-                text_lower = result.text.lower()
-                if any(token in text_lower for token in tokens) or value_lower in text_lower:
+                if _cites(str(value), result.text):
                     citations.append(Citation(
                         source_url=result.source_uri,
                         header_path=result.header_path,

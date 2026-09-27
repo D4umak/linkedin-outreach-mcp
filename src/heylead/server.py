@@ -33,6 +33,14 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.407 (2026-09-27)
+- New: the UI QA loop tests narrow widths itself, in a popup window
+- Fix: a citation is a whole-word mention, never a substring
+- Fix: the client keeps the level a brief asked for when it re-applies seniority
+- the daemon upgrade retries while PyPI's index catches up
+- Fix: no test run can touch the developer's real HeyLead home
+- the client's release steps work as written, end to end
+
 ## v0.10.406 (2026-09-27)
 - Fix: a new-chat DM sent through the hosted proxy keeps its chat id
 - Fix: the report's cover never claims more than its case table

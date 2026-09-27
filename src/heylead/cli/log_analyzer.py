@@ -41,7 +41,9 @@ def _entry_epoch(entry: dict) -> float | None:
 
 
 def _log_path() -> Path:
-    return Path.home() / ".heylead" / "logs" / "heylead.json.log"
+    from .. import config, constants
+
+    return config._heylead_home() / constants.LOG_DIR / "heylead.json.log"
 
 
 def _read_entries(hours: int = 24) -> list[dict]:

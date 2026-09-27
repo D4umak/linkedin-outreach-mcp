@@ -34,7 +34,11 @@ PLIST_LABEL = "dev.heylead.scheduler"
 
 
 def _plist_path() -> Path:
-    return Path.home() / "Library" / "LaunchAgents" / f"{PLIST_LABEL}.plist"
+    from .config import refuse_real_home_in_tests
+
+    return refuse_real_home_in_tests(
+        Path.home() / "Library" / "LaunchAgents" / f"{PLIST_LABEL}.plist",
+    )
 
 
 def _log_dir() -> Path:

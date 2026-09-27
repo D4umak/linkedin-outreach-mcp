@@ -22,6 +22,8 @@ Substring matching on titles is the bug family that made "cto" match
 
 from __future__ import annotations
 
+import re
+
 from ..constants import SENIORITY_KEYWORDS
 from ..textutil import contains_term
 
@@ -34,6 +36,7 @@ __all__ = [
     "infer_seniority_level",
     "states_seniority",
     "is_decision_maker",
+    "levels_named",
     "constrain_include",
     "apply_seniority_policy",
     "to_unipile_seniority",
@@ -160,8 +163,42 @@ def is_decision_maker(title_or_level: str | None) -> bool:
     return normalize_seniority(title_or_level) in DECISION_MAKER_LEVELS
 
 
+# A brief is split into its roles at these, so "CTOs and engineering
+# managers" names two levels. "lead generation" is what the product sells,
+# not a team lead, and is taken out before the levels are read.
+_BRIEF_PARTS = re.compile(r"\s*(?:,|;|/|&|\band\b|\bor\b|\bplus\b)\s*", re.IGNORECASE)
+_NOT_A_ROLE = re.compile(r"\blead(?:s)?\s+gen(?:eration)?\b", re.IGNORECASE)
+_BRIEF_WORD = re.compile(r"[A-Za-z0-9.'-]+")
+
+
+def _singular(word: str) -> str:
+    """ "managers" -> "manager", "CTOs" -> "cto"; "boss" and "status" stay."""
+    if len(word) > 2 and word.endswith("s") and not word.endswith(("ss", "us", "is")):
+        return word[:-1]
+    return word
+
+
+def levels_named(text: str | None) -> list[str]:
+    """The levels a free-text brief names, lowest first; [] when it names none.
+
+    26 Sep 2026: "Bid managers in the UK" produced personas that excluded
+    managers, because nothing read the level the brief asked for before the
+    decision-maker floor removed it (heylead-api #1566). Each role in the
+    brief is read by :func:`infer_seniority_level`, plural or not.
+    """
+    cleaned = _NOT_A_ROLE.sub(" ", str(text or ""))
+    found: set[str] = set()
+    for part in _BRIEF_PARTS.split(cleaned):
+        phrase = " ".join(_singular(w.lower()) for w in _BRIEF_WORD.findall(part))
+        level = infer_seniority_level(phrase)
+        if level:
+            found.add(level)
+    return [lvl for lvl in SENIORITY_ORDER if lvl in found]
+
+
 def constrain_include(
     include: object, exclude: object = None, *, decision_makers_only: bool = True,
+    keep: object = (),
 ) -> tuple[list[str], list[str]]:
     """Normalize a persona's seniority and, optionally, force decision makers.
 
@@ -171,9 +208,14 @@ def constrain_include(
     decision-maker set rather than an empty filter that would let everyone
     through. Every level outside the include list is added to exclude, so the
     scorers record the drop as `seniority_miss` instead of scoring a ladder.
+
+    ``keep`` is the levels the person's own brief named (:func:`levels_named`):
+    they are included whatever the floor, beside the decision makers, because
+    the person asked for them.
     """
     inc = normalize_seniority_list(include)
     exc = normalize_seniority_list(exclude)
+    kept = normalize_seniority_list(list(keep) if isinstance(keep, (list, tuple, set)) else keep)
     if decision_makers_only:
         inc = [lvl for lvl in inc if lvl in DECISION_MAKER_LEVELS]
         if not inc:
@@ -184,12 +226,15 @@ def constrain_include(
             # 10 Sep 2026, and the exclude derived below then dropped every
             # technical co-founder from a decision-maker campaign.
             inc.append("owner")
+    inc += [lvl for lvl in kept if lvl not in inc]
     if inc:
         exc = [lvl for lvl in SENIORITY_ORDER if lvl not in inc]
     return inc, exc
 
 
-def apply_seniority_policy(result: object, *, decision_makers_only: bool = True) -> None:
+def apply_seniority_policy(
+    result: object, *, decision_makers_only: bool = True, keep: object = (),
+) -> None:
     """Rewrite every persona's seniority on an IcpResult, in place.
 
     The LLM is told to emit canonical keys, but a prompt is a request. This is
@@ -204,6 +249,7 @@ def apply_seniority_policy(result: object, *, decision_makers_only: bool = True)
             getattr(param, "include", None),
             getattr(param, "exclude", None),
             decision_makers_only=decision_makers_only,
+            keep=keep,
         )
         param.include = include
         param.exclude = exclude

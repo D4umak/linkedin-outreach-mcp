@@ -6,6 +6,7 @@ import copy
 import json
 import logging
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Optional
@@ -15,9 +16,41 @@ from . import constants
 logger = logging.getLogger(__name__)
 
 
+def _account_home() -> Path | None:
+    """The account's home from the password database, whatever HOME says."""
+    try:
+        import pwd
+
+        return Path(pwd.getpwuid(os.getuid()).pw_dir)
+    except (ImportError, KeyError):  # no pwd module (Windows) or no entry
+        return None
+
+
+def refuse_real_home_in_tests(path: Path) -> Path:
+    """Return ``path``, or raise if a test run reaches into the account's real home.
+
+    tests/conftest.py redirects the home for every test it collects, but a test
+    file run from anywhere else runs without it: on 27 Sep 2026 a copied test's
+    fixture overwrote Denys's real backend URL and token (api #1568). A test
+    process is one that imported pytest, the check logging_setup makes too.
+    """
+    if "pytest" not in sys.modules:
+        return path
+    account = _account_home()
+    if account is None:
+        return path
+    real, target = os.path.realpath(account), os.path.realpath(path)
+    if target == real or target.startswith(real + os.sep):
+        raise RuntimeError(
+            f"a test run reached the real HeyLead home ({path}); run tests from "
+            f"tests/ so conftest redirects it, or point HOME at a temp folder"
+        )
+    return path
+
+
 def _heylead_home() -> Path:
     """Return the HeyLead home directory (~/.heylead)."""
-    return Path.home() / constants.HEYLEAD_DIR_NAME
+    return refuse_real_home_in_tests(Path.home() / constants.HEYLEAD_DIR_NAME)
 
 
 def ensure_dirs() -> Path:
