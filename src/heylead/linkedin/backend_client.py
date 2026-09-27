@@ -1928,7 +1928,9 @@ class BackendClient:
             data = _ensure_dict(resp.json())
             _classify_nested_response(data, result)
             if result["success"]:
-                result["chat_id"] = data.get("chat_id") or data.get("id") or ""
+                # The ids are in the proxy's body, which the call above read;
+                # the {"status_code", "body"} wrapper has none (api #1558).
+                result["chat_id"] = result.get("chat_id") or result.get("id") or ""
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             result["error"] = str(_wrap_connection_error(e, self.base_url))
         except Exception as e:

@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.406 (2026-09-27)
+- Fix: a new-chat DM sent through the hosted proxy keeps its chat id
+- Fix: the report's cover never claims more than its case table
+
 ## v0.10.405 (2026-09-27)
 - Fix: a tool call in a chat that closes at once still reaches the workspace
 - Fix: read every page of a commit's checks, so a quiet main never reads as undeployed
