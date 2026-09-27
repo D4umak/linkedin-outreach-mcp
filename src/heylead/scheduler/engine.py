@@ -253,6 +253,7 @@ def runs_while_scheduler_off(job_type: str) -> bool:
 
 
 from . import leader
+from .. import background
 from .. import constants as _c  # job types not in the explicit import list above
 
 # How long to stay in standby after handing leadership over before contending
@@ -561,12 +562,13 @@ class SchedulerEngine:
 
         # Non-blocking: verify cloud fallback is active, and move existing
         # hosted campaigns onto the cloud if they still sit on this machine.
-        asyncio.create_task(self._check_cloud_on_startup())
-        asyncio.create_task(self._ensure_cloud_default_on_startup())
-        asyncio.create_task(self._cancel_cloud_owned_jobs_on_startup())
+        # Held by heylead.background: a bare create_task can be collected mid-run.
+        background.spawn(self._check_cloud_on_startup(), name="engine.check_cloud")
+        background.spawn(self._ensure_cloud_default_on_startup(), name="engine.cloud_default")
+        background.spawn(self._cancel_cloud_owned_jobs_on_startup(), name="engine.cancel_cloud_owned")
         # Seat / Premium can change while the laptop is closed — probe on start
         # even if the persisted daily timer would have skipped this tick.
-        asyncio.create_task(self._schedule_sn_redetect())
+        background.spawn(self._schedule_sn_redetect(), name="engine.sn_redetect")
 
     async def stop(self) -> None:
         """Gracefully stop the scheduler."""

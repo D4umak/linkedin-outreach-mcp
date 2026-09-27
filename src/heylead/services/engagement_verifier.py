@@ -374,20 +374,23 @@ def schedule_post_send_verify(
     """
     if not POST_SEND_VERIFY_ENABLED or not chat_id or not sent_text:
         return
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(
-            post_send_verify_and_delete(
-                account_id=account_id,
-                chat_id=chat_id,
-                sent_text=sent_text,
-                outreach_id=outreach_id,
-                local_message_id=local_message_id,
-                message_type=message_type,
-                voice_signature=voice_signature,
-            )
-        )
-    except RuntimeError:
+    from .. import background
+
+    # Held by heylead.background: a bare create_task could be collected
+    # mid-run, and a stopping server names a check it had to cut short.
+    task = background.spawn(
+        post_send_verify_and_delete(
+            account_id=account_id,
+            chat_id=chat_id,
+            sent_text=sent_text,
+            outreach_id=outreach_id,
+            local_message_id=local_message_id,
+            message_type=message_type,
+            voice_signature=voice_signature,
+        ),
+        name="post_send_verify",
+    )
+    if task is None:
         logger.debug("schedule_post_send_verify: no running event loop")
 
 

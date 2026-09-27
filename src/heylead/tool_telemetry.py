@@ -10,12 +10,15 @@ the tool, its ``action`` (an identifier word, else "other"), the MCP host
 from a closed list, ok, the exception class, the duration and the transport.
 Never the arguments, the result, a prospect, a URL or a message.
 
-Records wait in memory and are posted in batches (50 records, or 30 seconds
+Records wait in memory and are posted in batches (50 records, or 2 seconds
 after the first one) through the backend client to
 ``POST /api/v1/product-events/tool-calls``, under the signed-in workspace.
-They are dropped silently when the user turned telemetry off
-(``heylead config telemetry off`` or ``DO_NOT_TRACK``) or is not signed in.
-Telemetry never costs the call: every failure here is swallowed.
+When the server stops, whatever is still waiting is posted at once (a
+:mod:`heylead.background` drain hook): on 26 Sep 2026 a chat that closed
+within the old 30-second window took its call with it. They are dropped
+silently when the user turned telemetry off (``heylead config telemetry off``
+or ``DO_NOT_TRACK``) or is not signed in. Telemetry never costs the call:
+every failure here is swallowed, and a refused or failed post is logged.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ import time
 import uuid
 from typing import Any, Callable
 
+from . import background
 from .textutil import contains_term
 
 logger = logging.getLogger(__name__)
@@ -36,7 +40,9 @@ logger = logging.getLogger(__name__)
 #: Set on every wrapped tool function; tests/test_tool_call_telemetry.py reads it.
 MARKER = "__heylead_tool_telemetry__"
 MAX_BATCH = 50
-FLUSH_AFTER_SECONDS = 30.0
+# Short enough that a session the host kills without closing stdin (no drain)
+# has still posted its calls: the model writes its answer after a tool result.
+FLUSH_AFTER_SECONDS = 2.0
 
 # First match wins: Cursor's handshake says "cursor-vscode", Codex is an
 # OpenAI client, so each is asked before the name it contains.
@@ -55,7 +61,6 @@ _ERROR_CLASS = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,79}$")
 _lock = threading.Lock()
 _pending: list[dict[str, Any]] = []
 _timer: asyncio.TimerHandle | None = None
-_tasks: set[asyncio.Task] = set()
 
 
 def classify_client(name: str | None) -> str:
@@ -138,7 +143,7 @@ def build_record(
 
 
 def enqueue(record: dict[str, Any]) -> None:
-    """Buffer one record; flush at 50, or 30 seconds after the first."""
+    """Buffer one record; flush at 50, or FLUSH_AFTER_SECONDS after the first."""
     global _timer
     if not _enabled():
         return
@@ -150,15 +155,26 @@ def enqueue(record: dict[str, Any]) -> None:
     except RuntimeError:
         return
     if size >= MAX_BATCH:
-        _spawn(loop)
+        _spawn()
     elif _timer is None:
-        _timer = loop.call_later(FLUSH_AFTER_SECONDS, _spawn, loop)
+        _timer = loop.call_later(FLUSH_AFTER_SECONDS, _spawn)
 
 
-def _spawn(loop: asyncio.AbstractEventLoop) -> None:
-    task = loop.create_task(flush())
-    _tasks.add(task)
-    task.add_done_callback(_tasks.discard)
+def _spawn() -> None:
+    background.spawn(flush(), name="tool_telemetry.flush")
+
+
+@background.before_drain
+def flush_soon() -> None:
+    """Post what is waiting now, not when the timer fires: the server is stopping."""
+    global _timer
+    with _lock:
+        waiting = bool(_pending)
+        if _timer is not None:
+            _timer.cancel()
+            _timer = None
+    if waiting:
+        _spawn()
 
 
 _client: Any = None
@@ -214,9 +230,12 @@ async def flush() -> int:
             if status < 400:
                 posted += len(batch)
             else:
-                logger.debug("tool-call telemetry refused: HTTP %s", status)
-        except Exception:  # noqa: BLE001 - telemetry never costs the call
-            logger.debug("tool-call telemetry post failed", exc_info=True)
+                logger.info("tool-call telemetry refused: HTTP %s, %d record(s) dropped",
+                            status, len(batch))
+        except Exception as exc:  # noqa: BLE001 - telemetry never costs the call
+            # The class only: a message can carry a URL or a server's words.
+            logger.info("tool-call telemetry post failed: %s, %d record(s) dropped",
+                        type(exc).__name__, len(batch))
 
 
 def _record(tool: str, action: str, rctx: Any, started: float, error: BaseException | None) -> None:

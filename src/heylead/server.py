@@ -21,7 +21,7 @@ from mcp.types import ToolAnnotations
 
 import os as _os
 
-from . import __version__, config, facts, tool_profiles, tool_telemetry
+from . import __version__, background, config, facts, tool_profiles, tool_telemetry
 from .logging_setup import setup_logging
 from .ops_log import run_traced
 
@@ -32,6 +32,10 @@ from .ops_log import run_traced
 
 _CHANGELOG = """\
 # HeyLead Changelog
+
+## v0.10.405 (2026-09-27)
+- Fix: a tool call in a chat that closes at once still reaches the workspace
+- Fix: read every page of a commit's checks, so a quiet main never reads as undeployed
 
 ## v0.10.404 (2026-09-27)
 - New: HeyLead installs into Claude as one plugin, the hosted connector plus seven skills
@@ -1414,8 +1418,30 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 
 
+#: How main() serves. FastMCP enters the lifespan once per session: over
+#: stdio the session's end is the process's end, over HTTP the loop outlives
+#: every session and one session's end must not cut another's work short.
+_transport = "stdio"
+
+
 @asynccontextmanager
 async def _app_lifespan(app: FastMCP) -> AsyncIterator[dict]:
+    """The scheduler lifespan, and on stdio a drain of what the session left running.
+
+    A host ends a stdio session by closing stdin, and the loop closes right
+    after: work still waiting (a ``tool.called`` batch) went with it until
+    api #1204. The drain runs first, inside the host's grace period.
+    """
+    async with _scheduler_lifespan(app) as state:
+        try:
+            yield state
+        finally:
+            if _transport == "stdio":
+                await background.drain()
+
+
+@asynccontextmanager
+async def _scheduler_lifespan(app: FastMCP) -> AsyncIterator[dict]:
     """Start/stop the autonomous scheduler + cloud sync alongside the MCP server.
 
     Uses file-based leader election so only ONE process across all MCP clients
@@ -4674,6 +4700,9 @@ def main(transport: str = "stdio", host: str = "0.0.0.0", port: int = 8080) -> N
         backfill_signal_stamps()
     except Exception as e:
         logger.warning("Signal stamp backfill failed: %s", e)
+
+    global _transport
+    _transport = transport
 
     # Configure HTTP transport settings if needed
     if transport in ("sse", "streamable-http"):

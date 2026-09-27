@@ -186,7 +186,7 @@ def _session_health_loop():
 
 async def _serve_until_stopped(stop: asyncio.Event) -> None:
     """Hold leadership and run the scheduler until stopped or asked to yield."""
-    from . import config
+    from . import background, config
     from .scheduler.engine import SchedulerEngine
     from .scheduler.leader import release_leader
 
@@ -262,6 +262,10 @@ async def _serve_until_stopped(stop: asyncio.Event) -> None:
         if engine is not None:
             await engine.stop()
         release_leader()
+        # Post-send checks this process's sends started: their moment before
+        # the loop closes on them. Last, so leadership is released whatever
+        # happens here.
+        await background.drain()
 
 
 async def _run() -> int:
