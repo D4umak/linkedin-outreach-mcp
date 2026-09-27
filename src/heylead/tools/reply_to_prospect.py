@@ -851,97 +851,48 @@ async def run_reply_to_prospect(
     sentiment_icon = SENTIMENT_ICONS.get(sentiment, "\U0001f4ac")
     sentiment_label = SENTIMENT_LABELS.get(sentiment, "Unknown")
 
+    # Voice memos are off for everyone (heylead-api #1527): a reply is text.
     actual_format = "text"
-    audio_path = ""
-    if format == "voice":
-        try:
-            from ..ai.voice_memo_generator import generate_voice_memo, cleanup_voice_memo
-            from ..config import is_voice_memo_enabled
-            if is_voice_memo_enabled():
-                voice_result = await generate_voice_memo(
-                    message,
-                    voice_signature=voice_signature,
-                    humanize=campaign_config.get("voice_humanize", True),
-                    noise_type=campaign_config.get("voice_noise_type", "auto"),
-                    noise_volume=campaign_config.get("voice_noise_volume", "subtle"),
-                )
-                if voice_result.get("success"):
-                    audio_path = voice_result["audio_path"]
-                    actual_format = "voice"
-                else:
-                    logger.warning("Voice gen failed (%s), falling back to text", voice_result.get("error"))
-        except Exception as e:
-            logger.warning("Voice gen error (%s), falling back to text", e)
-
     try:
-        if actual_format == "voice" and audio_path:
-            send_result = await client.send_voice_message(
-                account_id=account_id,
-                chat_id=chat_id,
-                audio_path=audio_path,
-            )
-            if not send_result.get("success"):
-                logger.warning("Voice send failed (%s), falling back to text", send_result.get("error"))
-                actual_format = "text"
-
-        if actual_format == "text":
-            from ..ops_log import log_outbound_send
-            log_outbound_send(
-                "attempt",
-                outreach_id=outreach_id,
-                campaign_id=campaign_id,
-                channel="dm",
-                step_index="reply",
-                text=message,
-                chat_id=chat_id,
-                msg_format=actual_format,
-            )
-            send_result = await client.send_message(
-                account_id=account_id,
-                chat_id=chat_id,
-                text=message,
-            )
-            log_outbound_send(
-                "result",
-                outreach_id=outreach_id,
-                campaign_id=campaign_id,
-                channel="dm",
-                step_index="reply",
-                text=message,
-                chat_id=chat_id,
-                success=bool(send_result.get("success")),
-                error_type=(send_result.get("error") or "")[:80] or None,
-                msg_format=actual_format,
-            )
+        from ..ops_log import log_outbound_send
+        log_outbound_send(
+            "attempt",
+            outreach_id=outreach_id,
+            campaign_id=campaign_id,
+            channel="dm",
+            step_index="reply",
+            text=message,
+            chat_id=chat_id,
+            msg_format=actual_format,
+        )
+        send_result = await client.send_message(
+            account_id=account_id,
+            chat_id=chat_id,
+            text=message,
+        )
+        log_outbound_send(
+            "result",
+            outreach_id=outreach_id,
+            campaign_id=campaign_id,
+            channel="dm",
+            step_index="reply",
+            text=message,
+            chat_id=chat_id,
+            success=bool(send_result.get("success")),
+            error_type=(send_result.get("error") or "")[:80] or None,
+            msg_format=actual_format,
+        )
     except UnipileAuthError:
         await client.close()
-        if audio_path:
-            try:
-                from ..ai.voice_memo_generator import cleanup_voice_memo
-                cleanup_voice_memo(audio_path)
-            except Exception:
-                pass
         return (
             "LinkedIn account disconnected.\n\n"
             "Run setup_profile() again to reconnect."
         )
     except Exception as e:
         await client.close()
-        if audio_path:
-            try:
-                from ..ai.voice_memo_generator import cleanup_voice_memo
-                cleanup_voice_memo(audio_path)
-            except Exception:
-                pass
         return f"Failed to send reply: {e}"
     finally:
         await client.close()
-        if audio_path:
-            try:
-                from ..ai.voice_memo_generator import cleanup_voice_memo
-                cleanup_voice_memo(audio_path)
-            except Exception:
-                pass
 
     if send_result.get("success"):
         # Update status based on sentiment

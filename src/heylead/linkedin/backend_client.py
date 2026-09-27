@@ -1939,38 +1939,6 @@ class BackendClient:
             logger.warning("send_new_message failed: %s", result)
         return result
 
-    # ── Voice Messages ──
-
-    async def send_voice_message(
-        self,
-        account_id: str,
-        chat_id: str,
-        audio_path: str,
-        text: str = "",
-    ) -> dict[str, Any]:
-        """Refuse: voice memos are off for every user (heylead-api #1527).
-
-        This and ``send_new_voice_message`` were how this machine handed
-        LinkedIn a voice note. They now refuse without a request, so a caller
-        that still asks for audio falls back to text.
-        """
-        from ..constants import VOICE_MEMOS_OFF
-
-        logger.warning("send_voice_message refused: voice memos are off (chat_id=%s)", chat_id)
-        return {"success": False, "error": VOICE_MEMOS_OFF}
-
-    async def send_new_voice_message(
-        self,
-        account_id: str,
-        provider_id: str,
-        audio_path: str,
-        text: str = "",
-    ) -> dict[str, Any]:
-        """Refuse: voice memos are off for every user. See ``send_voice_message``."""
-        from ..constants import VOICE_MEMOS_OFF
-
-        logger.warning("send_new_voice_message refused: voice memos are off (provider_id=%s)", provider_id)
-        return {"success": False, "error": VOICE_MEMOS_OFF, "chat_id": ""}
 
     async def get_chat_messages(
         self,
@@ -3694,25 +3662,6 @@ class BackendClient:
         resp.raise_for_status()
         return resp.json().get("params", [])
 
-    # ── Voice Memo Proxy ──
-
-    async def generate_voice_memo(
-        self,
-        text: str,
-        voice_config: dict[str, Any],
-        voice_signature: dict[str, Any] | None = None,
-        humanize: bool = True,
-        noise_type: str = "auto",
-        noise_volume: str = "subtle",
-    ) -> tuple[str, float]:
-        """Refuse: voice memos are off for every user (heylead-api #1527).
-
-        The backend's voice-generation route answers 410 since then; this
-        raises before asking it.
-        """
-        from ..constants import VOICE_MEMOS_OFF
-
-        raise UnipileError(VOICE_MEMOS_OFF)
 
     # ── LLM Proxy Methods ──
 

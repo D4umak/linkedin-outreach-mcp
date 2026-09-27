@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 
 from .. import constants as c
 from .. import facts
+from ..guardrails import AI_DISCLOSURE, disclosure_enabled
 from .outreach_channel import exclude_connections_enabled
 
 logger = logging.getLogger(__name__)
@@ -257,6 +258,17 @@ def _followup_line(cfg: dict[str, Any], tier: str) -> tuple[str, str]:
     )
 
 
+def _first_touch_clause() -> str:
+    """What the first touch ends with, as the step that sends it says it.
+
+    Twin of heylead-api's campaign_plan._first_touch_clause (#1561): the first
+    message a person receives ends with the AI disclosure (guardrails.disclose,
+    heylead-api#1481), the invitation note or, with no invitations, the
+    opening message. Read on every call, like the switch; "" while it is off.
+    """
+    return f' that ends with "{AI_DISCLOSURE}"' if disclosure_enabled() else ""
+
+
 def _warmup_line(cfg: dict[str, Any]) -> str:
     """The warm-up the scheduler arms: only the touches this campaign has on.
 
@@ -342,14 +354,16 @@ def campaign_plan(
             f"From {day} at {start:02d}:00 your time: up to {daily} "
             f"invitations a day and {weekly} a week, {window}, "
             f"{_minutes(c.INVITE_DELAY_MIN)} to {_minutes(c.INVITE_DELAY_MAX)} minutes apart, "
-            "each with a short note in your voice.",
+            # The quoted sentence ends with its own full stop; a "." after the
+            # clause read 'assistant.".' (UI QA of #1561, F1).
+            f"each with a short note in your voice{_first_touch_clause() or '.'}",
             f"From {day}",
         ))
         steps.append(PlanStep("accept", "Accept", ACCEPT_LINE, "A few days later"))
 
     if connections_only:
         opener = (f"From {day} at {start:02d}:00 your time, {window}: an opening message "
-                  "in your voice to each person, ")
+                  f"in your voice{_first_touch_clause()} to each person, ")
         open_hint = f"From {day}"
     else:
         opener = "When someone accepts: an opening message in your voice, "

@@ -2239,38 +2239,6 @@ class UnipileClient:
             logger.warning("send_new_message: %s provider_id=%s", result["error"], provider_id)
         return result
 
-    # ── Voice Messages ──
-
-    async def send_voice_message(
-        self,
-        account_id: str,
-        chat_id: str,
-        audio_path: str,
-        text: str = "",
-    ) -> dict[str, Any]:
-        """Refuse: voice memos are off for every user (heylead-api #1527).
-
-        This and ``send_new_voice_message`` were how this machine handed
-        LinkedIn a voice note. They now refuse without a request, so a caller
-        that still asks for audio falls back to text.
-        """
-        from ..constants import VOICE_MEMOS_OFF
-
-        logger.warning("send_voice_message refused: voice memos are off (chat_id=%s)", chat_id)
-        return {"success": False, "error": VOICE_MEMOS_OFF}
-
-    async def send_new_voice_message(
-        self,
-        account_id: str,
-        provider_id: str,
-        audio_path: str,
-        text: str = "",
-    ) -> dict[str, Any]:
-        """Refuse: voice memos are off for every user. See ``send_voice_message``."""
-        from ..constants import VOICE_MEMOS_OFF
-
-        logger.warning("send_new_voice_message refused: voice memos are off (provider_id=%s)", provider_id)
-        return {"success": False, "error": VOICE_MEMOS_OFF, "chat_id": ""}
 
     async def get_chat_messages(
         self,

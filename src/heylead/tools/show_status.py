@@ -1723,18 +1723,6 @@ async def _show_campaign_detail(campaign_id: str) -> str:
             pass
         output.append("")
 
-    # Voice memo stats
-    voice_stats = await db.get_voice_memo_stats(campaign_id)
-    voice_sent = voice_stats.get("voice_sent", 0)
-    if voice_sent > 0:
-        voice_rr = voice_stats.get("voice_reply_rate", 0)
-        text_rr = voice_stats.get("text_reply_rate", 0)
-        text_sent = voice_stats.get("text_sent", 0)
-        output.append(f"🎤 Voice memos: {voice_sent} sent (text: {text_sent})")
-        if voice_stats.get("voice_total_outreaches", 0) > 0:
-            output.append(f"   Reply rate: voice {voice_rr:.0%} vs text {text_rr:.0%}")
-        output.append("")
-
     # Stale leads warning
     stale = await db.get_stale_outreaches(campaign_id, stale_days=14)
     if stale:

@@ -21,8 +21,6 @@ from ..config import apply_free_monthly_caps, get_tier, is_backend_mode, load_co
 from ..constants import (
     CAMPAIGN_TYPE_JOB_SEARCH,
     DEFAULT_CAMPAIGN_TYPE,
-    DEFAULT_NOISE_TYPE,
-    DEFAULT_VOICE_HUMANIZE,
     FREE_MAX_CAMPAIGNS,
     FREE_MAX_CONTACTS_ANALYZED,
     INMAIL_FALLBACK_AFTER_DAYS,
@@ -141,8 +139,6 @@ def build_campaign_config(
         "prospect_count": prospect_count,
         "booking_link": "",
         "voice_mode": VOICE_MODE_TEXT_ONLY,  # voice memos are off (heylead-api #1527)
-        "voice_noise_type": DEFAULT_NOISE_TYPE,
-        "voice_humanize": DEFAULT_VOICE_HUMANIZE,
         # Warm-up sequence toggles
         "enable_profile_views": not is_connections_only,
         "enable_follows": not is_connections_only,

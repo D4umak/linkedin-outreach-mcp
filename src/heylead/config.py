@@ -59,7 +59,6 @@ def ensure_dirs() -> Path:
     (home / constants.DB_DIR).mkdir(parents=True, exist_ok=True)
     (home / constants.AUTH_DIR).mkdir(parents=True, exist_ok=True)
     (home / constants.LOG_DIR).mkdir(parents=True, exist_ok=True)
-    (home / constants.VOICE_MEMO_DIR).mkdir(parents=True, exist_ok=True)
     (home / constants.BACKUP_DIR).mkdir(parents=True, exist_ok=True)
     return home
 
@@ -600,38 +599,6 @@ def set_scheduler_always_on(enabled: bool) -> None:
     cfg = load_config()
     cfg["scheduler_always_on"] = enabled
     save_config(cfg)
-
-
-# ──────────────────────────────────────────────
-# Hume AI / Voice Memo config helpers
-# ──────────────────────────────────────────────
-
-def get_hume_api_key() -> str:
-    """Return Hume AI API key from config, or empty string."""
-    cfg = load_config()
-    return cfg.get("api_keys", {}).get("hume", "")
-
-
-def set_hume_api_key(key: str) -> None:
-    """Store Hume AI API key."""
-    cfg = load_config()
-    cfg.setdefault("api_keys", {})["hume"] = key
-    save_config(cfg)
-
-
-def is_voice_memo_enabled() -> bool:
-    """Voice memos are off for every user (heylead-api #1527, 26 Sep 2026).
-
-    Prospects recognise them as AI. Every audio path (follow-ups, replies,
-    send_message) asks this gate first and sends text when it says no, so it
-    says no whatever key or login the machine has.
-    """
-    return False
-
-
-def voice_memo_dir() -> Path:
-    """Return the voice memos directory (~/.heylead/voice_memos/)."""
-    return _heylead_home() / constants.VOICE_MEMO_DIR
 
 
 def backups_dir() -> Path:

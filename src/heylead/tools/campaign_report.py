@@ -283,24 +283,6 @@ async def run_campaign_report(
                     output.append(f"  \u2022 {name}: {eng.get('reaction_type', 'LIKE')}{status_tag} on \"{post_snippet}...\"")
             output.append("")
 
-    # ── Section 7.5: Voice Memo Stats ──
-    voice_stats = await db.get_voice_memo_stats(campaign_id)
-    voice_sent = voice_stats.get("voice_sent", 0)
-    text_sent = voice_stats.get("text_sent", 0)
-    if voice_sent > 0:
-        voice_rr = voice_stats.get("voice_reply_rate", 0)
-        text_rr = voice_stats.get("text_reply_rate", 0)
-        output.append("Voice Memo Stats:")
-        output.append(f"\u251c\u2500\u2500 Voice messages sent: {voice_sent}")
-        output.append(f"\u251c\u2500\u2500 Text messages sent: {text_sent}")
-        if voice_stats.get("voice_total_outreaches", 0) > 0 and voice_stats.get("text_total_outreaches", 0) > 0:
-            diff = voice_rr - text_rr
-            diff_str = f" ({'+' if diff > 0 else ''}{diff:.0%} diff)" if abs(diff) > 0.01 else ""
-            output.append(f"\u2514\u2500\u2500 Voice vs text reply rate: {voice_rr:.0%} vs {text_rr:.0%}{diff_str}")
-        else:
-            output.append(f"\u2514\u2500\u2500 Reply rate data: collecting (need more voice outreaches)")
-        output.append("")
-
     # ── Section 7.7: Delivery Verification ──
     try:
         def _query_verification(cid: str) -> dict[str, int]:

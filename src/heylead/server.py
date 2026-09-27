@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.408 (2026-09-27)
+- New: the launch plan says the first message each person gets ends with "Sent with my AI assistant."
+- Removed: the unused voice-memo code and its send paths; every message is text
+
 ## v0.10.407 (2026-09-27)
 - New: the UI QA loop tests narrow widths itself, in a popup window
 - Fix: a citation is a whole-word mention, never a substring

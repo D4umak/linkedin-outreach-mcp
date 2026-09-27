@@ -5482,7 +5482,6 @@ def recover_stuck_jobs(stuck_minutes: int = 30) -> int:
     return count
 
 
-
 def get_pending_job_count(campaign_id: Optional[str], job_type: str) -> int:
     """Count pending/running jobs of a given type for a campaign (dedup check).
 
@@ -6869,124 +6868,6 @@ def list_published_posts(days: int = 7) -> list[dict]:
     ).fetchall()
     db.close()
     return [dict(r) for r in rows]
-
-
-def get_voice_memo_stats(campaign_id: str = "") -> dict:
-    """Get voice memo statistics for analytics.
-
-    Returns: {voice_sent, text_sent, voice_reply_rate, text_reply_rate}
-    """
-    db = get_db()
-    if campaign_id:
-        row = db.execute(
-            """SELECT
-                   SUM(CASE WHEN m.format = 'voice' THEN 1 ELSE 0 END) as voice_sent,
-                   SUM(CASE WHEN m.format != 'voice' THEN 1 ELSE 0 END) as text_sent
-               FROM messages m
-               JOIN outreaches o ON m.outreach_id = o.id
-               WHERE o.campaign_id = ? AND m.role = 'sdr'""",
-            (campaign_id,),
-        ).fetchone()
-        # Reply rates per format
-        voice_reply_row = db.execute(
-            """SELECT COUNT(DISTINCT o.id) as cnt
-               FROM outreaches o
-               JOIN messages m ON m.outreach_id = o.id
-               WHERE o.campaign_id = ?
-                 AND o.status IN ('replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out')
-                 AND m.format = 'voice' AND m.role = 'sdr'""",
-            (campaign_id,),
-        ).fetchone()
-        text_reply_row = db.execute(
-            """SELECT COUNT(DISTINCT o.id) as cnt
-               FROM outreaches o
-               JOIN messages m ON m.outreach_id = o.id
-               WHERE o.campaign_id = ?
-                 AND o.status IN ('replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out')
-                 AND m.format != 'voice' AND m.role = 'sdr'""",
-            (campaign_id,),
-        ).fetchone()
-        # Total outreaches that received voice vs text
-        voice_total_row = db.execute(
-            """SELECT COUNT(DISTINCT o.id) as cnt
-               FROM outreaches o
-               JOIN messages m ON m.outreach_id = o.id
-               WHERE o.campaign_id = ? AND m.format = 'voice' AND m.role = 'sdr'""",
-            (campaign_id,),
-        ).fetchone()
-        text_total_row = db.execute(
-            """SELECT COUNT(DISTINCT o.id) as cnt
-               FROM outreaches o
-               JOIN messages m ON m.outreach_id = o.id
-               WHERE o.campaign_id = ? AND m.format != 'voice' AND m.role = 'sdr'""",
-            (campaign_id,),
-        ).fetchone()
-    else:
-        row = db.execute(
-            """SELECT
-                   SUM(CASE WHEN format = 'voice' THEN 1 ELSE 0 END) as voice_sent,
-                   SUM(CASE WHEN format != 'voice' THEN 1 ELSE 0 END) as text_sent
-               FROM messages WHERE role = 'sdr'"""
-        ).fetchone()
-        voice_reply_row = db.execute(
-            """SELECT COUNT(DISTINCT o.id) as cnt
-               FROM outreaches o
-               JOIN messages m ON m.outreach_id = o.id
-               WHERE o.status IN ('replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out')
-                 AND m.format = 'voice' AND m.role = 'sdr'"""
-        ).fetchone()
-        text_reply_row = db.execute(
-            """SELECT COUNT(DISTINCT o.id) as cnt
-               FROM outreaches o
-               JOIN messages m ON m.outreach_id = o.id
-               WHERE o.status IN ('replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out')
-                 AND m.format != 'voice' AND m.role = 'sdr'"""
-        ).fetchone()
-        voice_total_row = db.execute(
-            """SELECT COUNT(DISTINCT o.id) as cnt
-               FROM outreaches o
-               JOIN messages m ON m.outreach_id = o.id
-               WHERE m.format = 'voice' AND m.role = 'sdr'"""
-        ).fetchone()
-        text_total_row = db.execute(
-            """SELECT COUNT(DISTINCT o.id) as cnt
-               FROM outreaches o
-               JOIN messages m ON m.outreach_id = o.id
-               WHERE m.format != 'voice' AND m.role = 'sdr'"""
-        ).fetchone()
-    db.close()
-
-    voice_sent = (row["voice_sent"] if row and row["voice_sent"] else 0)
-    text_sent = (row["text_sent"] if row and row["text_sent"] else 0)
-    voice_replied = voice_reply_row["cnt"] if voice_reply_row else 0
-    text_replied = text_reply_row["cnt"] if text_reply_row else 0
-    voice_total = voice_total_row["cnt"] if voice_total_row else 0
-    text_total = text_total_row["cnt"] if text_total_row else 0
-
-    return {
-        "voice_sent": voice_sent,
-        "text_sent": text_sent,
-        "voice_reply_rate": voice_replied / voice_total if voice_total > 0 else 0.0,
-        "text_reply_rate": text_replied / text_total if text_total > 0 else 0.0,
-        "voice_replied": voice_replied,
-        "text_replied": text_replied,
-        "voice_total_outreaches": voice_total,
-        "text_total_outreaches": text_total,
-    }
-
-
-def get_daily_voice_memo_count() -> int:
-    """Count voice memos sent today for rate limiting."""
-    import datetime
-    today = datetime.date.today()
-    today_start = int(time.mktime(today.timetuple()))
-    db = get_db()
-    row = db.execute(
-        "SELECT COUNT(*) as c FROM messages WHERE format = 'voice' AND timestamp >= ?",
-        (today_start,),
-    ).fetchone()
-    db.close()
-    return row["c"] if row else 0
 
 
 def update_published_post(post_id: str, last_checked: int, comment_count: int) -> None:

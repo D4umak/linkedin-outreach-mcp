@@ -473,18 +473,10 @@ def get_feedback_data(
             out.append(d)
         return out
 
-    voice_stats: dict[str, Any] = {}
-    try:
-        from .queries import get_voice_memo_stats
-        voice_stats = get_voice_memo_stats(campaign_id) or {}
-    except Exception:
-        voice_stats = {}
-
     return {
         "best": _to_dict(best),
         "worst": _to_dict(worst),
         "scope": scope,
-        "voice_stats": voice_stats,
     }
 
 def get_plan_quality_metrics(campaign_id: str = "", days: int = 7) -> dict:

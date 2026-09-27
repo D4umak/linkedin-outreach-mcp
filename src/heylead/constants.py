@@ -1468,17 +1468,6 @@ STRATEGIST_SCORE_PROFILE_VIEWED_BACK = 1.0
 STRATEGIST_SCORE_NO_RESPONSE = 0.0
 STRATEGIST_SCORE_DECLINED = -1.0
 
-# ──────────────────────────────────────────────
-# Voice Memos / Hume AI TTS
-# ──────────────────────────────────────────────
-
-HUME_TTS_API_URL = "https://api.hume.ai/v0/tts"
-HUME_DEFAULT_OUTPUT_FORMAT = "mp3"
-HUME_DEFAULT_SPEED = 1.0
-VOICE_MEMO_MAX_TEXT_CHARS = 500           # Keep voice messages concise
-VOICE_MEMO_MAX_DURATION_SECONDS = 60     # LinkedIn voice message limit
-VOICE_MEMO_DIR = "voice_memos"          # Subdir under ~/.heylead/
-
 # Voice mode options for campaigns. Voice memos are off for every user
 # (heylead-api #1527, 26 Sep 2026): text_only is the only mode a tool accepts.
 # The other names stay so campaigns stored before then still read cleanly.
@@ -1492,12 +1481,6 @@ VOICE_MEMOS_OFF = (
     "message is sent as text. voice_mode accepts only 'text_only'."
 )
 
-# Voice Memo Enhancement (v0.10)
-VALID_NOISE_TYPES = frozenset({"office", "cafe", "street", "quiet", "none", "auto"})
-VALID_NOISE_VOLUMES = frozenset({"subtle", "moderate", "noticeable"})
-DEFAULT_NOISE_TYPE = "auto"
-DEFAULT_NOISE_VOLUME = "subtle"
-DEFAULT_VOICE_HUMANIZE = True
 
 # ──────────────────────────────────────────────
 # Partner Follow-Up Tracking

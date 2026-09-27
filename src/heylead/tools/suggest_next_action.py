@@ -87,33 +87,6 @@ ACTION_ICONS = {
     "errored": "\u26a0\ufe0f",
 }
 
-# Voice memo advice: minimum sends before judging, and how far below text
-# the voice reply rate must sit before we recommend turning it off.
-VOICE_ADVICE_MIN_SENT = 10
-VOICE_ADVICE_UNDERPERFORM_RATIO = 0.5
-
-
-def _voice_mode_advice(stats: dict | None) -> str | None:
-    """Return "text_only" when voice memos are clearly not earning replies.
-
-    Compares the voice reply rate with the text reply rate from
-    get_voice_memo_stats. The old check read a ``voice_accepted`` key that
-    the stats never contained, so it always saw zero and nagged every
-    campaign after its 10th voice memo regardless of outcome.
-    """
-    stats = stats or {}
-    voice_sent = int(stats.get("voice_sent") or 0)
-    if voice_sent < VOICE_ADVICE_MIN_SENT:
-        return None
-    voice_rate = float(stats.get("voice_reply_rate") or 0.0)
-    text_rate = float(stats.get("text_reply_rate") or 0.0)
-    if voice_rate <= 0.0:
-        return "text_only"
-    if text_rate > 0.0 and voice_rate < text_rate * VOICE_ADVICE_UNDERPERFORM_RATIO:
-        return "text_only"
-    return None
-
-
 # Temperature labels
 TEMP_COLD = "cold"
 TEMP_WARM = "warm"
@@ -935,39 +908,6 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
                 "campaign": "",
                 "temp": "",
             })
-    except Exception:
-        pass
-
-    # ── Voice memo suggestion ──
-    try:
-        from ..config import is_voice_memo_enabled
-        from ..db.queries import get_voice_memo_stats
-
-        if is_voice_memo_enabled():
-            for camp in campaigns:
-                cid = camp["id"]
-                camp_config = {}
-                try:
-                    import json as _json
-                    camp_config = _json.loads(camp.get("config_json", "{}") or "{}")
-                except (ValueError, TypeError):
-                    pass
-                voice_mode = camp_config.get("voice_mode", "text_only")
-                if voice_mode != "text_only":
-                    # Voice is on — check if voice acceptance is low and suggest disabling
-                    v_stats = await run_db(get_voice_memo_stats, cid)
-                    if _voice_mode_advice(v_stats) == "text_only":
-                        recommendations.append({
-                            "priority": 9,
-                            "score": 1.5,
-                            "icon": "\U0001f3a4",
-                            "text": f"Voice memos not getting responses for **{camp['name']}** — consider switching to text only",
-                            "action": f"Run: edit_campaign(campaign_id='{cid[:8]}...', voice_mode='text_only')",
-                            "fit_score": 0,
-                            "campaign": camp["name"],
-                            "temp": "",
-                        })
-                        break  # Only suggest once
     except Exception:
         pass
 

@@ -548,15 +548,6 @@ async def _fetch_and_analyze(
     await run_db(save_setting, "voice_signature", voice)
     await run_db(save_setting, "expertise_map", expertise)
 
-    # ── Generate Hume AI voice config from voice signature ──
-    try:
-        from ..ai.hume_voice import create_voice_config
-        hume_voice_config = create_voice_config(voice)
-        await run_db(save_setting, "hume_voice_config", hume_voice_config)
-        logger.info("Hume voice config generated and saved")
-    except Exception as e:
-        logger.warning("Hume voice config generation failed (non-fatal): %s", e)
-
     await run_db(save_setting, "setup_complete", True)
 
     # ── Auto-create company watchlist for user's own company page ──

@@ -906,99 +906,57 @@ async def run_send_followup(
         return f"⏭️ Skipped follow-up to {prospect_name} — {guard.message}"
 
     # ── LINKEDIN DM PATH ──
+    # Voice memos are off for everyone (heylead-api #1527): a follow-up is text.
     actual_format = "text"
-    audio_path = ""
-    if format == "voice" and not first_touch:  # a first touch is text: the disclosure is a sentence
-        try:
-            from ..ai.voice_memo_generator import generate_voice_memo, cleanup_voice_memo
-            from ..config import is_voice_memo_enabled
-            if is_voice_memo_enabled():
-                voice_result = await generate_voice_memo(
-                    message,
-                    voice_signature=voice_signature,
-                    humanize=campaign_config.get("voice_humanize", True),
-                    noise_type=campaign_config.get("voice_noise_type", "auto"),
-                    noise_volume=campaign_config.get("voice_noise_volume", "subtle"),
-                )
-                if voice_result.get("success"):
-                    audio_path = voice_result["audio_path"]
-                    actual_format = "voice"
-                else:
-                    logger.warning("Voice gen failed (%s), falling back to text", voice_result.get("error"))
-        except Exception as e:
-            logger.warning("Voice gen error (%s), falling back to text", e)
-
+    # The client stays open past this block: delivery is confirmed by reading
+    # the conversation back, and a closed httpx session makes that read fail,
+    # which used to record every delivered DM as unverified.
     try:
-        if actual_format == "voice" and audio_path:
-            if create_new_chat:
-                send_result = await client.send_new_voice_message(
-                    account_id=account_id,
-                    provider_id=prospect_provider_id,
-                    audio_path=audio_path,
-                )
-            else:
-                send_result = await client.send_voice_message(
-                    account_id=account_id,
-                    chat_id=chat_id,
-                    audio_path=audio_path,
-                )
-            # If voice send failed, fall back to text
-            if not send_result.get("success"):
-                logger.warning("Voice send failed (%s), falling back to text", send_result.get("error"))
-                actual_format = "text"
-
-        if actual_format == "text":
-            from ..ops_log import log_outbound_send
-            step = f"followup_{followup_count + 1}"
-            log_outbound_send(
-                "attempt",
-                outreach_id=outreach_id,
-                campaign_id=campaign_id,
-                channel="dm",
-                step_index=step,
-                text=message,
+        from ..ops_log import log_outbound_send
+        step = f"followup_{followup_count + 1}"
+        log_outbound_send(
+            "attempt",
+            outreach_id=outreach_id,
+            campaign_id=campaign_id,
+            channel="dm",
+            step_index=step,
+            text=message,
+            provider_id=prospect_provider_id,
+            chat_id=chat_id if not create_new_chat else "",
+            msg_format=actual_format,
+        )
+        if create_new_chat:
+            send_result = await client.send_new_message(
+                account_id=account_id,
                 provider_id=prospect_provider_id,
-                chat_id=chat_id if not create_new_chat else "",
-                msg_format=actual_format,
-            )
-            if create_new_chat:
-                send_result = await client.send_new_message(
-                    account_id=account_id,
-                    provider_id=prospect_provider_id,
-                    text=message,
-                )
-            else:
-                send_result = await client.send_message(
-                    account_id=account_id,
-                    chat_id=chat_id,
-                    text=message,
-                )
-            resolved_chat = send_result.get("chat_id") or chat_id or ""
-            if resolved_chat:
-                from ..db.queries import update_outreach
-                await run_db(update_outreach, outreach_id, chat_id=resolved_chat)
-            log_outbound_send(
-                "result",
-                outreach_id=outreach_id,
-                campaign_id=campaign_id,
-                channel="dm",
-                step_index=step,
                 text=message,
-                provider_id=prospect_provider_id,
-                chat_id=resolved_chat,
-                success=bool(send_result.get("success")),
-                error_type=(send_result.get("error") or "")[:80] or None,
-                msg_format=actual_format,
             )
+        else:
+            send_result = await client.send_message(
+                account_id=account_id,
+                chat_id=chat_id,
+                text=message,
+            )
+        resolved_chat = send_result.get("chat_id") or chat_id or ""
+        if resolved_chat:
+            from ..db.queries import update_outreach
+            await run_db(update_outreach, outreach_id, chat_id=resolved_chat)
+        log_outbound_send(
+            "result",
+            outreach_id=outreach_id,
+            campaign_id=campaign_id,
+            channel="dm",
+            step_index=step,
+            text=message,
+            provider_id=prospect_provider_id,
+            chat_id=resolved_chat,
+            success=bool(send_result.get("success")),
+            error_type=(send_result.get("error") or "")[:80] or None,
+            msg_format=actual_format,
+        )
     except UnipileAuthError:
         await _release_followup_claim()
         await client.close()
-        if audio_path:
-            try:
-                from ..ai.voice_memo_generator import cleanup_voice_memo
-                cleanup_voice_memo(audio_path)
-            except Exception:
-                pass
         return (
             "LinkedIn account disconnected.\n\n"
             "Run setup_profile() again to reconnect."
@@ -1006,23 +964,7 @@ async def run_send_followup(
     except Exception as e:
         await _release_followup_claim()
         await client.close()
-        if audio_path:
-            try:
-                from ..ai.voice_memo_generator import cleanup_voice_memo
-                cleanup_voice_memo(audio_path)
-            except Exception:
-                pass
         return f"Failed to send follow-up: {e}"
-    finally:
-        # The client stays open past this block: delivery is confirmed by
-        # reading the conversation back, and a closed httpx session makes that
-        # read fail, which used to record every delivered DM as unverified.
-        if audio_path:
-            try:
-                from ..ai.voice_memo_generator import cleanup_voice_memo
-                cleanup_voice_memo(audio_path)
-            except Exception:
-                pass
 
     if send_result.get("success"):
         # Verify the DM was actually delivered by reading back the conversation.
