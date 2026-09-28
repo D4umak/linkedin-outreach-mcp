@@ -21,6 +21,7 @@ import time
 
 from ..dashboard_links import dashboard_url
 from ..db.async_bridge import run_db
+from ..formatter import person_name
 from ..db.queries import get_outreach_with_contact, log_action
 
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ async def _find_hosted_lead(outreach_id: str) -> dict | None:
             return {
                 "outreach_id": outreach_id,
                 "status": "hot_lead",
-                "name": lead.get("contact_name") or "Unknown",
+                "name": person_name(lead.get("contact_name")),
                 "title": lead.get("title") or "",
                 "company": lead.get("company") or "",
                 "campaign_name": lead.get("campaign_name") or "",
@@ -65,7 +66,7 @@ async def _find_hosted_lead(outreach_id: str) -> dict | None:
             return {
                 "outreach_id": outreach_id,
                 "status": "hot_lead",
-                "name": lead.get("prospect_name") or lead.get("name") or "Unknown",
+                "name": person_name(lead.get("prospect_name") or lead.get("name")),
                 "title": lead.get("prospect_title") or lead.get("title") or "",
                 "company": lead.get("prospect_company") or lead.get("company") or "",
                 "campaign_name": lead.get("campaign_name") or "",

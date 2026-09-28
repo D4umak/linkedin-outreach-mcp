@@ -263,9 +263,19 @@ def why_line(why: dict | None) -> str:
 UNNAMED = "Unnamed prospect"
 
 
+# What a source writes when it has no name. Stored as a name, it read as one.
+PLACEHOLDER_NAMES = frozenset({"unknown", "linkedin member", "unnamed lead", "someone"})
+
+
+def has_name(name: object) -> bool:
+    """True when ``name`` is a person's name, not empty and not a placeholder."""
+    text = str(name or "").strip()
+    return bool(text) and text.lower() not in PLACEHOLDER_NAMES
+
+
 def person_name(name: object, unnamed: str = UNNAMED) -> str:
     """The name to show for a person: theirs, or ``unnamed``."""
-    return str(name or "").strip() or unnamed
+    return str(name).strip() if has_name(name) else unnamed
 
 
 def person_line(

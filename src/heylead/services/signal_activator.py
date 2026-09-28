@@ -215,7 +215,7 @@ async def _keep_global_only(
     await run_db(
         upsert_global_contact,
         linkedin_id=linkedin_id,
-        name=sig.get("prospect_name") or "Unknown",
+        name=sig.get("prospect_name") or "",
         title=sig.get("prospect_title") or "",
         company=_extract_company(sig),
         linkedin_url=f"https://www.linkedin.com/in/{linkedin_id}" if linkedin_id else "",
@@ -238,7 +238,7 @@ async def _enroll_signal_prospect(
         enroll_prospect,
         campaign_id,
         {
-            "name": sig.get("prospect_name") or "Unknown",
+            "name": sig.get("prospect_name") or "",
             "title": sig.get("prospect_title") or "",
             "company": _extract_company(sig),
             "linkedin_url": (

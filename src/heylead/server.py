@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.413 (2026-09-28)
+- Fix: a placeholder is never stored as a person's name (#1715)
+- Fix: the probe reports a <main> that scrolls sideways (#1753)
+
 ## v0.10.412 (2026-09-28)
 - Fix: a replied lead is never offered a follow-up
 - Fix: a cut result ends at a line (#1630, client twin of the UI QA F1 fix)

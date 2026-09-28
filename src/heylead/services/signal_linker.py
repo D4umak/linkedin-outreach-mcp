@@ -135,7 +135,7 @@ def scan_signal_pool_for_campaign(
             outreach_id = enroll_prospect(
                 campaign_id,
                 {
-                    "name": sig.get("prospect_name") or "Unknown",
+                    "name": sig.get("prospect_name") or "",
                     "title": sig.get("prospect_title") or "",
                     "company": _extract_company(sig),
                     "linkedin_url": f"https://www.linkedin.com/in/{linkedin_id}",
@@ -180,7 +180,7 @@ def scan_signal_pool_for_campaign(
             hot_leads_found += 1
             signals_matched += 1
             details.append({
-                "name": sig.get("prospect_name") or "Unknown",
+                "name": sig.get("prospect_name") or "",
                 "signal_type": sig.get("signal_type", ""),
                 "intent": sig.get("intent", ""),
             })
@@ -285,7 +285,7 @@ def match_signals_to_campaigns() -> str:
             outreach_id = enroll_prospect(
                 campaign_id,
                 {
-                    "name": sig.get("prospect_name") or "Unknown",
+                    "name": sig.get("prospect_name") or "",
                     "title": sig.get("prospect_title") or "",
                     "company": _extract_company(sig),
                     "linkedin_url": f"https://www.linkedin.com/in/{linkedin_id}",

@@ -892,7 +892,7 @@ async def run_check_replies() -> str:
                 )
                 enrolled = await enrich_and_enroll_live_thread(
                     sender_id=sender_id,
-                    name=sender_name or "Unknown",
+                    name=sender_name or "",
                     text=msg.get("text") or "",
                     headline=msg.get("sender_headline") or msg.get("headline") or "",
                     company=msg.get("sender_company") or msg.get("company") or "",

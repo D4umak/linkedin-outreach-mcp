@@ -2624,7 +2624,7 @@ async def _adopt_cloud_outreach(oid: str, update: dict[str, Any]) -> dict[str, A
     contact_id = await run_db(
         queries.save_contact,
         campaign_id=campaign_id,
-        name=name or linkedin_id or "Unknown",
+        name=name,  # no name is stored as none, never "Unknown" (heylead-api #1715)
         title=str(update.get("contact_title") or ""),
         company=str(update.get("contact_company") or ""),
         linkedin_url=linkedin_url,
