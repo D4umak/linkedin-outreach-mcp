@@ -33,6 +33,11 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.409 (2026-09-28)
+- Fix: the probe reports the theme the page chose
+- Fix: the local judge counts the titles that decide (api #1605 twin)
+- New: the loop checks the network, links and console; the receiver names its run; rounds merge in parts
+
 ## v0.10.408 (2026-09-27)
 - New: the launch plan says the first message each person gets ends with "Sent with my AI assistant."
 - Removed: the unused voice-memo code and its send paths; every message is text

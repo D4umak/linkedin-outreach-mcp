@@ -36,6 +36,7 @@ __all__ = [
     "infer_seniority_level",
     "states_seniority",
     "is_decision_maker",
+    "decision_maker_share",
     "levels_named",
     "constrain_include",
     "apply_seniority_policy",
@@ -161,6 +162,19 @@ def states_seniority(title: str | None) -> bool:
 def is_decision_maker(title_or_level: str | None) -> bool:
     """True when a title or a level resolves to owner / cxo / vp / director."""
     return normalize_seniority(title_or_level) in DECISION_MAKER_LEVELS
+
+
+def decision_maker_share(titles: object) -> tuple[int, int]:
+    """How many of ``titles`` state a decision-maker level, out of how many.
+
+    The goal-fit judge was asked for this share and estimated it: the same 15
+    titles came back as 33% and as 27% (heylead-api #1605). A title counts
+    when the level it states is owner, cxo, vp or director; one that states no
+    level does not. Blank titles are not titles.
+    """
+    named = [str(t).strip() for t in (titles or []) if t is not None and str(t).strip()]
+    deciders = sum(1 for t in named if infer_seniority_level(t) in DECISION_MAKER_LEVELS)
+    return deciders, len(named)
 
 
 # A brief is split into its roles at these, so "CTOs and engineering

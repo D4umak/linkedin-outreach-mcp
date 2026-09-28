@@ -152,6 +152,32 @@ class GoalMatchVerdict:
         }
 
 
+def _judged_coverage(data: dict[str, Any]) -> float:
+    """The share the payload reports: the backend's, which counts it for sell,
+    or the local model's, which is overridden for sell (heylead-api #1605)."""
+    try:
+        coverage = float(data.get("decision_maker_coverage", 0.0))
+    except (TypeError, ValueError):
+        coverage = 0.0
+    return max(0.0, min(1.0, coverage))
+
+
+def counted_coverage(goal_key: str, titles: list[str]) -> tuple[int, int] | None:
+    """For sell, the titles that decide, counted: (deciders, titles).
+
+    The judge's own estimate of this share moved between 33% and 27% for the
+    same 15 titles (heylead-api #1605). The other goals ask who hires, who
+    would take the role, who sells it: not a seniority question, so None.
+    """
+    from .. import goals
+    from ..services import seniority
+
+    if (goals.normalize_goal(goal_key) or goals.DEFAULT_GOAL) != goals.SELL:
+        return None
+    counted = seniority.decision_maker_share(titles)
+    return counted if counted[1] else None
+
+
 def coerce_verdict(
     data: dict[str, Any], source: str = "backend", goal: str = "sell",
 ) -> GoalMatchVerdict:
@@ -171,11 +197,7 @@ def coerce_verdict(
     verdict = str(data.get("verdict") or "").strip().lower()
     if verdict not in VERDICTS:
         verdict = "partial"
-    try:
-        coverage = float(data.get("decision_maker_coverage", 0.0))
-    except (TypeError, ValueError):
-        coverage = 0.0
-    coverage = max(0.0, min(1.0, coverage))
+    coverage = _judged_coverage(data)
 
     alignment: list[dict[str, Any]] = []
     for entry in (data.get("persona_alignment") or [])[:6]:
@@ -283,11 +305,20 @@ def build_goal_match_prompt(
         "## SALES METHODOLOGY EVIDENCE (cite persona/stage/source; abstain if irrelevant)"
         if goals.uses_sales_kb(key) else "## EVIDENCE"
     )
+    counted = counted_coverage(key, titles)
+    counted_block = ""
+    if counted:
+        counted_block = (
+            "## DECISION-MAKER COVERAGE (counted from the titles; use it, do not estimate it)\n"
+            f"{counted[0]} of {counted[1]} titles state owner, C-level, VP or director: "
+            f"{round(100 * counted[0] / counted[1])}%\n\n"
+        )
     prompt = (
         f"## CAMPAIGN GOAL{label_suffix}\n{(goal or 'not specified')[:1200]}\n\n"
         f"## WHAT THE SENDER {'OFFERS' if key == goals.SELL else 'BRINGS'}\n"
         f"{(offer or 'not specified')[:1500]}\n\n"
         f"## GENERATED ICP\n{icp_block[:4000]}\n\n"
+        f"{counted_block}"
         f"{evidence_heading}\n"
         f"{kb_block or 'none retrieved'}\n\n"
         f"{closing}"
@@ -350,6 +381,9 @@ async def judge_goal_match(
         )
     verdict = coerce_verdict(data, source="local", goal=goal_key)
     verdict.kb_cards_used = used
+    counted = counted_coverage(goal_key, summarize_icp(icp_json)[1])
+    if counted:
+        verdict.decision_maker_coverage = counted[0] / counted[1]
     return verdict
 
 
