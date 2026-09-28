@@ -71,6 +71,18 @@ _ON_WORDS = frozenset({"on", "true", "1", "yes", "y", "enabled", "enable"})
 _OFF_WORDS = frozenset({"off", "false", "0", "no", "n", "disabled", "disable"})
 
 
+# A plan's days ("Today", "From tomorrow") hold only while the campaign runs
+# its steps: a draft runs them once launched, an active campaign now. Any
+# other status sends nothing, and the plan says so first; an archived
+# campaign's page read 'Today: HeyLead searches…' and 'From today at 08:00
+# your time: up to 168 invitations a day' (heylead-api#1696, 28 Sep 2026).
+# Twin of heylead-api app/services/campaign_plan.py. A row with no status is
+# a draft.
+RUNNING_STATUSES = frozenset({"draft", "active"})
+# The control that starts a stopped campaign again, as the dashboard names it.
+RESTART_CONTROL = {"paused": "Resume", "archived": "Unarchive"}
+
+
 @dataclass(frozen=True)
 class PlanStep:
     key: str
@@ -162,6 +174,29 @@ def effective_working_hours(state: dict[str, Any] | None) -> dict[str, Any]:
     if zone:
         window["timezone"] = zone
     return window
+
+
+def plan_status(campaign: dict[str, Any] | None) -> str:
+    """The campaign's status as the plan reads it; no status is a draft."""
+    return str((campaign or {}).get("status") or "draft").strip().lower()
+
+
+def not_running_step(status: str) -> PlanStep | None:
+    """The step that opens the plan of a campaign that is not running, or None."""
+    if status in RUNNING_STATUSES:
+        return None
+    control = RESTART_CONTROL.get(status)
+    if control:
+        line = (
+            f"This campaign is {status} and not running: it finds nobody and sends "
+            f"nothing. {control} it and it takes the steps below again, inside your "
+            "sending window."
+        )
+        title = status.capitalize()
+    else:
+        line = "This campaign is not running: it finds nobody and sends nothing."
+        title = "Not running"
+    return PlanStep("status", title, line, "Not running")
 
 
 def first_send_day(hours: dict[str, Any], now: datetime) -> str:
@@ -329,42 +364,53 @@ def campaign_plan(
     job_search = _is_job_search(cfg, context)
     booking_link = str(cfg.get("booking_link") or "").strip()
     daily, weekly = _seat_caps(seat)
+    status = plan_status(campaign)
+    stopped = not_running_step(status)
+    restart = RESTART_CONTROL.get(status, "restart").lower()
     day = first_send_day(hours, now or datetime.now(timezone.utc))
     start = int(hours.get("start", 0))
+    # When the dated steps happen: from today (or the next sending day) while
+    # the campaign runs; after the restart while it does not.
+    if stopped:
+        find_when, find_hint = f"Once you {restart} it", f"After you {restart}"
+        send_when, send_hint = f"Once you {restart} it, from {start:02d}:00 your time", f"After you {restart}"
+    else:
+        find_when, find_hint = "Today", "Today"
+        send_when, send_hint = f"From {day} at {start:02d}:00 your time", f"From {day}"
     window = f"{_days_label(hours.get('days') or ALL_DAYS)} {start:02d}:00-{int(hours.get('end', 24)):02d}:00"
 
-    steps: list[PlanStep] = []
+    steps: list[PlanStep] = [stopped] if stopped else []
     if connections_only:
         find = (
-            f"Today: HeyLead searches LinkedIn for people who match, up to {c.PLAN_DAILY_ADD_BUDGET} "
+            f"{find_when}: HeyLead searches LinkedIn for people who match, up to {c.PLAN_DAILY_ADD_BUDGET} "
             "a day, keeps only those above the fit line, and in this campaign writes only to "
             "people you are already connected to. You can open every one."
         )
     else:
         find = (
-            f"Today: HeyLead searches LinkedIn for people who match, up to {c.PLAN_DAILY_ADD_BUDGET} "
+            f"{find_when}: HeyLead searches LinkedIn for people who match, up to {c.PLAN_DAILY_ADD_BUDGET} "
             "a day, and keeps only those above the fit line. You can open every one."
         )
-    steps.append(PlanStep("find", "Find", find, "Today"))
+    steps.append(PlanStep("find", "Find", find, find_hint))
 
     if not connections_only:
         steps.append(PlanStep("warmup", "Warm-up", _warmup_line(cfg), "Before each invitation"))
         steps.append(PlanStep(
             "invite", "Invite",
-            f"From {day} at {start:02d}:00 your time: up to {daily} "
+            f"{send_when}: up to {daily} "
             f"invitations a day and {weekly} a week, {window}, "
             f"{_minutes(c.INVITE_DELAY_MIN)} to {_minutes(c.INVITE_DELAY_MAX)} minutes apart, "
             # The quoted sentence ends with its own full stop; a "." after the
             # clause read 'assistant.".' (UI QA of #1561, F1).
             f"each with a short note in your voice{_first_touch_clause() or '.'}",
-            f"From {day}",
+            send_hint,
         ))
         steps.append(PlanStep("accept", "Accept", ACCEPT_LINE, "A few days later"))
 
     if connections_only:
-        opener = (f"From {day} at {start:02d}:00 your time, {window}: an opening message "
+        opener = (f"{send_when}, {window}: an opening message "
                   f"in your voice{_first_touch_clause()} to each person, ")
-        open_hint = f"From {day}"
+        open_hint = send_hint
     else:
         opener = "When someone accepts: an opening message in your voice, "
         open_hint = "On acceptance"

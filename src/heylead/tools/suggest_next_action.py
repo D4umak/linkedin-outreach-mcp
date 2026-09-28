@@ -55,6 +55,7 @@ from ..db.queries import (
 )
 from ..db.schema import get_db
 from ..formatter import stars
+from ..next_step import reengage_command
 from ..linkedin import get_account_id, get_linkedin_client, UnipileError
 from ..services.health_score import coerce_daily_limit, compute_health_score
 from ..db.async_bridge import run_db
@@ -498,7 +499,9 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
                 "score": 0.0,
                 "icon": ACTION_ICONS["stale"],
                 "text": f"**{s['name']}** has been inactive for {s['days_stale']}d \u2014 close or re-engage?",
-                "action": f'prospect(action="close", outreach_id="{s["outreach_id"]}") or send_message(action="followup")',
+                # A stale hot lead answered us: re-open with a reply, never a
+                # follow-up (#1723; send_followup refuses one anyway).
+                "action": f'prospect(action="close", outreach_id="{s["outreach_id"]}") or {reengage_command(s.get("status"))}',
                 "fit_score": s.get("fit_score", 0),
                 "campaign": camp_name,
                 "temp": "",

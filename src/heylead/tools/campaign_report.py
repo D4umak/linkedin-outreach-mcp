@@ -13,6 +13,7 @@ import time as _time
 from ..db import aio as db
 from ..db.async_bridge import run_db
 from ..constants import SOURCE_LABELS
+from ..next_step import reengage_command
 from ..services.revenue import is_won
 from ..formatter import (
     conversion_rate_display,
@@ -250,7 +251,13 @@ async def run_campaign_report(
             output.append(f"{prefix} " + _person(s) + f" (last activity: {s['days_stale']}d ago{src_tag})")
         if len(stale) > 5:
             output.append(f"    ... and {len(stale) - 5} more")
-        output.append('   \u2192 Use prospect(action="close") to resolve or send_message(action="followup") to re-engage')
+        # The re-engage call follows the person's status: a hot lead who
+        # went quiet gets a reply, never a follow-up (#1723).
+        commands = sorted({reengage_command(s.get("status")) for s in stale})
+        output.append(
+            '   \u2192 Use prospect(action="close") to resolve or '
+            + " / ".join(commands) + " to re-engage"
+        )
         output.append("")
 
     # ── Section 7: Engagement metrics ──

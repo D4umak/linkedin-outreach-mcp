@@ -258,6 +258,16 @@ def why_line(why: dict | None) -> str:
     return text
 
 
+# The one name for a person HeyLead has no name for, as in the API's
+# person_line (heylead-api #1715): "Unknown" read as a gap.
+UNNAMED = "Unnamed prospect"
+
+
+def person_name(name: object, unnamed: str = UNNAMED) -> str:
+    """The name to show for a person: theirs, or ``unnamed``."""
+    return str(name or "").strip() or unnamed
+
+
 def person_line(
     name: str,
     url: str = "",
@@ -272,7 +282,7 @@ def person_line(
     reason follows when `why` says anything. A list of names with no link
     and no reason is what a new user could not act on (24 Sep 2026).
     """
-    line = prospect_link(name or "Unknown", url or "")
+    line = prospect_link(person_name(name), url or "")
     role = (title or "").strip()
     if (company or "").strip():
         role = f"{role} at {company.strip()}" if role else company.strip()

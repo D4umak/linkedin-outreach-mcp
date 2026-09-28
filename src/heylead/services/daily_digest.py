@@ -13,6 +13,7 @@ import time
 from datetime import datetime
 
 from ..db.async_bridge import run_db
+from ..formatter import person_name
 from ..db.queries import (
     count_inbound_dms_today,
     get_daily_auto_reply_count,
@@ -220,7 +221,7 @@ async def compile_daily_digest() -> str:
         if comment_entries:
             lines.append("## Recent Comments")
             for eng in comment_entries:
-                name = eng.get("prospect_name") or "Unknown"
+                name = person_name(eng.get("prospect_name"))
                 title = eng.get("prospect_title") or ""
                 text = (eng.get("comment_text") or "")[:120]
                 ts = eng.get("created_at", 0)

@@ -30,6 +30,7 @@ class JobResult:
 
 from ..db.async_bridge import run_db
 from ..db import aio as db
+from ..next_step import FOLLOWUP_STATUSES
 from ..constants import (
     JOB_ACCEPT_INBOUND,
     JOB_ACTIVATE_SIGNALS,
@@ -1171,7 +1172,7 @@ async def _execute_followup(job: dict[str, Any]) -> str | JobResult:
     logger.info("Scheduler: sending follow-up for outreach %s", outreach_id or "next")
 
     # Pre-execution safety: re-validate status and message rate
-    skip = await _check_outreach_still_valid(job, ("connected", "messaged"))
+    skip = await _check_outreach_still_valid(job, FOLLOWUP_STATUSES)
     if skip:
         await _track_plan_execution(job, "followup", skip, outcome="skipped")
         return JobResult("skipped", skip)

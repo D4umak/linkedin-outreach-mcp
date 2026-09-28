@@ -33,6 +33,11 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.412 (2026-09-28)
+- Fix: a replied lead is never offered a follow-up
+- Fix: a cut result ends at a line (#1630, client twin of the UI QA F1 fix)
+- Fix: a paused or archived campaign's plan says it is not running (client twin)
+
 ## v0.10.411 (2026-09-28)
 - Fix: reply mode reads the thread under our comment
 - Fix: the local judge's Who buys follows the titles (api #1636 twin)

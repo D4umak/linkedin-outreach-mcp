@@ -16,6 +16,7 @@ from .schema import get_db
 from .message_rows import insert_message_row
 from ..ai.copywriter import provenance as copy_provenance
 from ..ai.copywriter.provenance import Provenance
+from ..next_step import statuses_sql as _followup_statuses_sql
 from ..constants import (
     ENGAGEMENT_RESERVATION_TTL_SECONDS,
     INMAIL_FALLBACK_MAX_AGE_DAYS,
@@ -1808,7 +1809,7 @@ def get_followup_candidates(
            FROM outreaches o
            JOIN contacts c ON o.contact_id = c.id
            WHERE o.campaign_id = ?
-             AND o.status IN ('connected', 'messaged')
+             AND o.status IN ({_followup_statuses_sql()})
              AND o.followup_count < ?
            ORDER BY (
                EXISTS (

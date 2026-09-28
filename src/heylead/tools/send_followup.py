@@ -32,6 +32,7 @@ from ..constants import (
     TIER_PRO,
 )
 from ..db import aio as db
+from ..next_step import followup_allowed, statuses_sql as followup_statuses_sql
 from ..db.async_bridge import run_db
 from ..linkedin import (
     UnipileAuthError,
@@ -476,7 +477,7 @@ async def run_send_followup(
         )
         # Update status so scheduler stops trying to follow up
         outreach_data_check = await db.get_outreach(outreach_id) or {}
-        if outreach_data_check.get("status") in ("connected", "messaged"):
+        if followup_allowed(outreach_data_check.get("status")):
             await db.update_outreach(outreach_id, status="replied")
         return (
             f"⏭️ Skipped follow-up for {candidate.get('name', 'Unknown')} — "
@@ -781,7 +782,8 @@ async def run_send_followup(
         ).fetchone()
         pre_status = pre_lock_row["status"] if pre_lock_row else "connected"
         rows = lock_db.execute(
-            "UPDATE outreaches SET status = 'sending_followup', updated_at = strftime('%s','now') WHERE id = ? AND status IN ('connected', 'messaged')",
+            "UPDATE outreaches SET status = 'sending_followup', updated_at = strftime('%s','now') "
+            f"WHERE id = ? AND status IN ({followup_statuses_sql()})",
             (oid,),
         ).rowcount
         lock_db.commit()
