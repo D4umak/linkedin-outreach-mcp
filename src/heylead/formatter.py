@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .textutil import evidence_hit_is_meaningful
+
 
 def tree(items: list[tuple[str, str]], title: str = "") -> str:
     """Format a list of (label, value) as a tree.
@@ -244,6 +246,9 @@ def why_line(why: dict | None) -> str:
     if _hit("keywords"):
         reasons.append("keyword overlap")
     hits = why.get("evidence_hits")
+    if isinstance(hits, list):
+        # "about:at" is no evidence (heylead-api#1809).
+        hits = [h for h in hits if evidence_hit_is_meaningful(h)]
     if isinstance(hits, list) and hits:
         n = len(hits)
         reasons.append(f"{n} evidence hit{'s' if n != 1 else ''}")

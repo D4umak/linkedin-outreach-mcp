@@ -10,7 +10,7 @@ In approval mode, HeyLead writes opening messages and follow-ups and holds them 
 ## Steps
 
 1. **Which mode is on.** `scheduler_status` says whether the workspace is in approval mode or on autopilot.
-2. **What is waiting.** Call `inspect(action='waiting')`. For each message show who it is for, which campaign, and the text exactly as it will be sent, including the closing sentence that says it was sent with an AI assistant on a first message.
+2. **What is waiting.** Call `inspect(action='waiting')`. For each message show who it is for, which campaign, and the text exactly as it will be sent.
 3. **Decide, one message at a time, as the user says:**
    - send it as written: `prospect(action='approve_message', draft_id=...)`;
    - send an edited version: `prospect(action='approve_message', draft_id=..., text=<the user's edit>)`;

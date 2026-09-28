@@ -13,6 +13,8 @@ import re
 from pathlib import Path
 from typing import Any, Collection
 
+from ..textutil import is_evidence_term
+
 logger = logging.getLogger(__name__)
 
 COMPILER_VERSION = 3
@@ -230,7 +232,9 @@ def _interest_terms_from_text(text: str) -> list[str]:
             "and", "for", "in", "a", "an", "of", "us", "now", "hiring",
         }
         for tok in re.findall(r"[A-Za-z][A-Za-z0-9\-]+", text or ""):
-            if tok.lower() not in stop and tok.lower() not in terms:
+            # One term filter (heylead-api#1809): "at" from "sales leaders at
+            # B2B startups" matched nearly every headline.
+            if tok.lower() not in stop and is_evidence_term(tok) and tok not in terms:
                 terms.append(tok)
     return terms[:15]
 
@@ -861,7 +865,9 @@ def score_profile_evidence(
         profile.get("skills"),
         profile.get("publications"),
     ])
-    about_hit = _contains_any(about_hay, list(ev.get("about_terms") or []))
+    # A spec compiled before heylead-api#1809 may still carry "at"; only a
+    # term that is evidence is looked for.
+    about_hit = _contains_any(about_hay, [t for t in (ev.get("about_terms") or []) if is_evidence_term(t)])
     if about_hit:
         supporting.append("about")
         explain.append(f"about:{about_hit}")

@@ -98,3 +98,51 @@ def contains_term(text: str | None, term: str | None) -> bool:
         return False
     pattern = _term_pattern(term)
     return bool(pattern and pattern.search(text))
+
+
+# Words that say nothing about a person: function words, auxiliaries and the
+# filler of an ICP sentence. The same set is in the api's
+# app/services/textmatch.py; keep the two alike.
+STOPWORDS = frozenset({
+    "a", "about", "above", "across", "after", "again", "all", "also", "am", "an", "and",
+    "any", "are", "as", "at", "be", "been", "before", "being", "between", "both", "but",
+    "by", "can", "could", "did", "do", "does", "doing", "done", "each", "either", "etc",
+    "every", "for", "from", "get", "gets", "got", "had", "has", "have", "having", "he",
+    "her", "here", "hers", "him", "his", "how", "i", "if", "in", "into", "is", "it", "its",
+    "just", "less", "like", "may", "me", "might", "more", "most", "much", "must", "my",
+    "need", "needs", "no", "nor", "not", "now", "of", "off", "on", "once", "one", "only",
+    "onto", "or", "other", "our", "ours", "out", "over", "own", "per", "same", "she",
+    "should", "so", "some", "such", "than", "that", "the", "their", "them", "then", "there",
+    "these", "they", "this", "those", "through", "to", "too", "under", "until", "up", "us",
+    "use", "very", "via", "want", "wants", "was", "we", "were", "what", "when", "where",
+    "which", "while", "who", "whom", "why", "will", "with", "within", "without", "would",
+    "you", "your", "yours",
+})
+
+# A term needs this many letters or digits to say anything on its own
+# ("KPI", "B2B" and "SaaS" do; "at", "UA" and "IT" do not).
+MIN_EVIDENCE_CHARS = 3
+
+
+def is_evidence_term(term: str | None) -> bool:
+    """True when *term* can stand as evidence about a person: at least
+    MIN_EVIDENCE_CHARS letters or digits, not only digits, and not made only
+    of stopwords.
+
+    "about:at" was most of production's evidence: an ICP sentence's "at"
+    became an about term, and "at" is in nearly every headline
+    (heylead-api#1809, 28 Sep 2026).
+    """
+    words = re.findall(r"[0-9a-z]+", str(term or "").lower())
+    if not words or all(w in STOPWORDS for w in words):
+        return False
+    body = "".join(words)
+    return len(body) >= MIN_EVIDENCE_CHARS and not body.isdigit()
+
+
+def evidence_hit_is_meaningful(hit: str | None) -> bool:
+    """An enrolment evidence hit ("field:value", or a bare term from before
+    that form) whose value is evidence."""
+    text = str(hit or "")
+    _field, sep, value = text.partition(":")
+    return is_evidence_term(value if sep else text)

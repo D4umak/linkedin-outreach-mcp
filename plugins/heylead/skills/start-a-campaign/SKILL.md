@@ -32,7 +32,7 @@ A job search is its own goal, not a sales campaign: replies are held for the use
 
 Launch only when the user says so, for this campaign: `campaign(action='launch', campaign_id=...)`. If it asks for a `project_brief`, get one from the user; a placeholder is refused.
 
-Say what launch does before calling it: HeyLead starts sending from the user's own LinkedIn account, at its stated pace, Monday to Friday 08:00 to 22:00 in their time zone. The first message a person receives says it was sent with an AI assistant. Opening messages and follow-ups wait for approval unless the workspace is on autopilot; `scheduler_status` says which.
+Say what launch does before calling it: HeyLead starts sending from the user's own LinkedIn account, at its stated pace, Monday to Friday 08:00 to 22:00 in their time zone. Opening messages and follow-ups wait for approval unless the workspace is on autopilot; `scheduler_status` says which.
 
 ## Changing a draft
 

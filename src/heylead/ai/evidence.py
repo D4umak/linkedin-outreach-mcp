@@ -12,7 +12,7 @@ import logging
 import re
 from typing import Any
 
-from ..textutil import contains_term
+from ..textutil import contains_term, is_evidence_term
 from .context_summarizer import CompressedEvidence
 from .icp_schemas import Citation, FieldEvidence, SingleIcp
 from .vector_search import SearchResult
@@ -23,21 +23,14 @@ logger = logging.getLogger(__name__)
 # letter word of a value counted as a citation by substring, so "and" or
 # "the" in any sentence cited every pain point, and "bid" inside "forbidden"
 # cited "Bid Director".
-_STOPWORDS = frozenset({
-    "and", "the", "for", "with", "from", "that", "this", "these", "those", "are",
-    "was", "were", "has", "have", "had", "their", "they", "them", "our", "your",
-    "its", "into", "onto", "over", "under", "who", "whom", "what", "when", "where",
-    "which", "while", "all", "any", "not", "but", "can", "per", "via", "out",
-    "off", "too", "very", "more", "most", "less", "than", "then", "also", "such",
-    "each", "every", "other", "about", "across", "after", "before", "between",
-    "within", "without", "will", "would", "should", "could", "may", "might",
-    "must", "been", "being", "does", "did", "done", "get", "gets", "got",
-})
+# The one term filter (heylead-api#1809): textutil.STOPWORDS holds this list's
+# words, and is_evidence_term the three-character floor this used to write out.
+
 _VALUE_WORD = re.compile(r"[a-z0-9][a-z0-9+&'.-]*")
 
 
 def _value_words(value: str) -> list[str]:
-    return [w for w in _VALUE_WORD.findall(value.lower()) if len(w) > 2 and w not in _STOPWORDS]
+    return [w for w in _VALUE_WORD.findall(value.lower()) if is_evidence_term(w)]
 
 
 def _cites(value: str, text: str) -> bool:

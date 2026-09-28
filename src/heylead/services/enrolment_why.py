@@ -16,7 +16,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from ..textutil import contains_term
+from ..textutil import contains_term, evidence_hit_is_meaningful
 
 # Coarse function buckets, copied from heylead-api
 # `app/services/campaign_preferences.TITLE_FAMILIES` so both sides name the
@@ -73,7 +73,8 @@ def evidence_hits_for(prospect: dict[str, Any]) -> list[str]:
         out = [f"{k}:{v}" for k, v in hits.items() if v]
     if not out:
         out = [str(h) for h in (prospect.get("_evidence_hits") or [])]
-    return out[:12]
+    # A stopword is never evidence (heylead-api#1809).
+    return [h for h in out if evidence_hit_is_meaningful(h)][:12]
 
 
 def enrolment_why(

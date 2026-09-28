@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.415 (2026-09-28)
+- Fix: the skills stop promising an AI sentence on the first message
+
 ## v0.10.414 (2026-09-28)
 - Fix: time to reply runs from our message to their reply
 - client twin of the paused-campaign discovery DM

@@ -11,6 +11,17 @@ from typing import Any, Literal
 InboundReplyDecision = Literal["dismiss", "counter_pitch", "reply"]
 
 
+# The qualifier's verdicts that mean "write to this person". accept_and_monitor
+# ("keep in the network, low-confidence match") and ignore mean stay quiet.
+# Until 28 Sep 2026 only ignore was read (heylead-api #1815).
+DISCOVERY_DM_VERDICTS = frozenset({"engage_immediately", "ask_purpose"})
+
+
+def verdict_allows_discovery_dm(recommended_action: str | None) -> bool:
+    """Does the qualifier's ``recommended_action`` say to write to the person?"""
+    return str(recommended_action or "").strip() in DISCOVERY_DM_VERDICTS
+
+
 def decide_inbound_reply(signal: dict[str, Any] | None) -> InboundReplyDecision:
     """Return what to do with a classified inbound signal's DM.
 
@@ -19,7 +30,8 @@ def decide_inbound_reply(signal: dict[str, Any] | None) -> InboundReplyDecision:
     2. Spam / job-seeking are dismissed.
     3. Vendor pitch: counter-pitch only when they match an ICP.
     4. Partnership: reply only when they match an ICP; otherwise stay quiet.
-    5. recommended_action=ignore is honored.
+    5. The verdict is honored: only engage_immediately and ask_purpose write;
+       accept_and_monitor, ignore and a missing verdict stay quiet.
     6. Everything else gets a contextual reply.
     """
     signal = signal or {}
@@ -36,6 +48,6 @@ def decide_inbound_reply(signal: dict[str, Any] | None) -> InboundReplyDecision:
         return "counter_pitch" if icp_id else "dismiss"
     if intent == "partnership":
         return "reply" if icp_id else "dismiss"
-    if action == "ignore":
+    if not verdict_allows_discovery_dm(action):
         return "dismiss"
     return "reply"
