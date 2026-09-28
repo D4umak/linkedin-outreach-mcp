@@ -33,6 +33,12 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.414 (2026-09-28)
+- Fix: time to reply runs from our message to their reply
+- client twin of the paused-campaign discovery DM
+- Fix: client twin — a discovery DM goes out only while a campaign is active
+- Fix: a first message no longer ends with an AI-disclosure sign-off nobody agreed to (#1766)
+
 ## v0.10.413 (2026-09-28)
 - Fix: a placeholder is never stored as a person's name (#1715)
 - Fix: the probe reports a <main> that scrolls sideways (#1753)
@@ -67,7 +73,7 @@ _CHANGELOG = """\
 - New: the loop checks the network, links and console; the receiver names its run; rounds merge in parts
 
 ## v0.10.408 (2026-09-27)
-- New: the launch plan says the first message each person gets ends with "Sent with my AI assistant."
+- New: the launch plan named a closing sentence on the first message (reversed in v0.10.410, never agreed)
 - Removed: the unused voice-memo code and its send paths; every message is text
 
 ## v0.10.407 (2026-09-27)

@@ -37,6 +37,7 @@ from ..db.queries import (
     get_messages_for_outreach,
     get_setting,
     list_icps,
+    list_campaigns,
     list_inbound_signals,
     log_action,
     save_inbound_signal,
@@ -1013,6 +1014,20 @@ def _decide_invitation_action(intent: str, confidence: float) -> str:
 
 # ── ACT: Messages ───────────────────────────────────────────────────────────
 
+async def discovery_dms_allowed() -> set[str]:
+    """The ids of the campaigns a discovery DM may go out under: the active ones.
+
+    A discovery DM is outreach, HeyLead writing unasked to someone who
+    connected or wrote in. It carries no campaign id, so until 28 Sep 2026
+    nothing asked whether any campaign was active, and the hosted twin wrote
+    to a new connection of a user whose only campaign had been paused for
+    five days (heylead-api #1762). Pausing the last campaign is the only
+    switch the user has; an empty set here is what makes it stop everything.
+    """
+    active = await run_db(list_campaigns, status="active")
+    return {str(c.get("id") or "") for c in active}
+
+
 async def _act_on_messages(client: Any, account_id: str) -> str:
     """Send discovery DMs and/or reactions for classified inbound signals.
 
@@ -1037,10 +1052,15 @@ async def _act_on_messages(client: Any, account_id: str) -> str:
     if not all_signals:
         return ""
 
+    # Spam and off-ICP pitches are still dismissed below; only the
+    # message is withheld when no campaign may send.
+    sending_campaign_ids = await discovery_dms_allowed()
+
     voice = await run_db(get_setting, "voice_signature", {})
 
     sent = 0
     skipped = 0
+    held = 0
     errors = 0
 
     for signal in all_signals:
@@ -1063,6 +1083,15 @@ async def _act_on_messages(client: Any, account_id: str) -> str:
         if decide_inbound_reply(signal) == "dismiss":
             await run_db(update_inbound_signal, signal["id"], status="dismissed")
             skipped += 1
+            continue
+
+        # No active campaign: nobody is written to, the signal waits. A
+        # person tied to a paused campaign waits for that one to resume.
+        tied_campaign = str(signal.get("campaign_id") or "")
+        if not sending_campaign_ids or (
+            tied_campaign and tied_campaign not in sending_campaign_ids
+        ):
+            held += 1
             continue
 
         if not sender_id:
@@ -1136,6 +1165,8 @@ async def _act_on_messages(client: Any, account_id: str) -> str:
     parts = []
     if sent:
         parts.append(f"{sent} DMs sent")
+    if held:
+        parts.append(f"{held} held: no active campaign")
     if skipped:
         parts.append(f"{skipped} skipped")
     if errors:
@@ -1446,14 +1477,6 @@ async def _send_discovery_dm(
         can, _current, _cap, _ = await check_daily_cap("dm")
         if not can:
             return "capped"
-
-        # The discovery DM to someone who sent us an invitation is the first
-        # thing they get from us: it carries the AI disclosure
-        # (D4umak/heylead-api#1481). Not a reply to a message they wrote.
-        if signal.get("signal_type", "invitation") == "invitation":
-            from ..guardrails import disclose
-
-            dm_text = disclose(dm_text, kind="dm")
 
         if chat_id:
             result = await client.send_message(

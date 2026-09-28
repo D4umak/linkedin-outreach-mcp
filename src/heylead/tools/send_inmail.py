@@ -421,13 +421,7 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
         sender_profile = await adb.get_setting("profile", {}) or {}
         voice_signature = await adb.get_setting("voice_signature", {}) or {}
 
-        # An InMail to someone who has seen nothing from us is the first thing
-        # they see: it ends with the AI disclosure (D4umak/heylead-api#1481),
-        # and the copy is written into 1900 less the sentence.
-        from ..db.queries import person_already_in_conversation
-        from ..guardrails import disclose, first_touch_budget
-        first_touch = not await run_db(person_already_in_conversation, outreach_id)
-        body_max = first_touch_budget(INMAIL_BODY_MAX, first_touch=first_touch)
+        body_max = INMAIL_BODY_MAX
 
         prompt_name = select_prompt("outreach_inmail", campaign_intent)
         system_name = select_prompt("outreach_system", campaign_intent)
@@ -542,10 +536,6 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
                 f"InMail for {prospect_name} skipped after validation "
                 f"(invite can follow).\n{issues_text}"
             )
-
-        # Validated first, disclosed after.
-        if first_touch:
-            body = disclose(body, kind="dm")
 
         from ..ops_log import log_outbound_send
         log_outbound_send(

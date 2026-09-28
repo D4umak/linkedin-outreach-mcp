@@ -16,6 +16,7 @@ from .schema import get_db
 from .message_rows import insert_message_row
 from ..ai.copywriter import provenance as copy_provenance
 from ..ai.copywriter.provenance import Provenance
+from ..services.response_time import response_seconds
 from ..next_step import statuses_sql as _followup_statuses_sql
 from ..constants import (
     ENGAGEMENT_RESERVATION_TTL_SECONDS,
@@ -4248,19 +4249,23 @@ def get_campaign_velocity(campaign_id: str) -> dict:
         (campaign_id,),
     ).fetchone()
 
-    # Avg time-to-reply (accepted_at → first_reply_at)
-    reply_row = db.execute(
-        """SELECT AVG(first_reply_at - accepted_at) as avg_ttr,
-                  MIN(first_reply_at - accepted_at) as min_ttr,
-                  MAX(first_reply_at - accepted_at) as max_ttr,
-                  COUNT(*) as cnt
-           FROM outreaches
-           WHERE campaign_id = ?
-             AND accepted_at IS NOT NULL
-             AND first_reply_at IS NOT NULL
-             AND status IN ('replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out')""",
+    # Time to reply: from our message to the reply that answers it, one
+    # definition with the api (services/response_time.py). It was
+    # accepted_at → first_reply_at, the connection's age for someone accepted
+    # months before we wrote (heylead-api#1726).
+    thread_rows = db.execute(
+        """SELECT m.outreach_id, m.role, m.timestamp
+           FROM messages m JOIN outreaches o ON o.id = m.outreach_id
+           WHERE o.campaign_id = ?""",
         (campaign_id,),
-    ).fetchone()
+    ).fetchall()
+    waits = response_seconds((r["outreach_id"], r["role"], r["timestamp"]) for r in thread_rows)
+    reply_row = {
+        "avg_ttr": (sum(waits) / len(waits)) if waits else None,
+        "min_ttr": min(waits) if waits else None,
+        "max_ttr": max(waits) if waits else None,
+        "cnt": len(waits),
+    }
 
     # Avg invite-to-reply (full funnel)
     full_row = db.execute(
@@ -5674,41 +5679,6 @@ def _is_invite_note(msg: Any, invited_at: int | None, accepted_at: int | None) -
     if not invited_at:
         return False
     return abs((msg["timestamp"] or 0) - invited_at) <= _INVITE_NOTE_WINDOW_SECONDS
-
-
-def person_already_in_conversation(outreach_id: str) -> bool:
-    """Has this install already shown this person a message, or heard from them?
-
-    The AI disclosure (D4umak/heylead-api#1481) rides on the first thing a
-    person sees, exactly once. Derived from the messages recorded as sent: a
-    row of ours with words in it (a note, a DM, an InMail, an email) means the
-    person has seen us, and since the disclosure shipped the first such row
-    carries the sentence. An invitation that went without a note is stored
-    empty and does not count, so the first DM after it discloses. A message
-    FROM the person means the conversation is theirs and ours is a reply.
-    The person, not the outreach: the same linkedin_id in another campaign of
-    this install counts. Mirrors the hosted store's function of the same name.
-    """
-    db = get_db()
-    try:
-        row = db.execute(
-            "SELECT c.linkedin_id FROM outreaches o JOIN contacts c ON c.id = o.contact_id "
-            "WHERE o.id = ?",
-            (outreach_id,),
-        ).fetchone()
-        linkedin_id = str((row["linkedin_id"] if row else "") or "").strip()
-        hit = db.execute(
-            "SELECT 1 FROM messages m WHERE m.deleted_at IS NULL AND ("
-            "m.outreach_id = ? OR (? != '' AND m.outreach_id IN ("
-            "SELECT o.id FROM outreaches o JOIN contacts c ON c.id = o.contact_id "
-            "WHERE c.linkedin_id = ?))) "
-            "AND ((m.role = 'sdr' AND TRIM(COALESCE(m.text, '')) != '') "
-            "OR m.role = 'prospect') LIMIT 1",
-            (outreach_id, linkedin_id, linkedin_id),
-        ).fetchone()
-    finally:
-        db.close()
-    return hit is not None
 
 
 def outreach_has_invite_note(outreach_id: str) -> bool:
