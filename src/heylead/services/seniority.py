@@ -37,6 +37,8 @@ __all__ = [
     "states_seniority",
     "is_decision_maker",
     "decision_maker_share",
+    "decision_maker_titles",
+    "buying_role",
     "levels_named",
     "constrain_include",
     "apply_seniority_policy",
@@ -175,6 +177,50 @@ def decision_maker_share(titles: object) -> tuple[int, int]:
     named = [str(t).strip() for t in (titles or []) if t is not None and str(t).strip()]
     deciders = sum(1 for t in named if infer_seniority_level(t) in DECISION_MAKER_LEVELS)
     return deciders, len(named)
+
+
+def decision_maker_titles(titles: object) -> list[tuple[str, int]]:
+    """The titles that state a decision-maker level, each with how often it
+    appears, in the order first seen. What "N of M titles decide" counted
+    (heylead-api #1636)."""
+    counts: dict[str, int] = {}
+    for title in (titles or []):
+        text = str(title or "").strip()
+        if text and infer_seniority_level(text) in DECISION_MAKER_LEVELS:
+            counts[text] = counts.get(text, 0) + 1
+    return list(counts.items())
+
+
+# A persona's role in a purchase from the highest level its titles state:
+# budget authority buys, a manager champions it to the budget holder, a
+# senior individual contributor influences the choice, an entry-level one
+# uses it. The judge chose these per call and flipped them for the same
+# titles (heylead-api #1636).
+_BUYING_ROLES: tuple[tuple[str, frozenset[str]], ...] = (
+    ("economic_buyer", DECISION_MAKER_LEVELS),
+    ("champion", frozenset({"manager"})),
+    ("influencer", frozenset({"senior"})),
+    ("user", frozenset({"entry"})),
+)
+
+
+def buying_role(titles: object) -> tuple[str, list[str]] | None:
+    """A persona's role in a purchase, and the titles that give it that role.
+
+    ``None`` when no title states a level: there the titles say nothing about
+    who signs, and the judge's reading stands.
+    """
+    levels: dict[str, list[str]] = {}
+    for title in (titles or []):
+        text = str(title or "").strip()
+        level = infer_seniority_level(text) if text else None
+        if level and text not in levels.setdefault(level, []):
+            levels[level].append(text)
+    for role, role_levels in _BUYING_ROLES:
+        giving = [t for level in SENIORITY_ORDER[::-1] if level in role_levels for t in levels.get(level, [])]
+        if giving:
+            return role, giving
+    return None
 
 
 # A brief is split into its roles at these, so "CTOs and engineering

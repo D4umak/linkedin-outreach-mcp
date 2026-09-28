@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from ..constants import LLM_TIER_REASONING
+from ..services.result_cut import cut
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ async def run_agent_loop(
             text = str(result)
         except Exception as e:
             text = f"error: {e}"
-        transcript += f"\n\nTOOL {action}: {text[: budget.result_chars]}"
+        transcript += f"\n\nTOOL {action}: {cut(text, budget.result_chars)}"
 
     return AgentResult(decision="none", reason="step budget exhausted", steps=steps, exhausted=True)
 

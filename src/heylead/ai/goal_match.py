@@ -133,6 +133,10 @@ class GoalMatchVerdict:
     kb_cards_used: int = 0
     source: str = "backend"
     goal: str = "sell"
+    # Sell only (heylead-api #1636): the titles the share counted.
+    decision_maker_titles: list[dict[str, Any]] = field(default_factory=list)
+    decision_maker_count: int = 0
+    title_count: int = 0
 
     @property
     def blocks_campaign(self) -> bool:
@@ -149,6 +153,9 @@ class GoalMatchVerdict:
             "kb_cards_used": self.kb_cards_used,
             "source": self.source,
             "goal": self.goal,
+            "decision_maker_titles": self.decision_maker_titles,
+            "decision_maker_count": self.decision_maker_count,
+            "title_count": self.title_count,
         }
 
 
@@ -178,6 +185,95 @@ def counted_coverage(goal_key: str, titles: list[str]) -> tuple[int, int] | None
     return counted if counted[1] else None
 
 
+def goal_match_personas(icp_json: dict[str, Any] | None) -> list[tuple[str, list[str]]]:
+    """Each persona the judge sees, as (name, titles), read the way
+    summarize_icp reads them (twin of heylead-api llm._goal_match_personas)."""
+    icp = icp_json or {}
+    blocks = icp.get("icps") or icp.get("segments") or ([icp] if icp else [])
+    if not isinstance(blocks, list):
+        return []
+    personas: list[tuple[str, list[str]]] = []
+    for block in blocks[:4]:
+        if not isinstance(block, dict):
+            continue
+        job = block.get("job_titles") or {}
+        titles = list(job.get("include") or []) if isinstance(job, dict) else []
+        titles += list(block.get("titles") or [])
+        titles = [t for t in (str(x).strip() for x in titles if x is not None) if t][:10]
+        personas.append((str(block.get("name") or "unnamed")[:120], titles))
+    return personas
+
+
+_ROLE_REASONS = {
+    "economic_buyer": "{titles} {verb} director level or above: budget authority for this purchase.",
+    "champion": "{titles} {verb} manager level: {pronoun} can champion it to the budget holder, not sign for it.",
+    "influencer": "{titles} {verb} senior level: {pronoun} shape the choice, not sign for it.",
+    "user": "{titles} {verb} entry level: {pronoun} would use it, not buy it.",
+}
+
+
+def _counted_reason(role: str, titles: list[str]) -> str:
+    """Why a persona has its role, naming only titles it searches
+    (heylead-api #1636)."""
+    named = titles[:4]
+    joined = named[0] if len(named) == 1 else ", ".join(named[:-1]) + " and " + named[-1]
+    one = len(named) == 1
+    return _ROLE_REASONS[role].format(titles=joined, verb="is" if one else "are", pronoun="they")
+
+
+def _judged_alignment(data: dict[str, Any], roles: tuple[str, ...]) -> list[dict[str, Any]]:
+    """The payload's own Who buys: the backend's (which follows the titles
+    for sell), or the local judge's, which counted_alignment overrides for
+    sell (heylead-api #1636)."""
+    alignment: list[dict[str, Any]] = []
+    for entry in (data.get("persona_alignment") or [])[:6]:
+        if not isinstance(entry, dict):
+            continue
+        role = str(entry.get("role_in_purchase") or "none").strip().lower()
+        if role not in roles:
+            role = "none"
+        alignment.append({
+            "persona": str(entry.get("persona") or "")[:120],
+            "role_in_purchase": role,
+            "evidence": str(entry.get("evidence") or "")[:300],
+        })
+    return alignment
+
+
+def counted_alignment(
+    personas: list[tuple[str, list[str]]], judged: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Sell's Who buys: one entry per persona, its role and reason from its
+    titles; a persona whose titles state no level keeps the judge's entry,
+    matched by name (twin of heylead-api llm._counted_alignment)."""
+    from ..services import seniority
+
+    by_name = {entry["persona"].strip().lower(): entry for entry in judged}
+    alignment: list[dict[str, Any]] = []
+    for i, (name, titles) in enumerate(personas):
+        derived = seniority.buying_role(titles)
+        if derived:
+            role, giving = derived
+            alignment.append({"persona": name, "role_in_purchase": role, "evidence": _counted_reason(role, giving)})
+            continue
+        fallback = by_name.get(name.strip().lower()) or (judged[i] if i < len(judged) else None)
+        alignment.append(dict(fallback, persona=name) if fallback else
+                         {"persona": name, "role_in_purchase": "none", "evidence": ""})
+    return alignment
+
+
+def _counted_titles(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """The backend's list of the titles its share counted, validated."""
+    counted = []
+    for entry in (data.get("decision_maker_titles") or [])[:20]:
+        if isinstance(entry, dict) and str(entry.get("title") or "").strip():
+            try:
+                counted.append({"title": str(entry["title"])[:120], "count": max(1, int(entry.get("count") or 1))})
+            except (TypeError, ValueError):
+                continue
+    return counted
+
+
 def coerce_verdict(
     data: dict[str, Any], source: str = "backend", goal: str = "sell",
 ) -> GoalMatchVerdict:
@@ -198,19 +294,13 @@ def coerce_verdict(
     if verdict not in VERDICTS:
         verdict = "partial"
     coverage = _judged_coverage(data)
+    alignment = _judged_alignment(data, roles)
 
-    alignment: list[dict[str, Any]] = []
-    for entry in (data.get("persona_alignment") or [])[:6]:
-        if not isinstance(entry, dict):
-            continue
-        role = str(entry.get("role_in_purchase") or "none").strip().lower()
-        if role not in roles:
-            role = "none"
-        alignment.append({
-            "persona": str(entry.get("persona") or "")[:120],
-            "role_in_purchase": role,
-            "evidence": str(entry.get("evidence") or "")[:300],
-        })
+    def _count(key: str) -> int:
+        try:
+            return max(0, int(data.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
 
     def _strings(key: str) -> list[str]:
         return [str(x)[:240] for x in (data.get(key) or [])[:6] if str(x).strip()]
@@ -230,6 +320,9 @@ def coerce_verdict(
         kb_cards_used=used,
         source=source,
         goal=goal,
+        decision_maker_titles=_counted_titles(data),
+        decision_maker_count=_count("decision_maker_count"),
+        title_count=_count("title_count"),
     )
 
 
@@ -308,11 +401,23 @@ def build_goal_match_prompt(
     counted = counted_coverage(key, titles)
     counted_block = ""
     if counted:
+        from ..services import seniority
+
         counted_block = (
             "## DECISION-MAKER COVERAGE (counted from the titles; use it, do not estimate it)\n"
             f"{counted[0]} of {counted[1]} titles state owner, C-level, VP or director: "
             f"{round(100 * counted[0] / counted[1])}%\n\n"
         )
+        # Who buys comes from the titles too (heylead-api #1636).
+        role_lines = [
+            f"Persona {i}: {name}: {derived[0]} ({', '.join(derived[1][:4])})"
+            for i, (name, person_titles) in enumerate(goal_match_personas(icp_json), 1)
+            if (derived := seniority.buying_role(person_titles))
+        ]
+        if role_lines:
+            counted_block += (
+                "## WHO BUYS (from the titles; use these roles)\n" + "\n".join(role_lines) + "\n\n"
+            )
     prompt = (
         f"## CAMPAIGN GOAL{label_suffix}\n{(goal or 'not specified')[:1200]}\n\n"
         f"## WHAT THE SENDER {'OFFERS' if key == goals.SELL else 'BRINGS'}\n"
@@ -381,9 +486,20 @@ async def judge_goal_match(
         )
     verdict = coerce_verdict(data, source="local", goal=goal_key)
     verdict.kb_cards_used = used
-    counted = counted_coverage(goal_key, summarize_icp(icp_json)[1])
+    titles = summarize_icp(icp_json)[1]
+    counted = counted_coverage(goal_key, titles)
     if counted:
+        from ..services import seniority
+
         verdict.decision_maker_coverage = counted[0] / counted[1]
+        verdict.decision_maker_count, verdict.title_count = counted
+        verdict.decision_maker_titles = [
+            {"title": t, "count": n} for t, n in seniority.decision_maker_titles(titles)
+        ]
+        verdict.persona_alignment = counted_alignment(goal_match_personas(icp_json), verdict.persona_alignment)
+        # "match" over titles none of which decide contradicts the count.
+        if verdict.verdict == "match" and counted[0] == 0:
+            verdict.verdict = "partial"
     return verdict
 
 
@@ -419,6 +535,13 @@ def format_verdict(v: GoalMatchVerdict) -> str:
             f"{icon} Goal ↔ ICP ({goals.GOALS[goal].label}): **{v.verdict}**: {headline} "
             f"({copy['coverage'].format(pct=pct)})",
         ]
+    if goal == goals.SELL and v.title_count:
+        listed = ", ".join(
+            f"{e['title']} ×{e['count']}" if e["count"] > 1 else e["title"] for e in v.decision_maker_titles
+        )
+        lines.append(
+            f"  {v.decision_maker_count} of {v.title_count} titles decide" + (f": {listed}" if listed else "")
+        )
     if v.reason:
         lines.append(f"  {v.reason}")
     if v.persona_alignment and goal != goals.SELL:

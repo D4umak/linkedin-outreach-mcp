@@ -4667,8 +4667,11 @@ class UnipileClient:
         account_id: str,
         post_id: str,
         limit: int,
+        comment_id: str = "",
     ) -> httpx.Response | None:
-        """GET comments or reactions, retrying activity then ugcPost."""
+        """GET comments or reactions, retrying activity then ugcPost.
+
+        ``comment_id`` narrows comments to the replies under that one."""
         if post_id and post_id.startswith("urn:"):
             targets = [post_id]
         else:
@@ -4678,6 +4681,7 @@ class UnipileClient:
             url = (
                 f"{self.base_url}/api/v1/posts/{named}/{collection}"
                 f"?account_id={account_id}&limit={limit}"
+                + (f"&comment_id={comment_id}" if comment_id else "")
             )
             last = await self._client.get(url, headers=self._headers())
             if last.status_code in (401, 403):
@@ -4685,6 +4689,30 @@ class UnipileClient:
             if not _is_missing_post(last.status_code, last.text[:500]):
                 return last
         return last
+
+    async def get_comment_replies(
+        self,
+        account_id: str,
+        post_id: str,
+        comment_id: str,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Replies under one comment (api #1678): the comments collection with
+        a comment_id filter, since the top-level listing leaves them out."""
+        try:
+            resp = await self._get_post_collection(
+                "comments", account_id, post_id, limit, comment_id=comment_id,
+            )
+            if resp is None:
+                return []
+            resp.raise_for_status()
+            items = _extract_items(resp.json(), "items", "comments", "data")
+            return [_normalize_comment(item) for item in items if isinstance(item, dict)]
+        except UnipileAuthError:
+            raise
+        except Exception as e:
+            logger.warning("Failed to get comment replies: %s", e)
+            return []
 
     async def get_post_comments(
         self,

@@ -5059,6 +5059,36 @@ class BackendClient:
             logger.warning("get_post_comments failed: %s", e)
             return []
 
+    async def get_comment_replies(
+        self, account_id: str, post_id: str, comment_id: str, limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Replies under one comment, via the backend proxy (api #1678).
+
+        get_post_comments returns top-level comments only; LinkedIn nests an
+        answer to a comment one level under it, so a prospect answering OUR
+        comment is only visible here. Same normalized shape as
+        get_post_comments; [] when it cannot be read, which reply mode
+        treats as "nothing to answer", never as an answer.
+        """
+        if post_id and post_id.startswith("urn:li:"):
+            post_id = post_id.split(":")[-1]
+        url = f"{self.base_url}/api/v1/posts/{post_id}/comments/{comment_id}/replies?limit={limit}"
+        try:
+            resp = await self._client.get(url, headers=self._headers())
+            if resp.status_code == 429:
+                _raise_rate_limit(resp)
+            resp.raise_for_status()
+            data = resp.json()
+            items = data if isinstance(data, list) else data.get("items", [])
+            return [_normalize_comment(item) for item in items if isinstance(item, dict)]
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            raise _wrap_connection_error(e, self.base_url) from e
+        except UnipileError:
+            raise
+        except Exception as e:
+            logger.warning("get_comment_replies failed: %s", e)
+            return []
+
     async def get_post_reactions(
         self, account_id: str, post_id: str, limit: int = 100,
     ) -> list[dict[str, Any]]:

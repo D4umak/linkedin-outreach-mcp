@@ -33,6 +33,11 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.411 (2026-09-28)
+- Fix: reply mode reads the thread under our comment
+- Fix: the local judge's Who buys follows the titles (api #1636 twin)
+- Fix: a tool result cut for an agent says it was cut (#1630)
+
 ## v0.10.410 (2026-09-28)
 - a production proof is a marked comment on the outcome issue
 - Fix: no dependency floor allows a version with a known vulnerability

@@ -1274,6 +1274,68 @@ def _prospect_authored_comment(
     return False
 
 
+def _same_text(a: str, b: str) -> bool:
+    """Two comment texts are the same comment, whitespace and case aside."""
+    def norm(t: str) -> str:
+        return " ".join((t or "").split()).lower()[:200]
+    return bool(norm(a)) and norm(a) == norm(b)
+
+
+async def _own_provider_id(client: Any, account_id: str) -> str:
+    """The seat's own LinkedIn id, or "" when the profile cannot be read."""
+    try:
+        profile = await client.get_own_profile(account_id)
+    except Exception as e:
+        logger.info("reply_comment: own profile unreadable: %s", e)
+        return ""
+    return str((profile or {}).get("provider_id") or "")
+
+
+async def _prospect_answers_in_our_thread(
+    client: Any,
+    account_id: str,
+    post_id: str,
+    our_comment: str,
+    own_id: str,
+    prospect_linkedin_id: str,
+    replied_comment_ids: set[str],
+) -> tuple[str, list[dict[str, Any]]] | None:
+    """Our top-level comment on this post, and the prospect's replies under
+    it that came after our latest reply there (api #1678).
+
+    Our comment is the top-level one with our text, or failing that the one
+    our seat wrote. A reply is ours when our seat wrote it. None when there
+    is nothing to answer, including when either read fails: "cannot tell" is
+    never an answer to reply to.
+    """
+    try:
+        comments = await client.get_post_comments(account_id, post_id, limit=30)
+    except Exception:
+        return None
+    ours = [c for c in comments or [] if _same_text(c.get("text", ""), our_comment)]
+    if not ours and own_id:
+        ours = [c for c in comments or [] if c.get("author_id") == own_id]
+    if not ours or not ours[-1].get("comment_id"):
+        return None
+    thread_comment_id = str(ours[-1]["comment_id"])
+    try:
+        replies = await client.get_comment_replies(
+            account_id, post_id, thread_comment_id, limit=30,
+        )
+    except Exception:
+        return None
+    replies = sorted(replies or [], key=lambda r: str(r.get("timestamp") or ""))
+    mine = [i for i, r in enumerate(replies) if own_id and r.get("author_id") == own_id]
+    after = mine[-1] if mine else -1
+    answers = [
+        r for i, r in enumerate(replies)
+        if i > after
+        and _prospect_authored_comment(r, linkedin_id=prospect_linkedin_id)
+        and (r.get("comment_id") or "") not in replied_comment_ids
+    ]
+    return (thread_comment_id, answers) if answers else None
+
+
 async def _handle_reply_comment(
     client: Any,
     account_id: str,
@@ -1325,37 +1387,26 @@ async def _handle_reply_comment(
         )
 
     prospect_linkedin_id = candidate.get("linkedin_id") or ""
+    own_id = await _own_provider_id(client, account_id)
 
-    # Check each commented post for new replies
+    # Check the thread under each of our comments for the prospect's answer
+    # (api #1678). LinkedIn nests an answer one level under the comment it
+    # answers, and the top-level listing this used to read leaves it out.
     for e in comment_engagements:
         post_id = e.get("post_id", "")
         our_comment = e.get("text", "")
         if not post_id:
             continue
 
-        try:
-            comments = await client.get_post_comments(account_id, post_id, limit=30)
-        except Exception:
+        found = await _prospect_answers_in_our_thread(
+            client, account_id, post_id, our_comment, own_id,
+            prospect_linkedin_id, replied_comment_ids,
+        )
+        if not found:
             continue
+        thread_comment_id, prospect_replies = found
 
-        if not comments:
-            continue
-
-        prospect_replies = []
-        for c in comments:
-            if not _prospect_authored_comment(
-                c, prospect_name=prospect_name, linkedin_id=prospect_linkedin_id,
-            ):
-                continue
-            cid = c.get("comment_id") or ""
-            if cid and cid in replied_comment_ids:
-                continue
-            prospect_replies.append(c)
-
-        if not prospect_replies:
-            continue
-
-        # Found a reply — generate a response
+        # Found a reply: generate a response
         latest_reply = prospect_replies[-1]
         reply_text = latest_reply.get("text", "")
         reply_comment_id = latest_reply.get("comment_id", "")
@@ -1380,9 +1431,15 @@ async def _handle_reply_comment(
 
         # Copilot mode: show for review
         # Autopilot: send reply
+        # Under OUR top-level comment, with the prospect mentioned: LinkedIn
+        # nests one level, so the reply they wrote has no thread of its own.
+        # The mention leads, as LinkedIn's own reply box writes it.
+        first = (latest_reply.get("author_name") or prospect_name).split(" ")[0]
+        body = reply_content if "{{0}}" in reply_content else "{{0}} " + reply_content
+        mentions = [{"name": first, "profile_id": latest_reply.get("author_id", "")}]
         try:
             result = await client.reply_to_comment(
-                account_id, post_id, reply_comment_id, reply_content,
+                account_id, post_id, thread_comment_id, body, mentions=mentions,
             )
         except Exception as e:
             await client.close()
