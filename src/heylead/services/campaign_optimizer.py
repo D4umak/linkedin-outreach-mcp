@@ -277,11 +277,17 @@ def _adjust_messaging(
     campaign_id: str,
     patterns: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    """Adjust campaign messaging preferences based on patterns.
+    """Record the strategy engine's messaging note for a campaign.
 
-    Writes winning patterns into campaign.context_json.campaign_preferences
-    so the message generator picks them up.
+    The note goes under context_json.strategy_note, replacing the previous
+    one and capped (services/strategy_note.py). It used to be appended to
+    campaign_preferences, the operator's own text, on every cycle whose
+    wording differed: 589 notes and 195 KB in one campaign by 18 Sep 2026
+    (heylead-api#1663). Legacy notes found in the preferences are moved out
+    on the way.
     """
+    from .strategy_note import with_strategy_note
+
     # Find messaging-relevant patterns
     msg_patterns = [
         p for p in patterns
@@ -308,22 +314,21 @@ def _adjust_messaging(
         "SELECT context_json FROM campaigns WHERE id = ?", (campaign_id,)
     ).fetchone()
 
-    ctx = {}
+    ctx: dict[str, Any] = {}
     if row and row["context_json"]:
         try:
-            ctx = json.loads(row["context_json"])
+            loaded = json.loads(row["context_json"])
+            if isinstance(loaded, dict):
+                ctx = loaded
         except (json.JSONDecodeError, TypeError):
             pass
 
-    # Append strategy recommendations to campaign_preferences
-    existing_prefs = ctx.get("campaign_preferences", "")
-    strategy_note = " | Strategy engine: " + "; ".join(recommendations)
-    if strategy_note not in (existing_prefs or ""):
-        ctx["campaign_preferences"] = (existing_prefs or "") + strategy_note
-
+    updated = with_strategy_note(ctx, recommendations)
+    context_updated = updated != ctx
+    if context_updated:
         db.execute(
             "UPDATE campaigns SET context_json = ? WHERE id = ?",
-            (json.dumps(ctx), campaign_id),
+            (json.dumps(updated), campaign_id),
         )
         db.commit()
 
@@ -331,7 +336,7 @@ def _adjust_messaging(
 
     details = {
         "recommendations": recommendations,
-        "context_updated": True,
+        "context_updated": context_updated,
     }
     action_id = save_strategy_action(
         action_type="adjust_messaging",

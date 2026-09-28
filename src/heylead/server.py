@@ -33,6 +33,20 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.410 (2026-09-28)
+- a production proof is a marked comment on the outcome issue
+- Fix: no dependency floor allows a version with a known vulnerability
+- Fix: a signal never lifts a contact past the fit floor (#1661)
+- Fix: the strategy note replaces itself instead of piling into campaign_preferences
+- Fix: a reply talks to the person it answers, not about them
+- Fix: mirror the rules table with help and icp; refuse a channel literal the table does not list
+- Fix: every stranger tier goes through stranger_admission (#1590 QA on the build r1)
+- Fix: names are stored as plain text and auto names end on a whole word
+- Fix: netcheck reports requests that were in flight and sees past 250 entries
+- Fix: reconnect lines open the accounts page, not sign-in (#1622)
+- Fix: no production write as Denys that he did not ask for
+- New: a stranger needs a reason in the client too (#1590)
+
 ## v0.10.409 (2026-09-28)
 - Fix: the probe reports the theme the page chose
 - Fix: the local judge counts the titles that decide (api #1605 twin)

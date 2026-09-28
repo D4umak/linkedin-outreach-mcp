@@ -62,6 +62,32 @@ _CHECKS: dict[str, re.Pattern[str]] = {
 
 _RULE_BY_ID = {rule.id: rule for rule in RULES}
 
+# The mention token used as a person the reply talks ABOUT: followed by a verb
+# or a possessive ("{{0}} highlights", "{{0}}'s point"), or after a word that
+# makes it the subject of a comparison ("whereas {{0}}", "as {{0}} says").
+# {{0}} is sent as an @mention of the person being replied to, so on 28 Sep
+# 2026 "whereas {{0}} highlights the real bottleneck" would have told Osama,
+# by tagging him, what Osama highlights (api #1645). A greeting -- "Good
+# point, {{0}}." or "{{0}}, exactly." -- is followed by punctuation and passes.
+_ABOUT_THEM = re.compile(
+    r"\{\{0\}\}(?=\s*(?:['\u2019]|[A-Za-z]))"
+    r"|(?i:\b(?:as|like|whereas|while|than|unlike)\s+)\{\{0\}\}"
+)
+
+# Checks on how a reply uses its mention token. Not house rules, so not in the
+# rules table both repos pin: a rule about token grammar binds only the one
+# channel that has the token. id -> (channels, pattern, wording for the rewrite).
+_TOKEN_CHECKS: dict[str, tuple[frozenset[str], re.Pattern[str], str]] = {
+    "talk-to-them": (
+        frozenset({"comment_reply"}),
+        _ABOUT_THEM,
+        "It talks about the person it replies to. {{0}} is sent as an @mention "
+        "of them, so talk to them as \"you\" and use {{0}} only as a greeting, "
+        "as in \"Good point, {{0}}.\"",
+    ),
+}
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
 
 @dataclass(frozen=True)
 class Polished:
@@ -91,6 +117,9 @@ def offences(draft: str, channel: str) -> tuple[str, ...]:
             continue
         if pattern.search(text):
             found.append(rule_id)
+    for check_id, (channels, pattern, _wording) in _TOKEN_CHECKS.items():
+        if channel in channels and pattern.search(text):
+            found.append(check_id)
     return tuple(found)
 
 
@@ -125,6 +154,14 @@ def repair(draft: str, channel: str) -> tuple[str, tuple[str, ...]]:
     if "no-dashes" in current:
         text = normalize_dashes(text)
         done.append("no-dashes")
+    if "talk-to-them" in current:
+        # The sentences that talk about them go; the rest stays. A reply with
+        # nothing else in it is left for the person to fix.
+        sentences = _SENTENCE_END.split(text)
+        kept = [s for s in sentences if not _ABOUT_THEM.search(s)]
+        if kept and len(kept) < len(sentences):
+            text = " ".join(kept)
+            done.append("talk-to-them")
     return text, tuple(done)
 
 
@@ -156,6 +193,8 @@ def _offence_lines(ids: tuple[str, ...], channel: str) -> str:
         rule = _RULE_BY_ID.get(rule_id)
         if rule is not None:
             lines.append(f"- {rule.wording(channel)}")
+        elif rule_id in _TOKEN_CHECKS:
+            lines.append(f"- {_TOKEN_CHECKS[rule_id][2]}")
     return "\n".join(lines) or "- It reads as though a machine wrote it."
 
 

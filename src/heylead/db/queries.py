@@ -19,16 +19,15 @@ from ..ai.copywriter.provenance import Provenance
 from ..constants import (
     ENGAGEMENT_RESERVATION_TTL_SECONDS,
     INMAIL_FALLBACK_MAX_AGE_DAYS,
-    SIGNAL_FIT_OVERRIDE,
 )
 
-# Shared send-gate: hand-picked CSV rows and a one-invite classified hook
-# may sit below min_fit. Keep this fragment in one place so invite/DM/InMail
+# Shared send-gate: only hand-picked CSV rows may sit below min_fit, as in
+# the api's scheduler._passes_send_fit. A signal never lifts a row past the
+# floor (heylead-api#1661). Keep this fragment in one place so invite/DM/InMail
 # and cloud-sync cannot drift.
 FIT_SENDABLE_SQL = (
-    f"(c.source = 'csv_import' "
-    f"OR o.next_action = '{SIGNAL_FIT_OVERRIDE}' "
-    f"OR COALESCE(c.fit_score, 0) >= ?)"
+    "(c.source = 'csv_import' "
+    "OR COALESCE(c.fit_score, 0) >= ?)"
 )
 
 # Invitation notes are stored as role='sdr'. Tagged rows carry
@@ -166,14 +165,16 @@ def create_campaign(
     config_json: str = "",
     context_json: str = "",
 ) -> str:
-    """Create a new campaign and return its ID."""
+    """Create a new campaign and return its ID. The name is kept as plain text (#1582)."""
+    from ..services.campaign_naming import plain_campaign_name
+
     campaign_id = str(uuid.uuid4())
     now = int(time.time())
     db = get_db()
     db.execute(
         """INSERT INTO campaigns (id, name, icp_json, status, mode, config_json, context_json, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (campaign_id, name, icp_json, status, mode, config_json, context_json, now, now),
+        (campaign_id, plain_campaign_name(name), icp_json, status, mode, config_json, context_json, now, now),
     )
     db.commit()
     db.close()
@@ -250,7 +251,12 @@ _VALID_CAMPAIGN_COLS = frozenset({
 
 
 def update_campaign(campaign_id: str, **kwargs: Any) -> None:
+    from ..services.campaign_naming import plain_campaign_name
+
     db = get_db()
+    if "name" in kwargs:
+        # Plain text, as the api stores it (#1582).
+        kwargs["name"] = plain_campaign_name(kwargs["name"])
     kwargs["updated_at"] = int(time.time())
     bad_keys = set(kwargs) - _VALID_CAMPAIGN_COLS
     if bad_keys:

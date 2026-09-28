@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..db.async_bridge import run_db
+from ..dashboard_links import page_url
 from ..ai.inbound_qualifier import _classify_fast
 from ..db import aio as db
 from ..linkedin import get_account_id, get_linkedin_client
@@ -132,7 +133,7 @@ async def _fetch_raw_chats(
             raise InboxError(
                 "LinkedIn session expired or unauthorized (HTTP "
                 f"{resp.status_code}). Please reconnect your LinkedIn account "
-                "at https://heylead.dev/auth/login-url"
+                f"at {page_url('accounts')}"
             )
         if resp.status_code == 400:
             body = ""

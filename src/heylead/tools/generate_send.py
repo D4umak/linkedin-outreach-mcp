@@ -1061,9 +1061,12 @@ async def run_generate_and_send(
                     f"Messaging instruction for this variant: {variant_desc}\n"
                     f"Follow this instruction precisely for controlled testing."
                 )
-                campaign_ctx = campaign_ctx or {}
-                existing_prefs = campaign_ctx.get("campaign_preferences", "")
-                campaign_ctx["campaign_preferences"] = (existing_prefs + variant_instruction).strip()
+                # Its own key: prompts read it through preferences_for_prompt,
+                # and the operator's preferences are never grown (api #1663).
+                from ..services.strategy_note import AB_VARIANT_KEY
+
+                campaign_ctx = dict(campaign_ctx or {})
+                campaign_ctx[AB_VARIANT_KEY] = variant_instruction.strip()
                 copy_provenance.note_variant(outreach_variant)
                 logger.info("Applied A/B variant %s instruction for outreach", outreach_variant)
         except Exception as e:

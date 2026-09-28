@@ -25,7 +25,7 @@ from ..constants import (
 from ..db import aio as db
 from ..db.async_bridge import run_db
 from ..constants import SOURCE_LABELS
-from ..dashboard_links import dashboard_url
+from ..dashboard_links import page_url
 from ..formatter import (
     conversion_rate_display, format_duration, person_line, progress_bar,
     prospect_link, stars,
@@ -1204,15 +1204,14 @@ async def _show_overview_from_backend(data: dict) -> str:
     if acct_status == "disconnected":
         output.append("⚠️ **LinkedIn Account Disconnected**\n")
         output.append("Your LinkedIn session has expired. All outreach is paused.")
-        output.append("Go to https://heylead.dev/auth/login-url to reconnect,")
-        output.append("then run setup_profile(backend_jwt='YOUR_TOKEN').\n")
+        output.append(f"Reconnect it at {page_url('accounts')}.\n")
     elif acct_status == "not_connected":
         # The workspace never connected LinkedIn (heylead-api #394) — nothing
         # expired, so the reconnect message above would be wrong.
         output.append("⚠️ **LinkedIn Not Connected**\n")
         output.append(
-            f"LinkedIn isn't connected yet — sign in at {dashboard_url('login')} "
-            "and connect it in Settings → Connected accounts, then run show_status again.\n"
+            f"LinkedIn isn't connected yet. Connect it at {page_url('accounts')}, "
+            "then run show_status again.\n"
         )
     elif acct_status == "degraded":
         output.append(f"⚠️ **Account Warning**: {acct_message}\n")

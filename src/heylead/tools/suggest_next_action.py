@@ -31,6 +31,7 @@ import logging
 import time
 from typing import Any
 
+from ..dashboard_links import page_url
 from ..flags import flag_enabled
 from ..config import get_tier
 from ..constants import (
@@ -192,8 +193,7 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
                         "⚠️ **Priority 1: Reconnect LinkedIn Account**\n\n"
                         f"Your account is not connected: {msg}\n\n"
                         "All outreach is paused until you reconnect.\n"
-                        "Go to https://heylead.dev/auth/login-url to reconnect,\n"
-                        "then run setup_profile(backend_jwt='YOUR_TOKEN')."
+                        f"Reconnect it at {page_url('accounts')}."
                     )
             finally:
                 await client.close()

@@ -25,13 +25,11 @@ def fit_gate_verdict(prospect: dict, campaign_cfg: dict) -> tuple[bool, float, f
     re-scored eleven hand-imported founders to an identical composite below
     the threshold and this gate silently buried all of them.
     """
-    from ..constants import MIN_FIT_SCORE_THRESHOLD, SIGNAL_FIT_OVERRIDE
+    from ..constants import MIN_FIT_SCORE_THRESHOLD
 
     fit = prospect.get("fit_score") or 0
     threshold = campaign_cfg.get("min_fit_score", MIN_FIT_SCORE_THRESHOLD)
     if prospect.get("contact_source") == "csv_import":
-        return False, fit, threshold
-    if prospect.get("next_action") == SIGNAL_FIT_OVERRIDE:
         return False, fit, threshold
     return fit < threshold, fit, threshold
 

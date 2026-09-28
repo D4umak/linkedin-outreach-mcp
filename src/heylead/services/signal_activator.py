@@ -122,8 +122,9 @@ def _backfill_pending_stamps() -> int:
             continue
         winner = _pick_best_signal(hooks)
         campaign = get_campaign(contact.get("campaign_id") or "")
-        below = _below_campaign_send_gate(campaign, contact.get("fit_score", 0) or 0)
-        _stamp_pending_outreach(contact, winner["id"], fit_override=below)
+        if _below_campaign_send_gate(campaign, contact.get("fit_score", 0) or 0):
+            continue  # the fit floor holds; a signal never lifts a row past it (heylead-api#1661)
+        _stamp_pending_outreach(contact, winner["id"])
         _write_signal_context(contact["id"], _build_signal_context(winner))
         stamped += 1
     return stamped
@@ -359,6 +360,24 @@ def _is_irrelevant_signal(sig: dict[str, Any], signal_context: dict[str, Any]) -
     return not keywords and not hook
 
 
+def stranger_admission(sig: dict[str, Any]) -> str | None:
+    """Why a stranger may be added on this signal, or None (heylead-api#1590).
+
+    Something the person did (a behavioural type), or an outreach intent. A
+    post-scan type or a hook is not a reason on its own: the post scan is a
+    keyword match and the template hook is always present, so the old hook
+    exception let every such stranger in. The api's signal_admission.judge
+    decides the same rows the same way (tests/fixtures/signal_rule_cases.json).
+    """
+    from ..constants import SIGNAL_BEHAVIORAL_TYPES, SIGNAL_OUTREACH_INTENTS
+
+    if (sig.get("signal_type") or "") in SIGNAL_BEHAVIORAL_TYPES:
+        return "behavioural"
+    if (sig.get("intent") or "") in SIGNAL_OUTREACH_INTENTS:
+        return "buying_intent"
+    return None
+
+
 def _clears_intent_gate(
     sig: dict[str, Any],
     signal_context: dict[str, Any],
@@ -415,19 +434,15 @@ def _stamp_pending_outreach(
     contact: dict[str, Any],
     signal_id: str,
     *,
-    fit_override: bool = False,
     next_action: str | None = None,
 ) -> str | None:
-    from ..constants import SIGNAL_FIT_OVERRIDE
     from ..db.queries import pending_outreach_for_contact, update_outreach
 
     row = pending_outreach_for_contact(contact.get("id") or "")
     if not row:
         return None
     updates: dict[str, Any] = {"signal_id": signal_id}
-    if fit_override:
-        updates["next_action"] = SIGNAL_FIT_OVERRIDE
-    elif next_action:
+    if next_action:
         updates["next_action"] = next_action
     update_outreach(row["id"], **updates)
     return row["id"]
@@ -469,10 +484,11 @@ def _apply_existing_contact_signal(
     composite_score: float,
     now: int,
 ) -> str:
-    """Stamp / write / override for someone already in a campaign.
+    """Stamp / write / boost for someone already in a campaign.
 
     Returns the action_taken. Parks return below_send_threshold; the caller
-    marks those skipped. Does not inflate fit to cheat the send gate.
+    marks those skipped. A signal never lifts a row past the fit floor
+    (heylead-api#1661), and never inflates fit to cheat the send gate.
     """
     from ..db.queries import get_campaign, update_contact
 
@@ -480,19 +496,12 @@ def _apply_existing_contact_signal(
     classified = _is_classified_hook(sig, signal_context)
     campaign = get_campaign(contact.get("campaign_id") or "")
     current_fit = contact.get("fit_score", 0) or 0
-    below = _below_campaign_send_gate(campaign, current_fit)
+    if _below_campaign_send_gate(campaign, current_fit):
+        return "below_send_threshold"
 
     if classified:
-        _stamp_pending_outreach(contact, sig["id"], fit_override=below)
+        _stamp_pending_outreach(contact, sig["id"])
         _write_signal_context(contact["id"], signal_context)
-        if not below:
-            boosted = min(current_fit + composite_score * 0.2, 1.0)
-            if boosted > current_fit:
-                update_contact(contact["id"], fit_score=boosted)
-        return "priority_boosted_existing"
-
-    if below:
-        return "below_send_threshold"
 
     boosted = min(current_fit + composite_score * 0.2, 1.0)
     if boosted > current_fit:
@@ -561,7 +570,6 @@ async def activate_pending_signals() -> str:
     from ..constants import (
         COMPANY_LEVEL_SIGNAL_TYPES,
         SIGNAL_AUTO_OUTREACH_THRESHOLD,
-        SIGNAL_FIT_OVERRIDE,
         SIGNAL_BEHAVIORAL_AUTO_THRESHOLD,
         SIGNAL_BEHAVIORAL_TYPES,
         SIGNAL_BOOST_INTENTS,
@@ -872,16 +880,19 @@ async def activate_pending_signals() -> str:
                 get_campaign, existing_contact.get("campaign_id") or "",
             )
             current_fit = existing_contact.get("fit_score", 0) or 0
-            below = _below_campaign_send_gate(campaign, current_fit)
-            await run_db(
-                _stamp_pending_outreach,
-                existing_contact, signal_id, fit_override=below,
-            )
+            if _below_campaign_send_gate(campaign, current_fit):
+                await _mark_signal_parked(
+                    sig, "below_send_threshold", now,
+                    score=current_fit,
+                    campaign_id=existing_contact.get("campaign_id") or "",
+                )
+                skipped += 1
+                continue
+            await run_db(_stamp_pending_outreach, existing_contact, signal_id)
             await run_db(_write_signal_context, existing_contact["id"], signal_context)
-            if not below:
-                boosted = min(current_fit + composite_score * 0.2, 1.0)
-                if boosted > current_fit:
-                    await run_db(update_contact, existing_contact["id"], fit_score=boosted)
+            boosted = min(current_fit + composite_score * 0.2, 1.0)
+            if boosted > current_fit:
+                await run_db(update_contact, existing_contact["id"], fit_score=boosted)
             await run_db(
                 update_signal,
                 signal_id,
@@ -895,7 +906,10 @@ async def activate_pending_signals() -> str:
         # ── Tier 1: Auto-outreach (score >= threshold + outreach intent) ──
         if (
             composite_score >= exp_auto_threshold
-            and _clears_intent_gate(sig, signal_context, SIGNAL_OUTREACH_INTENTS)
+            and (
+                _clears_intent_gate(sig, signal_context, SIGNAL_OUTREACH_INTENTS)
+                if existing_contact else stranger_admission(sig) == "buying_intent"
+            )
         ):
             if existing_contact:
                 action = await _handle_existing_contact(
@@ -956,8 +970,7 @@ async def activate_pending_signals() -> str:
                     continue
 
                 classified_hook = _is_classified_hook(sig, signal_context)
-                below_gate = _below_campaign_send_gate(matched_camp, icp_score)
-                if below_gate and not classified_hook:
+                if _below_campaign_send_gate(matched_camp, icp_score):
                     await _keep_global_only(sig, linkedin_id, icp_score)
                     await _mark_signal_parked(
                         sig, "below_send_threshold", now,
@@ -968,7 +981,7 @@ async def activate_pending_signals() -> str:
 
                 outreach_id, contact_id = await _enroll_signal_prospect(
                     campaign_id, sig, linkedin_id, max(icp_score, 0.1),
-                    signal_id if classified_hook else "",
+                    signal_id,
                 )
                 if not outreach_id or not contact_id:
                     skipped += 1
@@ -977,9 +990,7 @@ async def activate_pending_signals() -> str:
                 next_action = None
                 if classified_hook:
                     await run_db(_write_signal_context, contact_id, signal_context)
-                    if below_gate:
-                        next_action = SIGNAL_FIT_OVERRIDE
-                    elif composite_score >= SIGNAL_HOT_SKIP_WARMUP_THRESHOLD:
+                    if composite_score >= SIGNAL_HOT_SKIP_WARMUP_THRESHOLD:
                         next_action = "signal_hot_skip_warmup"
 
                 if next_action:
@@ -1014,8 +1025,8 @@ async def activate_pending_signals() -> str:
         # (no text content → confidence was historically low).
         elif (
             composite_score >= SIGNAL_BEHAVIORAL_AUTO_THRESHOLD
-            and sig.get("signal_type") in SIGNAL_BEHAVIORAL_TYPES
             and not existing_contact
+            and stranger_admission(sig) == "behavioural"
         ):
             campaign_id = _match_best_campaign(sig, active_campaigns, fallback=True)
             if not campaign_id:
@@ -1104,8 +1115,8 @@ async def activate_pending_signals() -> str:
             )
 
         # ── Tier 2: Add to campaign (score >= boost threshold + boost intent) ──
-        # Strangers need a classified hook or a true outreach intent —
-        # generic thought_leadership prospect_posts must not auto-enroll.
+        # A stranger needs an outreach intent (stranger_admission); a
+        # classified hook is not a reason on its own (heylead-api#1590).
         elif (
             composite_score >= exp_boost_threshold
             and (
@@ -1115,12 +1126,7 @@ async def activate_pending_signals() -> str:
                         sig, signal_context, SIGNAL_BOOST_INTENTS,
                     )
                 )
-                or (
-                    not existing_contact
-                    and _clears_intent_gate(
-                        sig, signal_context, SIGNAL_OUTREACH_INTENTS,
-                    )
-                )
+                or (not existing_contact and stranger_admission(sig) == "buying_intent")
             )
         ):
             if existing_contact:
@@ -1176,8 +1182,7 @@ async def activate_pending_signals() -> str:
                     continue
 
                 classified_hook = _is_classified_hook(sig, signal_context)
-                below_gate = _below_campaign_send_gate(matched_camp, icp_score)
-                if below_gate and not classified_hook:
+                if _below_campaign_send_gate(matched_camp, icp_score):
                     await _keep_global_only(sig, linkedin_id, icp_score)
                     await _mark_signal_parked(
                         sig, "below_send_threshold", now,
@@ -1188,7 +1193,7 @@ async def activate_pending_signals() -> str:
 
                 outreach_id, contact_id = await _enroll_signal_prospect(
                     campaign_id, sig, linkedin_id, max(icp_score, 0.1),
-                    signal_id if classified_hook else "",
+                    signal_id,
                 )
                 if not outreach_id or not contact_id:
                     skipped += 1
@@ -1196,12 +1201,6 @@ async def activate_pending_signals() -> str:
 
                 if classified_hook:
                     await run_db(_write_signal_context, contact_id, signal_context)
-                    if below_gate:
-                        from ..db.queries import update_outreach
-                        await run_db(
-                            update_outreach, outreach_id,
-                            next_action=SIGNAL_FIT_OVERRIDE,
-                        )
 
                 await run_db(upsert_signal_account,
                     linkedin_id=linkedin_id,

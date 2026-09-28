@@ -802,6 +802,8 @@ def build_context_block(
         Dict ready to pass to render_prompt()
     """
     ctx = campaign_context or {}
+    from ..services.strategy_note import preferences_for_prompt
+    _preferences = preferences_for_prompt(ctx)
 
     # For a job search the "offering" is the sender's own background. With no
     # campaign context these resolve to "Not specified" and the model invents a
@@ -859,7 +861,9 @@ def build_context_block(
         "project_brief": _format_project_brief_variable(ctx),
         "case_studies": ctx.get("case_studies") or _js_case_studies or "Not specified",
         "social_proofs": ctx.get("social_proofs", "Not specified"),
-        "campaign_preferences": ctx.get("campaign_preferences", ""),
+        # The operator's text, the strategy note and an A/B instruction, each
+        # from its own key and the note capped (heylead-api#1663).
+        "campaign_preferences": _preferences,
         # The message brief (ai/brief_builder.py): WHAT this message says.
         "message_brief": _render_brief(brief),
         # Rendered block for templates: campaign rules override template style
@@ -871,8 +875,8 @@ def build_context_block(
                 "CAMPAIGN RULES — these override any conflicting style rules in "
                 "this prompt. Follow them exactly. Write for the recipient's "
                 "actual role shown in Contact Information; never assume they are "
-                f"a founder:\n{ctx.get('campaign_preferences', '')}\n"
-                if (ctx.get("campaign_preferences") or "").strip()
+                f"a founder:\n{_preferences}\n"
+                if _preferences
                 else ""
             ),
             _sender_facts,

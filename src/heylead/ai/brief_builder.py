@@ -171,7 +171,10 @@ def build_message_brief(
     facts = ctx.get("project_facts") if isinstance(ctx.get("project_facts"), dict) else {}
     must_say = _one_point(ctx.get("project_brief"), facts)
     if not must_say and intent == "buy":
-        must_say = _clean(ctx.get("offerings")) or _clean(ctx.get("campaign_preferences"))
+        # The operator's own preferences, never a machine note (api #1663).
+        from ..services.strategy_note import operator_preferences
+
+        must_say = _clean(ctx.get("offerings")) or _clean(operator_preferences(ctx))
     confirms = [
         _clean(item) for item in (facts.get("must_confirm") or []) if _clean(item)
     ]

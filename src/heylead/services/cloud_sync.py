@@ -2305,6 +2305,8 @@ def _insert_cloud_campaign(campaign_id: str, name: str, status: str) -> None:
     rather than mint a duplicate. queries.create_campaign generates a fresh
     uuid, so it cannot be used here.
     """
+    from .campaign_naming import plain_campaign_name
+
     now = int(time.time())
     db = queries.get_db()
     try:
@@ -2313,7 +2315,7 @@ def _insert_cloud_campaign(campaign_id: str, name: str, status: str) -> None:
                    (id, name, icp_json, status, mode, config_json,
                     context_json, created_at, updated_at)
                VALUES (?, ?, '', ?, 'autopilot', '', '', ?, ?)""",
-            (campaign_id, name, status, now, now),
+            (campaign_id, plain_campaign_name(name), status, now, now),
         )
         db.commit()
     finally:

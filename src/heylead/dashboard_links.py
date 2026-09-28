@@ -28,6 +28,36 @@ PAGES: dict[str, str] = {
     "accounts": "settings/accounts",
 }
 
+# Every page of the signed-in dashboard a customer can open, relative to
+# /dashboard: heylead-dashboard src/App.tsx (its list is src/lib/dashboardPages.ts;
+# heylead-api keeps the same tuple in app/services/public_urls.py). A person has
+# no page of their own: campaign_url(campaign_id, outreach_id) opens them.
+# tests/test_every_link_opens_a_real_page.py scans src/heylead against it (#1622).
+DASHBOARD_PAGES: tuple[str, ...] = (
+    "",
+    "campaigns", "campaigns/:id",
+    "approvals", "signals", "scheduler", "agents", "brand", "actions",
+    "content", "content/posts", "content/posts/:id", "content/photos", "content/comments", "content/knowledge",
+    "settings", "settings/workspace", "settings/people", "settings/accounts", "settings/sending",
+    "settings/notifications", "settings/rules", "settings/integrations", "settings/privacy",
+    "settings/activity", "settings/billing",
+    "team",
+)
+# Pages that open without signing in.
+PUBLIC_DASHBOARD_PAGES: tuple[str, ...] = ("login", "auth/callback")
+
+
+def is_dashboard_page(page: str) -> bool:
+    """True when ``page`` ("campaigns/abc?outreach=x") is one of DASHBOARD_PAGES."""
+    bare = page.split("?", 1)[0].split("#", 1)[0].strip("/")
+    parts = bare.split("/") if bare else [""]
+    for known in DASHBOARD_PAGES:
+        segs = known.split("/") if known else [""]
+        if len(segs) == len(parts) and all(k.startswith(":") and p or k == p for k, p in zip(segs, parts)):
+            return True
+    return False
+
+
 SNAPSHOT_HINT = "🖼 Snapshot attached — open the link above for the live view."
 
 

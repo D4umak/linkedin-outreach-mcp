@@ -40,11 +40,20 @@ class Rule:
         return self.short if (channel in TIGHT_CHANNELS and self.short) else self.text
 
 
-# Every channel a person's words leave through.
+# Every channel a person's words leave through. rules_for raises on a name
+# that is not here, so a call that names a new one 500s (or, inside a
+# catch-all, falls back silently) until the name is added: 28 Sep 2026, the
+# site bubble's "help" and the ICP grounding pass's "icp" had both shipped
+# unlisted.
+#   help  the answer a visitor gets from the heylead.dev bubble, written from
+#         the site's own text; nobody's voice, so the voice rule skips it.
+#   icp   the sender's own words inside an ICP (value proposition, offer),
+#         read back for claims the sender never made.
 CHANNELS: tuple[str, ...] = (
     "invite", "dm", "followup", "inmail", "email", "reply", "check_in",
     "discovery_dm", "counter_pitch", "comment", "comment_reply",
     "post", "x_post", "x_thread", "headline", "about",
+    "help", "icp",
 )
 
 ALL = frozenset(CHANNELS)
@@ -336,6 +345,8 @@ RULES: tuple[Rule, ...] = (
             "write short standalone lines."
         ),
         channels=ALL,
+        # A site answer speaks for the product, not for a sender.
+        except_channels=frozenset({"help"}),
         note="21 Sep 2026: the signature reached the prompt and the model still wrote to an average.",
         short=(
             "Write the way the sender writes: their sentence length, their openings, the words they reach for."

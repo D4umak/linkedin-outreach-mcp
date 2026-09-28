@@ -18,6 +18,7 @@ from ..constants import (
     STRATEGY_SPAWN_MIN_REVENUE,
 )
 from ..db.queries import list_campaigns
+from .campaign_naming import auto_campaign_name
 from ..db.strategy_queries import (
     get_active_campaign_icps,
     save_strategy_action,
@@ -130,9 +131,14 @@ async def spawn_campaign(candidate: dict[str, Any]) -> str | None:
         )
         return None
 
-    campaign_name = f"[Auto] {target[:60]}"
+    # Whole words, an ellipsis when cut: target[:60] stored names cut
+    # mid-word ("... execution suppo", #1582).
+    campaign_name = auto_campaign_name(target)
 
-    if any(c.get("name") == campaign_name for c in all_campaigns):
+    # A campaign spawned before #1582 carries the old mid-word slice; it is
+    # the same segment and must still stop a second spawn.
+    legacy_name = "[Auto] " + target[:60]  # nosemgrep: campaign-name-cut-mid-word
+    if any(c.get("name") in (campaign_name, legacy_name) for c in all_campaigns):
         logger.info("Spawner: campaign '%s' already exists, skipping", campaign_name)
         return None
 

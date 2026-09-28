@@ -1458,5 +1458,8 @@ HOW YOU WRITE
 
 Keep it short and conversational. If they asked a question, answer it.
 If they agreed, build on the point. Aim to advance the relationship.
+Talk to {prospect_name} directly, as "you". Never write about them in the
+third person ("{prospect_name} makes a good point"): the reply sits under
+their words, in their thread.
 
 Return ONLY the reply text."""

@@ -654,10 +654,7 @@ SIGNAL_STATUS_DISMISSED = "dismissed"
 SIGNAL_STATUS_EXPIRED = "expired"
 SIGNAL_STATUS_SKIPPED = "skipped"
 
-# One-invite exception when a classified hook lands on someone below min_fit.
-SIGNAL_FIT_OVERRIDE = "signal_fit_override"
-
-# Post-level hooks that may write the invite note and the fit override.
+# Post-level hooks that may write the invite note.
 CLASSIFIED_POST_HOOK_TYPES = frozenset({
     SIGNAL_POST_PAIN_POINT,
     SIGNAL_POST_TECH_EVALUATION,
@@ -1096,8 +1093,12 @@ SIGNAL_ICP_MATCH_THRESHOLD = 0.25       # Min ICP match score for signal-activat
 SIGNAL_OUTREACH_INTENTS = frozenset({"buying_signal", "pain_point", "competitor_eval"})
 SIGNAL_BOOST_INTENTS = frozenset({"buying_signal", "pain_point", "competitor_eval", "thought_leadership"})
 
-# Behavioral signal types — express direct interest in YOU (not in a topic).
-# These bypass the text-classified intent gate when ICP-matched.
+# Behavioral signal types: something the person did, so they bypass the
+# text-classified intent gate when ICP-matched. Profile views, follows and site
+# visits are interest in you; a reaction or comment on a company post may be
+# on a competitor's page, so it is engagement, not interest in the sender
+# (heylead-api#1590 keeps it admitting as a declared limitation). Equal to the
+# api's signal_admission.BEHAVIOURAL_TYPES through the shared parity table.
 SIGNAL_BEHAVIORAL_TYPES = frozenset({
     "profile_view", "company_follower", "website_visit", "website_high_intent",
     "company_post_reaction", "company_post_comment",
