@@ -10,6 +10,7 @@ import logging
 
 from ..db import aio as db
 from ..formatter import conversion_rate_display, format_duration, table
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +157,7 @@ async def run_compare_campaigns(campaign_ids: str = "") -> str:
 
     # ── Assemble output ──
     output = [
-        f"\U0001f4ca Campaign Comparison ({len(campaigns)} campaigns)\n",
+        f"\U0001f4ca Campaign Comparison ({count_noun(len(campaigns), 'campaign')})\n",
         table_output,
         "",
     ]

@@ -207,6 +207,20 @@ _SENIORITY_LABELS: dict[str, str] = {
     "entry": "entry level",
 }
 
+# Labels for the title families `services.enrolment_why.TITLE_FAMILIES`
+# writes, as a sentence says them; the api's person_line and the dashboard's
+# outreachLabels say the same (heylead-api#1827).
+_TITLE_FAMILY_LABELS: dict[str, str] = {
+    "engineering": "engineering",
+    "product": "product",
+    "sales": "sales",
+    "marketing": "marketing",
+    "finance": "finance",
+    "operations": "operations",
+    "people": "people and HR",
+    "executive": "executive",
+}
+
 # A dimension at or above this counts as a reason. compute_icp_match returns
 # 0.30 (0.50 for location) for "nothing to compare", so the bar sits well
 # above the no-signal values.
@@ -231,7 +245,8 @@ def why_line(why: dict | None) -> str:
         return isinstance(value, (int, float)) and value >= _WHY_DIMENSION_MATCH
 
     reasons: list[str] = []
-    family = str(why.get("title_family") or "").strip()
+    family = str(why.get("title_family") or "").strip().lower()
+    family = "" if family == "unknown" else _TITLE_FAMILY_LABELS.get(family, family.replace("_", " "))
     if _hit("title"):
         reasons.append(f"{family} title match" if family else "title match")
     seniority = str(why.get("seniority") or "").strip()

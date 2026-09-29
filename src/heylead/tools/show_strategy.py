@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from ..services.count_words import count_noun
 
 
 async def run_show_strategy(campaign_id: str = "") -> str:
@@ -155,7 +156,7 @@ def _status_icon(status: str) -> str:
 
 def _format_action_detail(atype: str, details: dict) -> str:
     if atype == "skip_segment":
-        return f"Skipped {details.get('skipped_count', '?')} prospects ({details.get('reason', '')[:60]})"
+        return f"Skipped {count_noun(int(details.get('skipped_count') or 0), 'prospect')} ({details.get('reason', '')[:60]})"
     if atype == "reorder_queue":
         return f"Reordered {details.get('reordered_count', '?')}/{details.get('total_pending', '?')} pending"
     if atype == "adjust_messaging":

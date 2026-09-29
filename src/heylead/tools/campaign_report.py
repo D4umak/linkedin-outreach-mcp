@@ -27,6 +27,7 @@ from ..formatter import (
     stars,
     table,
 )
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -342,7 +343,7 @@ async def run_campaign_report(
         va_won = va.get("won", 0)
         va_win_str = f" ({va_won/va_invited:.0%} win)" if va_invited > 0 and va_won > 0 else ""
         output.append(
-            f"\u251c\u2500\u2500 Variant A: {va['total']} prospects, "
+            f"\u251c\u2500\u2500 Variant A: {count_noun(va['total'], 'prospect')}, "
             f"{va['acceptance_rate']}% accept, {va['reply_rate']}% reply, "
             f"{va_won} won{va_win_str}"
         )
@@ -350,7 +351,7 @@ async def run_campaign_report(
         vb_won = vb.get("won", 0)
         vb_win_str = f" ({vb_won/vb_invited:.0%} win)" if vb_invited > 0 and vb_won > 0 else ""
         output.append(
-            f"\u2514\u2500\u2500 Variant B: {vb['total']} prospects, "
+            f"\u2514\u2500\u2500 Variant B: {count_noun(vb['total'], 'prospect')}, "
             f"{vb['acceptance_rate']}% accept, {vb['reply_rate']}% reply, "
             f"{vb_won} won{vb_win_str}"
         )
@@ -583,7 +584,7 @@ async def run_campaign_report(
     # ── Section 14: Remaining queue ──
     pending = total - invited
     if pending > 0:
-        output.append(f"\U0001f4e6 {pending} prospects still queued for outreach.")
+        output.append(f"\U0001f4e6 {count_noun(pending, 'prospect')} still queued for outreach.")
 
     from ..services.dashboard_snapshot import status_footer
 

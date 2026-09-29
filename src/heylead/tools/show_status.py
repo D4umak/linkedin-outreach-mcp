@@ -33,6 +33,7 @@ from ..formatter import (
 from ..services.health_score import compute_health_score, format_health_score
 from ..services.dashboard_snapshot import status_footer
 from ..services.unipile_email import mailbox_disconnect_banner
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -767,7 +768,8 @@ async def _show_overview(offline: bool = False) -> str:
     hot_leads = await run_db(_query_hot_leads)
 
     if hot_leads:
-        output.append(f"🔥 Hot Leads ({len(hot_leads)}):")
+        # A sample of five, newest first: its length is not a count.
+        output.append("🔥 Recent hot leads:")
         for i, lead in enumerate(hot_leads):
             l = dict(lead)
             is_last = i == len(hot_leads) - 1
@@ -1333,8 +1335,16 @@ async def _show_overview_from_backend(data: dict) -> str:
     output.extend(await _needs_attention_lines(data.get("needs_attention") or None))
 
     # ── Hot leads ──
+    # Counted as the Overview tile counts them (heylead-api#1831): people in
+    # running campaigns, and all time. The list below is only a sample of
+    # names (GET /stats caps it at 5, archived campaigns included), so its
+    # length is never printed as the count.
+    running = (data.get("totals_active") or {}).get("hot_leads")
+    all_time = (data.get("totals") or {}).get("hot_leads")
+    if isinstance(running, int) and isinstance(all_time, int) and (running or all_time):
+        output.append(f"🔥 Hot leads, as Overview counts them: {running} in running campaigns, {all_time} all time")
     if hot_leads:
-        output.append(f"🔥 Hot Leads ({len(hot_leads)}):")
+        output.append("🔥 Recent hot leads:")
         for i, lead in enumerate(hot_leads):
             is_last = i == len(hot_leads) - 1
             prefix = "└──" if is_last else "├──"
@@ -1654,7 +1664,7 @@ async def _show_campaign_detail(campaign_id: str) -> str:
     output.append(f"├── Hot leads: {hot} 🔥" if hot > 0 else f"├── Hot leads: {hot}")
     if skipped > 0:
         output.append(f"├── Skipped: {skipped}")
-    output.append(f"└── Remaining: {pending} prospects queued")
+    output.append(f"└── Remaining: {count_noun(pending, 'prospect')} queued")
     output.append("")
 
     output.extend(await _action_health_lines(campaign_id))

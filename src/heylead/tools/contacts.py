@@ -7,13 +7,13 @@ One master record per person across all campaigns.
 from __future__ import annotations
 
 import asyncio
-import csv
 import io
 import json
 import logging
 import time
 from datetime import datetime, timezone
 
+from .. import csvsafe
 from ..db import aio as db
 from ..linkedin import (
     UnipileAuthError,
@@ -24,6 +24,7 @@ from ..linkedin import (
 )
 from ..formatter import source_badge, stars, table
 from ..db.async_bridge import run_db
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -343,7 +344,7 @@ async def _handle_view(contact_id: str) -> str:
     # Campaign history
     if campaigns:
         lines.append("")
-        lines.append(f"Campaign History ({len(campaigns)} campaigns)")
+        lines.append(f"Campaign History ({count_noun(len(campaigns), 'campaign')})")
         lines.append("-" * 60)
         for camp in campaigns:
             outreach = camp.get("outreach") or {}
@@ -518,7 +519,7 @@ async def _handle_export(lifecycle_stage: str, tag: str, fmt: str) -> str:
 
     elif fmt == "csv":
         output = io.StringIO()
-        writer = csv.writer(output)
+        writer = csvsafe.writer(output)
         writer.writerow([
             "Name", "Title", "Company", "LinkedIn URL", "Email",
             "Location", "Lifecycle", "Fit Score", "Tags", "Campaigns", "Source",

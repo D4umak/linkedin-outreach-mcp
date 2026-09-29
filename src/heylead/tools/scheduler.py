@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 
 from ..dashboard_links import dashboard_url
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ async def _run_backfill_cloud() -> str:
             "after `scheduler(action='toggle', enabled=True)` to push them."
         )
     return (
-        f"Pushed {campaigns} campaigns, {outreaches} outreaches "
+        f"Pushed {count_noun(campaigns, 'campaign')}, {outreaches} outreaches "
         f"to your hosted workspace — {dashboard_url()}{note}"
     )
 

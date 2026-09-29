@@ -24,6 +24,7 @@ from ..db.strategy_queries import (
     get_won_deal_profiles,
     upsert_strategy_pattern,
 )
+from .count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +292,7 @@ def _format_segments(segments: list[dict]) -> str:
     for s in segments[:20]:  # Top 20 by volume
         lines.append(
             f"- {s.get('segment_company', '?')} / {s.get('segment_title', '?')}: "
-            f"{s.get('total', 0)} prospects, {s.get('acceptance_rate', 0)}% accept, "
+            f"{count_noun(s.get('total', 0), 'prospect')}, {s.get('acceptance_rate', 0)}% accept, "
             f"{s.get('reply_rate', 0)}% reply, {s.get('won', 0)} won, "
             f"${s.get('avg_revenue', 0):,.0f} avg revenue"
         )
@@ -304,7 +305,7 @@ def _format_engagement(engagement: list[dict]) -> str:
     lines = []
     for e in engagement:
         lines.append(
-            f"- {e.get('strategy', '?')}: {e.get('total', 0)} prospects, "
+            f"- {e.get('strategy', '?')}: {count_noun(e.get('total', 0), 'prospect')}, "
             f"{e.get('acceptance_rate', 0)}% accept, {e.get('reply_rate', 0)}% reply, "
             f"{e.get('won', 0)} won, ${e.get('avg_revenue', 0) or 0:,.0f} avg revenue"
         )
@@ -331,7 +332,7 @@ def _format_fit_correlation(fit_data: list[dict]) -> str:
     lines = []
     for f in fit_data:
         lines.append(
-            f"- Fit {f.get('fit_bucket', '?')}: {f.get('total', 0)} prospects, "
+            f"- Fit {f.get('fit_bucket', '?')}: {count_noun(f.get('total', 0), 'prospect')}, "
             f"{f.get('acceptance_rate', 0)}% accept, {f.get('reply_rate', 0)}% reply, "
             f"{f.get('won', 0)} won, ${f.get('avg_revenue', 0) or 0:,.0f} avg revenue"
         )

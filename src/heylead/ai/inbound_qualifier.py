@@ -1091,13 +1091,9 @@ async def generate_discovery_question(
                 "discovery",
             )
     except Exception as e:
+        # A failed draft sends nothing. Until 28 Sep 2026 this returned a
+        # template greeting, which the pipeline then sent in the user's
+        # name; the api's reply classifier names that very line as what
+        # people paste at every new connection (heylead-api #1816).
         logger.warning("Discovery DM generation failed: %s", e)
-        name = first_name(sender_profile.get("name"), "there")
-        return await _guard_inbound_result(
-            {
-                "message": f"Hey {name}, thanks for connecting! What prompted you to reach out?",
-                "reasoning": "Fallback generic discovery question",
-            },
-            voice,
-            "discovery",
-        )
+        return {"message": "", "reasoning": f"draft failed: {e}"}

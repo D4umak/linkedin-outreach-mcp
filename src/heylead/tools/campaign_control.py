@@ -32,6 +32,7 @@ from ..services.cloud_sync import (
     sync_campaign_status,
     sync_campaign_status_explained,
 )
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -781,7 +782,7 @@ async def run_campaign_plan(campaign_id: str = "") -> str:
                     f"  {c['name']}: campaign_status(action='plan', campaign_id='{c['id']}')"
                     for c in rows
                 )
-                return f"{len(rows)} {status} campaigns. Which one?\n\n{names}"
+                return f"{count_noun(len(rows), f'{status} campaign')}. Which one?\n\n{names}"
             if rows:
                 campaign = rows[0]
                 break

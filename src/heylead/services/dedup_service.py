@@ -18,6 +18,7 @@ from typing import Any
 
 from ..db.schema import get_db
 from .connection_sync import _UNSET
+from .count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -467,4 +468,4 @@ def format_dedup_summary(stats: dict[str, int]) -> str:
     if stats["exclusion_list"] > 0:
         parts.append(f"{stats['exclusion_list']} excluded")
 
-    return f"Filtered {removed} prospects: {', '.join(parts)}"
+    return f"Filtered {count_noun(removed, 'prospect')}: {', '.join(parts)}"

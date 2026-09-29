@@ -33,6 +33,7 @@ from ..db import aio as db
 from ..db import queries
 from ..db.async_bridge import run_db
 from .cloud_sync import cloud_owns_outbound
+from .count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +246,7 @@ async def refill_campaigns(budget_seconds: float | None = None) -> str:
 
     parts = []
     if enriched:
-        parts.append(f"{enriched} campaigns enriched ({total_added} new prospects)")
+        parts.append(f"{count_noun(enriched, 'campaign')} enriched ({total_added} new prospects)")
     if found_nobody:
         parts.append(f"{found_nobody} searched, found nobody new")
     # Sorted so the same situation always reads the same way run to run.

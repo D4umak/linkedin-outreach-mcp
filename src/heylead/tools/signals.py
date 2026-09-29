@@ -6,6 +6,7 @@ Thin dispatcher that routes to existing run_* functions based on the action para
 from __future__ import annotations
 
 import logging
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -310,7 +311,7 @@ async def _handle_optimize() -> str:
     if result["keywords_added"]:
         parts.append(f"**{result['keywords_added']} keywords** discovered and added")
     if result["warmup_changes"]:
-        parts.append(f"**{result['warmup_changes']} campaigns** had warm-up disabled")
+        parts.append(f"**{count_noun(result['warmup_changes'], 'campaign')}** had warm-up disabled")
     if result["threshold_changes"]:
         parts.append(f"**{result['threshold_changes']} thresholds** tuned")
     if result.get("errors"):

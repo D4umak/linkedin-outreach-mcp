@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 
 from .. import constants as c
 from .. import facts
+from .invite_pace import pace_clause
 from .outreach_channel import exclude_connections_enabled
 
 logger = logging.getLogger(__name__)
@@ -385,8 +386,8 @@ def campaign_plan(
         steps.append(PlanStep("warmup", "Warm-up", _warmup_line(cfg), "Before each invitation"))
         steps.append(PlanStep(
             "invite", "Invite",
-            f"{send_when}: up to {daily} "
-            f"invitations a day and {weekly} a week, {window}, "
+            # The week is the pace and the day a ceiling (heylead-api#1782).
+            f"{send_when}: {pace_clause(daily, weekly, len(hours.get('days') or ALL_DAYS))}, {window}, "
             f"{_minutes(c.INVITE_DELAY_MIN)} to {_minutes(c.INVITE_DELAY_MAX)} minutes apart, "
             # The quoted sentence ends with its own full stop; a "." after the
             # clause read 'assistant.".' (UI QA of #1561, F1).

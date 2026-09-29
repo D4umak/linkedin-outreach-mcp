@@ -33,6 +33,17 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.416 (2026-09-29)
+- Fix: the hosted status counts hot leads as the Overview tile does (#1831)
+- Fix: a count and its noun agree; never '1 prospects' (#1894)
+- Fix: every scripted QA click goes through a gate that refuses state changes (#1505)
+- Fix: a first-event stamp is the event's time, never the write's
+- Fix: a prospect file cannot plant a formula, blow up the reader or read a local file (#1685)
+- Fix: seniority and function read as words, not codes
+- the verdict sweep closes notes whose check ran, or can never run
+- Fix: every CI job has room for a throttled runner, and a cancelled main is re-run
+- Fix: the Invite step states a pace a user can plan by (client twin)
+
 ## v0.10.415 (2026-09-28)
 - Fix: the skills stop promising an AI sentence on the first message
 
@@ -1831,7 +1842,7 @@ mcp = FastMCP(
         "    This does NOT send anything — the campaign is saved as a draft so the user\n"
         "    can review the prospects first. Show them the result, then start outreach with\n"
         "    campaign(action='launch') once they confirm. Never launch without being asked.\n"
-        "    For a user's FIRST campaign, always ask for project_brief (what they are building, go-live, volume, what a vendor must confirm). A homepage or company_context paste is a fallback, not the whole brief.\n"
+        "    For a user's FIRST campaign, always ask for project_brief in its goal's words (sell: what you offer and who it is for; job_search: the role, the kind of company, what you bring; hire: the role, who fits it, what it offers; partner: what you want from a partner and what you bring; buy: what you need, by when and how much, and what a vendor must confirm; research: what you research, who you want to hear from, what you ask of them). A homepage or company_context paste is a fallback, not the whole brief.\n"
         "    If the user says 'existing connections', 'DM my network', 'message my connections', or similar,\n"
         "    pass connections_only='on'. This filters for 1st-degree connections only and sends DMs directly.\n"
         "  - show_status() — campaign dashboard with progress and stats\n"
@@ -2337,8 +2348,8 @@ async def create_campaign(
     Describe your ideal customers and HeyLead will find them on LinkedIn.
     Supports lead generation, prospect discovery, SDR automation, cold outreach,
     and targeted B2B sales campaigns with AI-powered ICP-based targeting.
-    On first campaign, project_brief is asked explicitly (what you are building,
-    go-live, volume, what a vendor must confirm) — a homepage alone is not enough.
+    On first campaign, project_brief is asked explicitly, in the goal's words
+    (see project_brief below) — a homepage alone is not enough.
 
     Args:
         target_description: Who to target (e.g., "CTOs at fintech startups",
@@ -2349,9 +2360,13 @@ async def create_campaign(
             instead of generating a new one.
         company_context: Optional. Your website URL or 1-2 sentences about your
             product/company. Copied into project_brief when project_brief is omitted.
-        project_brief: Optional. Full project paste the model sees: what you are
-            building, go-live, volume, what a vendor must confirm. Required before
-            launch, resume, or auto-send.
+        project_brief: Optional. Full project paste the model sees, in the goal's
+            words. sell: what you offer and who it is for. job_search: the role,
+            the kind of company, what you bring. hire: the role, who fits it, what
+            it offers. partner: what you want from a partner, what you bring.
+            buy: what you need, by when and how much, what a vendor must confirm.
+            research: what you research, who you want to hear from, what you ask.
+            Required before launch, resume, or auto-send.
         mode: Always autopilot (copilot mode was removed). Whether opening DMs
             and follow-ups wait for a person is the WORKSPACE's approval mode,
             not this: a hosted workspace that never chose holds them

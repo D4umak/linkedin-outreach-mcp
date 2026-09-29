@@ -49,6 +49,21 @@ logger = logging.getLogger(__name__)
 # How many individual non-imported rows to spell out in the summary. The
 # per-reason counts above the list are always complete.
 _MAX_DISPOSITION_LINES = 200
+# The longest text an imported field keeps. A file can put megabytes in a
+# cell; nothing downstream (prompts, exports, the dashboard) wants more than
+# a line (D4umak/heylead-api#1685). LinkedIn's own limits are lower still.
+FIELD_MAX_CHARS: dict[str, int] = {
+    "name": 200,
+    "title": 300,
+    "company": 200,
+    "linkedin_url": 500,
+    "email": 254,
+    "location": 200,
+}
+# An error about the header row names at most this many headers, each cut to
+# _HEADER_ECHO_CHARS: enough to recognise the file, never a line of content.
+_HEADER_ECHO_COUNT = 12
+_HEADER_ECHO_CHARS = 30
 
 # Auto-detected column name mappings (case-insensitive)
 _COLUMN_ALIASES: dict[str, list[str]] = {
@@ -131,6 +146,17 @@ def linkedin_url_key(url: str) -> str:
     return f"linkedin.com/{path}"
 
 
+def _headers_for_echo(headers: list[str]) -> str:
+    """The header row, short: a file with no Name column may not be a prospect
+    file at all, and its first line must not come back whole (#1685)."""
+    shown = [
+        h if len(h) <= _HEADER_ECHO_CHARS else h[: _HEADER_ECHO_CHARS - 1] + "…"
+        for h in headers[:_HEADER_ECHO_COUNT]
+    ]
+    more = len(headers) - len(shown)
+    return ", ".join(repr(h) for h in shown) + (f" and {more} more" if more > 0 else "")
+
+
 def _row_to_prospect(
     cells: list[str], mapping: dict[str, int]
 ) -> tuple[dict[str, str], str]:
@@ -141,7 +167,7 @@ def _row_to_prospect(
     prospect: dict[str, str] = {}
     for field, col_idx in mapping.items():
         if col_idx < len(cells):
-            prospect[field] = cells[col_idx].strip()
+            prospect[field] = cells[col_idx].strip()[: FIELD_MAX_CHARS.get(field, 300)].strip()
 
     name = prospect.get("name", "").strip()
     if not name:
@@ -296,7 +322,7 @@ def _format_dispositions(outcomes: list[RowOutcome]) -> list[str]:
 def _usage() -> str:
     return (
         "**import_prospects** — Import prospects from a CSV/XLSX file.\n\n"
-        "**Usage**: pass `file_path` to a .csv or .xlsx file (preferred — no row "
+        "**Usage**: pass `file_path` to a .csv, .tsv or .xlsx file (preferred — no row "
         "limit), or paste CSV text as `csv_data`.\n\n"
         "**Supported columns** (auto-detected, case-insensitive):\n"
         "- `Name` (required)\n"
@@ -359,7 +385,7 @@ async def run_import_prospects(
     mapping = _detect_columns(headers)
     if "name" not in mapping:
         return (
-            f"Could not detect a 'Name' column in headers: {headers}\n\n"
+            f"Could not detect a 'Name' column in headers: {_headers_for_echo(headers)}\n\n"
             "Make sure your file has a column named 'Name', 'Full Name', or 'Contact Name'."
         )
 

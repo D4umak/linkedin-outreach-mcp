@@ -20,6 +20,7 @@ from ..db.queries import (
 from .. import config
 from ..db.async_bridge import run_db
 from ..services.cloud_sync import hosted_campaign_lifecycle
+from ..services.count_words import noun_for
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ async def run_archive_campaign(campaign_id: str = "", force: bool = False) -> st
         parts = [f"{cnt} {status}" for status, cnt in sorted(open_counts.items())]
         warning = " + ".join(parts)
         return (
-            f"Cannot archive '{campaign['name']}' — {warning} prospects "
+            f"Cannot archive '{campaign['name']}' — {warning} {noun_for(total_open, 'prospect')} "
             f"still have pending work.\n\n"
             f"These prospects still have unsent outreach. Archiving will "
             f"terminally skip them — there is no undo.\n\n"
@@ -137,7 +138,7 @@ async def run_archive_campaign(campaign_id: str = "", force: bool = False) -> st
     )
     if total_open > 0:
         parts = [f"{cnt} {status}" for status, cnt in sorted(open_counts.items())]
-        result += f"Warning: {' + '.join(parts)} prospects were abandoned without messaging.\n"
+        result += f"Warning: {' + '.join(parts)} {noun_for(total_open, 'prospect')} {'was' if total_open == 1 else 'were'} abandoned without messaging.\n"
     result += (
         "No further outreach will be sent for this campaign.\n\n"
         f"To view archived campaign details: show_status(campaign_id=\"{campaign_id[:8]}...\")\n"

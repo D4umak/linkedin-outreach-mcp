@@ -1158,6 +1158,20 @@ _REPLIED_STATUSES = frozenset({
 })
 
 
+def _accepted_no_later_than_first_dm(db: Any, outreach_id: str, current: dict[str, Any], now: int) -> int:
+    """``now``, or the first sdr message that is not the invitation note when
+    it is earlier: a message over the connection proves the acceptance."""
+    rows = db.execute(
+        "SELECT format, timestamp FROM messages WHERE outreach_id = ? AND role = 'sdr' "
+        "AND deleted_at IS NULL ORDER BY timestamp",
+        (outreach_id,),
+    ).fetchall()
+    for m in rows:
+        if m["timestamp"] and not _is_invite_note(m, current.get("invited_at"), current.get("accepted_at")):
+            return min(now, int(m["timestamp"]))
+    return now
+
+
 def _auto_set_event_timestamps(
     db: Any,
     outreach_id: str,
@@ -1189,7 +1203,10 @@ def _auto_set_event_timestamps(
     if needs_invited and "invited_at" not in kwargs and current.get("invited_at") is None:
         kwargs["invited_at"] = now
     if needs_accepted and "accepted_at" not in kwargs and current.get("accepted_at") is None:
-        kwargs["accepted_at"] = now
+        # No later than the first message we sent over the connection (not
+        # the invitation note): stamping the write's moment dated acceptances
+        # after the DM (heylead-api#1808, the api's event_stamps).
+        kwargs["accepted_at"] = _accepted_no_later_than_first_dm(db, outreach_id, current, now)
     if needs_reply and "first_reply_at" not in kwargs and current.get("first_reply_at") is None:
         kwargs["first_reply_at"] = now
 

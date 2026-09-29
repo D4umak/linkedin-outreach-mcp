@@ -236,6 +236,29 @@ def needs_brief(goal: str) -> bool:
     return goal == JOB_SEARCH or not GOALS[goal].complete
 
 
+# What a first campaign's project brief needs, per goal: the twin of
+# heylead-api's goals.BRIEF_ASKS (#1859). One sentence for every goal asked
+# a Sell draft "what a vendor must confirm" (28 Sep 2026).
+BRIEF_ASKS: dict[str, str] = {
+    SELL: "what you offer and who it is for",
+    JOB_SEARCH: "the role you want, the kind of company you want it at, and what you bring to it",
+    HIRE: "the role you are filling, who would fit it, and what it offers them",
+    PARTNER: "what you want from a partner or investor, and what you bring to them",
+    BUY: "what you need to buy, by when and how much, and what a vendor must confirm",
+    RESEARCH: "what you are researching, who you want to hear from, and what you are asking of them",
+}
+
+
+def brief_ask(goal: str) -> str:
+    """What the brief needs for this goal; an unknown goal asks as sell."""
+    return BRIEF_ASKS.get(normalize_goal(goal) or DEFAULT_GOAL, BRIEF_ASKS[SELL])
+
+
+def brief_asks_line() -> str:
+    """Every goal's ask on one line, for a tool description the model reads."""
+    return "; ".join(f"{key}: {ask}" for key, ask in BRIEF_ASKS.items())
+
+
 def fit_copy(goal: str) -> dict[str, str]:
     """The words the fit box shows. The dashboard and the client render
     these and keep none of their own."""

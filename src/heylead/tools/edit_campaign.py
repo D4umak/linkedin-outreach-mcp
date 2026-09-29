@@ -102,8 +102,9 @@ async def run_edit_campaign(
         case_studies: Brief case studies or success stories.
         social_proofs: Social proof (logos, metrics, testimonials).
         campaign_preferences: Custom messaging preferences (tone, topics to avoid, etc.).
-        project_brief: Full project paste the model sees (what you are building,
-            go-live, volume, what a vendor must confirm). Required before launch.
+        project_brief: Full project paste the model sees, in the goal's words
+            (heylead.goals.BRIEF_ASKS; buy: what a vendor must confirm too).
+            Required before launch.
         product: Optional structured fact: product / what you buy or sell.
         go_live: Optional structured fact: go-live date.
         volume: Optional structured fact: volume model.

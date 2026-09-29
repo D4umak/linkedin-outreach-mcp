@@ -52,6 +52,7 @@ from ..linkedin import (
     get_linkedin_client,
 )
 from ..db.async_bridge import run_db
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +192,32 @@ def build_campaign_config(
     }
 
 
+def first_campaign_brief_prompt(goal: str) -> str:
+    """The first campaign's request for a brief, in the goal's words (#1859).
+
+    It was written for a vendor search, so sellers, job seekers and
+    recruiters were asked what a vendor needed, with an ID-check example."""
+    from .. import goals as _goals
+
+    ask = _goals.brief_ask(goal)
+    lines = [
+        "👋 **First campaign — let's set you up for the best results**\n",
+        f"**Share the project brief:** {ask}.\n",
+        "A homepage URL or a one-line blurb is not enough — "
+        "launch and auto-send will refuse until `project_brief` is a real paste.\n",
+        "**How to provide it:**",
+        f"  `create_campaign(target_description=\"…\", project_brief=\"{ask[0].upper() + ask[1:]}\")`\n",
+    ]
+    if (_goals.normalize_goal(goal) or _goals.DEFAULT_GOAL) == _goals.BUY:
+        lines += [
+            "**Example of project_brief:**",
+            "• \"UK construction compliance product live 1 October. RTW checks at first payment. "
+            "Must confirm certified IDSP / statutory excuse, IDVT vs NFC, share-code end-to-end.\"\n",
+        ]
+    lines.append("Once you have it, call create_campaign again with `project_brief`.")
+    return "\n".join(lines)
+
+
 async def run_create_campaign(
     target_description: str,
     campaign_name: str = "",
@@ -215,9 +242,9 @@ async def run_create_campaign(
         campaign_name: Optional name for the campaign.
         icp_id: Optional saved ICP ID to reuse.
         company_context: Optional website URL or company description.
-        project_brief: Optional full project paste (what you are building,
-            go-live, volume, what a vendor must confirm). Copied from
-            company_context when omitted so one paste still works.
+        project_brief: Optional full project paste, in the goal's words
+            (heylead.goals.BRIEF_ASKS). Copied from company_context when
+            omitted so one paste still works.
         mode: Always "autopilot". Copilot mode was removed.
         company_url: Optional LinkedIn company URL for account-based targeting.
             When provided, searches for employees at that specific company matching
@@ -344,20 +371,7 @@ async def run_create_campaign(
     from ..services.project_brief import is_real_project_brief
     has_project = is_real_project_brief(project_brief)
     if is_first_campaign and not icp_id and not has_project:
-        return (
-            "👋 **First campaign — let's set you up for the best results**\n\n"
-            "**Share the project** so messages have something buyer-side to say:\n"
-            "├── What you are building (product, not just a homepage)\n"
-            "├── Go-live date and volume if you know them\n"
-            "└── What a vendor must confirm before a call is worth it\n\n"
-            "A homepage URL or a one-line company blurb is not enough — "
-            "launch and auto-send will refuse until `project_brief` is a real paste.\n\n"
-            "**How to provide it:**\n"
-            "  `create_campaign(target_description=\"…\", project_brief=\"What you are building, go-live, volume, what a vendor must confirm\")`\n\n"
-            "**Example of project_brief:**\n"
-            "• \"UK construction compliance product live 1 October. RTW checks at first payment. Must confirm certified IDSP / statutory excuse, IDVT vs NFC, share-code end-to-end.\"\n\n"
-            "Once you have the project ready, call create_campaign again with `project_brief`."
-        )
+        return first_campaign_brief_prompt(wanted_goal)
 
     # ── Step 2: Get Unipile account ──
     account_id = await run_db(get_account_id)
@@ -1247,7 +1261,7 @@ async def run_create_campaign(
         output_lines.append("Searched via premium account (Sales Navigator)")
     elif use_sales_nav:
         output_lines.append("Searched with Sales Navigator")
-    output_lines.append(f"{len(prospects_to_save)} prospects queued")
+    output_lines.append(f"{count_noun(len(prospects_to_save), 'prospect')} queued")
     if dedup_summary:
         output_lines.append(f"🔍 {dedup_summary}")
     if known_contacts_warning:
@@ -1302,8 +1316,8 @@ async def run_create_campaign(
         output_lines.extend([
             "",
             "⚠️ **No project_brief set** — launch and auto-send will refuse until it is.",
-            "   Add the project now (what you are building, go-live, volume, must-confirm):",
-            "   → `edit_campaign(project_brief='What you are building and what a vendor must confirm')`",
+            f"   Add it now: {_goals.brief_ask(config['campaign_goal'])}.",
+            "   → `edit_campaign(project_brief='…')`",
             "   → `edit_campaign(offerings='Short product line')`",
             "   → `edit_campaign(booking_link='https://cal.com/you/15min')`",
         ])

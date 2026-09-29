@@ -27,6 +27,14 @@ logger = logging.getLogger(__name__)
 
 # Refuse absurd inputs loudly rather than chewing through a zip bomb.
 MAX_ROWS = 200_000
+# A row is built as wide as its right-most cell, so one cell at ZZZZZZZZZZ1
+# asked for a list of ~10^14 strings (D4umak/heylead-api#1685). No prospect
+# export comes near 256 columns.
+MAX_COLUMNS = 256
+# The only files import_prospects opens. Any other path, however it reached
+# the tool (a prompt-injected call included), is refused before it is read,
+# so no error can echo a line of ~/.aws/credentials back (#1685).
+PROSPECT_FILE_SUFFIXES = (".csv", ".tsv", ".xlsx")
 # Sheet XML is streamed row by row, so MAX_ROWS bounds it. sharedStrings.xml
 # has to be read whole, so it needs a bound of its own.
 MAX_SHARED_STRING_BYTES = 256 * 1024 * 1024
@@ -222,6 +230,8 @@ def _read_sheet(
                 idx = _col_index(cell.get("r") or "")
                 if idx < 0:
                     idx = (max(cells) + 1) if cells else 0
+                if idx >= MAX_COLUMNS:
+                    raise TabularReadError(_too_wide(idx + 1))
                 cells[idx] = _cell_value(cell, shared)
 
             width = max(cells) + 1 if cells else 0
@@ -278,10 +288,19 @@ def _decode(raw: bytes) -> str:
     return raw.decode("latin-1")
 
 
-def _read_csv_text(text: str) -> list[tuple[int, list[str]]]:
+def _too_wide(width: int) -> str:
+    return (
+        f"Refusing a sheet {width} columns wide (limit {MAX_COLUMNS}). "
+        "Save only the prospect columns and import that file."
+    )
+
+
+def _read_csv_text(text: str, delimiter: str = ",") -> list[tuple[int, list[str]]]:
     text = (text or "").lstrip("\ufeff")
     out: list[tuple[int, list[str]]] = []
-    for n, row in enumerate(csv.reader(io.StringIO(text)), start=1):
+    for n, row in enumerate(csv.reader(io.StringIO(text), delimiter=delimiter), start=1):
+        if len(row) > MAX_COLUMNS:
+            raise TabularReadError(_too_wide(len(row)))
         out.append((n, list(row)))
         if len(out) > MAX_ROWS:
             raise TabularReadError(f"Refusing to read more than {MAX_ROWS} CSV rows.")
@@ -303,13 +322,19 @@ def read_table(
     """
     if file_path:
         path = os.path.expanduser(file_path.strip())
-        if not os.path.isfile(path):
-            raise TabularReadError(f"File not found: {path}")
-        if os.path.splitext(path)[1].lower() == ".xls":
+        suffix = os.path.splitext(path)[1].lower()
+        if suffix == ".xls":
             raise TabularReadError(
                 "Legacy .xls files are not supported — re-save as .xlsx or .csv."
             )
-        if zipfile.is_zipfile(path):
+        if suffix not in PROSPECT_FILE_SUFFIXES:
+            raise TabularReadError(
+                "HeyLead imports prospect files only: .csv, .tsv or .xlsx. "
+                f"{os.path.basename(path)!r} is none of these, so it was not opened."
+            )
+        if not os.path.isfile(path):
+            raise TabularReadError(f"File not found: {path}")
+        if suffix == ".xlsx":
             rows = _read_xlsx(path, sheet)
         else:
             if sheet:
@@ -317,7 +342,9 @@ def read_table(
                     "The 'sheet' argument only applies to .xlsx files."
                 )
             with open(path, "rb") as handle:
-                rows = _read_csv_text(_decode(handle.read()))
+                rows = _read_csv_text(
+                    _decode(handle.read()), "\t" if suffix == ".tsv" else ","
+                )
     else:
         if sheet:
             raise TabularReadError("The 'sheet' argument only applies to .xlsx files.")

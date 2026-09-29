@@ -41,6 +41,7 @@ from ..db.queries import (
 )
 from ..formatter import format_duration
 from . import ab_stats
+from .count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -773,7 +774,7 @@ def _build_snapshot(campaign_id: str = "") -> tuple[str, list[dict]]:
         acc_rate = stats.get("acceptance_rate", 0)
         reply_rate = stats.get("reply_rate", 0)
         lines.append(
-            f"Funnel: {total} prospects \u2192 {invited} invited \u2192 "
+            f"Funnel: {count_noun(total, 'prospect')} \u2192 {invited} invited \u2192 "
             f"{connected} connected ({acc_rate:.0%}) \u2192 "
             f"{replied} replied ({reply_rate:.0%}) \u2192 {hot} hot"
         )
@@ -813,9 +814,9 @@ def _build_snapshot(campaign_id: str = "") -> tuple[str, list[dict]]:
             va = v_stats["A"]
             vb = v_stats["B"]
             lines.append(
-                f"A/B Split: Variant A ({va['total']} prospects, "
+                f"A/B Split: Variant A ({count_noun(va['total'], 'prospect')}, "
                 f"{va['acceptance_rate']}% accept, {va['reply_rate']}% reply) "
-                f"vs B ({vb['total']} prospects, "
+                f"vs B ({count_noun(vb['total'], 'prospect')}, "
                 f"{vb['acceptance_rate']}% accept, {vb['reply_rate']}% reply)"
             )
             # Show running tests

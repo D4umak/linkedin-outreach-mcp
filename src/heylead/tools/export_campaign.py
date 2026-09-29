@@ -6,15 +6,15 @@ outreach status, fit score, messages sent, and engagement count.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 
-import csv
-import io
-
+from .. import csvsafe
 from ..db import aio as db
 from ..db.async_bridge import run_db
 from ..formatter import format_duration, stars, table
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ async def run_export_campaign(campaign_id: str = "", format: str = "table") -> s
     if format == "csv":
         full_data = await db.get_full_campaign_export(campaign_id)
         buf = io.StringIO()
-        writer = csv.writer(buf)
+        writer = csvsafe.writer(buf)
         csv_headers = [
             "Name", "Title", "Company", "LinkedIn URL", "LinkedIn ID",
             "Fit Score", "Status", "Channel", "Follow-ups", "Variant",
@@ -171,7 +171,7 @@ async def run_export_campaign(campaign_id: str = "", format: str = "table") -> s
                 outcome,
             ])
         return (
-            f"📋 CSV Export: **{campaign['name']}** ({len(full_data)} prospects)\n\n"
+            f"📋 CSV Export: **{campaign['name']}** ({count_noun(len(full_data), 'prospect')})\n\n"
             "```csv\n" + buf.getvalue() + "```\n\n"
             "Copy the CSV above into a spreadsheet or save as .csv file."
         )
@@ -200,14 +200,14 @@ async def run_export_campaign(campaign_id: str = "", format: str = "table") -> s
             "contacts": full_data,
         }
         return (
-            f"📋 JSON Export: **{campaign['name']}** ({len(full_data)} prospects)\n\n"
+            f"📋 JSON Export: **{campaign['name']}** ({count_noun(len(full_data), 'prospect')})\n\n"
             "```json\n" + json.dumps(export, indent=2, default=str) + "\n```\n\n"
             "Copy the JSON above for API integration or data analysis."
         )
 
     # ── Default: table format ──
     output = [
-        f"📋 Export: **{campaign['name']}** ({len(rows)} prospects)\n",
+        f"📋 Export: **{campaign['name']}** ({count_noun(len(rows), 'prospect')})\n",
         table_output,
         "",
         "Summary:",
