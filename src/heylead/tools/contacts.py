@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 # is the only thing that knows which keyword strings it can answer, and
 # refusing a search locally would turn a slow empty result into a permanent no.
 LINKEDIN_SEARCH_MAX_RESULTS = 25
+# The most contacts one export writes (the hosted export stops at the same).
+EXPORT_CAP = 10_000
 LINKEDIN_SEARCH_EXAMPLE = "Acme Corp CTO"
 
 # ── linkedin_search pacing ──
@@ -487,15 +489,27 @@ async def _handle_stats() -> str:
 
 
 async def _handle_export(lifecycle_stage: str, tag: str, fmt: str) -> str:
+    # One read of up to EXPORT_CAP + 1 rows: the extra row says whether the
+    # file stops short, and one read cannot drop a row between pages. The
+    # export used to read one page of 1,000 and say nothing of the rest
+    # (D4umak/heylead-api#1926).
     contacts = await db.search_global_contacts(
         lifecycle_stage=lifecycle_stage,
         tag=tag,
-        limit=1000,
+        limit=EXPORT_CAP + 1,
         order_by="name ASC",
     )
 
     if not contacts:
         return "No contacts to export."
+
+    cut_short = len(contacts) > EXPORT_CAP
+    contacts = contacts[:EXPORT_CAP]
+    note = (
+        f"First {EXPORT_CAP:,} contacts, by name; more match. "
+        "Narrow the export with lifecycle_stage or tag to get the rest.\n"
+        if cut_short else ""
+    )
 
     if fmt == "json":
         # Strip large blobs for export
@@ -515,7 +529,7 @@ async def _handle_export(lifecycle_stage: str, tag: str, fmt: str) -> str:
                 "total_campaigns": c.get("total_campaigns") or 0,
                 "source": c.get("source") or "",
             })
-        return json.dumps(export, indent=2)
+        return note + json.dumps(export, indent=2)
 
     elif fmt == "csv":
         output = io.StringIO()
@@ -539,7 +553,7 @@ async def _handle_export(lifecycle_stage: str, tag: str, fmt: str) -> str:
                 c.get("total_campaigns") or 0,
                 c.get("source") or "",
             ])
-        return output.getvalue()
+        return note + output.getvalue()
 
     else:
         # Default: markdown table

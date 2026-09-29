@@ -14,6 +14,7 @@ from .. import csvsafe
 from ..db import aio as db
 from ..db.async_bridge import run_db
 from ..formatter import format_duration, stars, table
+from ..outreach_labels import status_label
 from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
@@ -71,22 +72,6 @@ async def run_export_campaign(campaign_id: str = "", format: str = "table") -> s
             "Prospects are added when you run create_campaign()."
         )
 
-    # Status display mapping
-    status_display = {
-        "pending": "Pending",
-        "invited": "Invited",
-        "connected": "Connected",
-        "messaged": "Messaged",
-        "replied": "Replied",
-        "hot_lead": "Hot Lead",
-        "review_pending": "Review",
-        "skipped": "Skipped",
-        "error": "Error",
-        "opted_out": "Opted Out",
-        "closed_happy": "Won",
-        "closed_unhappy": "Lost",
-    }
-
     # Check if any outreaches have outcomes
     has_outcomes = any(dict(row).get("outcome_json") for row in rows)
 
@@ -107,7 +92,7 @@ async def run_export_campaign(campaign_id: str = "", format: str = "table") -> s
             r.get("name", "Unknown"),
             (r.get("title", "") or "")[:30],
             (r.get("company", "") or "")[:20],
-            status_display.get(r.get("status", ""), r.get("status", "")),
+            status_label(r.get("status")),
             stars(r.get("fit_score", 0)),
             str(r.get("messages_sent", 0)),
             str(r.get("engagement_count", 0)),
@@ -161,7 +146,7 @@ async def run_export_campaign(campaign_id: str = "", format: str = "table") -> s
                 r.get("linkedin_url", ""),
                 r.get("linkedin_id", ""),
                 f"{r.get('fit_score', 0):.2f}",
-                r.get("status", ""),
+                status_label(r.get("status")),
                 r.get("channel", "linkedin"),
                 r.get("followup_count", 0),
                 r.get("variant", ""),

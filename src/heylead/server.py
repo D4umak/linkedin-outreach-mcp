@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.420 (2026-09-29)
+- Fix: every contact is exported, and statuses read as the dashboard says them (#1926)
+
 ## v0.10.419 (2026-09-29)
 - Fix: the listing links terms, docs and support, and none ends in a full stop (#1514)
 
