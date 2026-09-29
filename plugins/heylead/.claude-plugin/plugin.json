@@ -1,7 +1,7 @@
 {
   "name": "heylead",
   "displayName": "HeyLead",
-  "version": "0.10.418",
+  "version": "0.10.419",
   "description": "LinkedIn outreach from Claude: connects the hosted HeyLead server and adds skills to start a campaign for a goal, approve waiting messages, answer replies, review results and pause. Campaigns are drafts until you launch them.",
   "author": {
     "name": "HeyLead",
@@ -29,5 +29,8 @@
     "mcp-server",
     "model-context-protocol"
   ],
-  "privacyPolicyUrl": "https://heylead.dev/privacy"
+  "privacyPolicyUrl": "https://heylead.dev/privacy",
+  "termsOfServiceUrl": "https://heylead.dev/terms",
+  "documentationUrl": "https://heylead.dev/docs",
+  "supportUrl": "https://github.com/D4umak/linkedin-outreach-mcp/issues"
 }

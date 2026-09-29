@@ -26,4 +26,6 @@ HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitat
 
 A campaign is a draft until you launch it. Opening messages and follow-ups wait for your approval until you switch to autopilot.
 
-Terms: https://heylead.dev/terms. Security: hello@heylead.dev.
+Terms: https://heylead.dev/terms
+
+Security: hello@heylead.dev

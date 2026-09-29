@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.419 (2026-09-29)
+- Fix: the listing links terms, docs and support, and none ends in a full stop (#1514)
+
 ## v0.10.418 (2026-09-29)
 - New: the listing carries an icon and a privacy policy URL (#1514)
 
