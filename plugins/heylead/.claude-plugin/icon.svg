@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256">
+  <!-- HeyLead mark, provisional: the brand indigo on a 16px-radius tile, a bold H cut from the ground. -->
+  <rect width="256" height="256" rx="16" fill="#6366f1"/>
+  <path d="M18 14h9v15h10V14h9v36h-9V37H27v13h-9z" fill="#ffffff"/>
+  <circle cx="49" cy="17" r="5" fill="#22d3ee"/>
+</svg>
