@@ -498,7 +498,7 @@ def search_global_contacts(
 
     db = get_db()
     rows = db.execute(
-        f"SELECT * FROM global_contacts {where} ORDER BY {order_by} LIMIT ? OFFSET ?",
+        f"SELECT * FROM global_contacts {where} ORDER BY {order_by}, id ASC LIMIT ? OFFSET ?",
         params + [limit, offset],
     ).fetchall()
     db.close()

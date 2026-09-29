@@ -5,7 +5,7 @@ description: LinkedIn outreach through the HeyLead MCP server. Use when the user
 
 # HeyLead — AI agent for LinkedIn outreach
 
-Your AI sales rep. One command to fill your pipeline.
+One sentence starts a draft campaign. Nothing is sent until you launch it.
 
 HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. This skill connects it to your OpenClaw agent.
 
@@ -161,7 +161,7 @@ Brand and content, signals, bulk import, CRM sync and the shared network pool ar
 | **Pro** | $29 per connected LinkedIn account per month | Up to 5 follow-ups per prospect |
 
 Invitation limits follow the LinkedIn account (free, Premium or Sales Navigator), not the HeyLead plan.
-Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign.
+Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign, 3 ICP generations.
 
 ## Privacy
 

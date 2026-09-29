@@ -206,7 +206,7 @@ def list_posts(
     where = " AND ".join(conditions) if conditions else "1=1"
     db = get_db()
     rows = db.execute(
-        f"SELECT * FROM posts WHERE {where} ORDER BY last_seen_at DESC LIMIT ? OFFSET ?",
+        f"SELECT * FROM posts WHERE {where} ORDER BY last_seen_at DESC, id DESC LIMIT ? OFFSET ?",
         params + [limit, offset],
     ).fetchall()
     db.close()
@@ -360,7 +360,8 @@ def list_post_authors(
     where = " AND ".join(conditions) if conditions else "1=1"
     db = get_db()
     rows = db.execute(
-        f"SELECT * FROM post_authors WHERE {where} ORDER BY last_post_at DESC LIMIT ? OFFSET ?",
+        # nosemgrep: offset-page-needs-a-unique-order -- linkedin_id is post_authors' primary key.
+        f"SELECT * FROM post_authors WHERE {where} ORDER BY last_post_at DESC, linkedin_id DESC LIMIT ? OFFSET ?",
         params + [limit, offset],
     ).fetchall()
     db.close()

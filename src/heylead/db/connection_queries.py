@@ -122,7 +122,7 @@ def list_all_connections(
                       company, location, profile_url, synced_at, connected_at
                FROM connections
                WHERE account_id = ? AND removed_at IS NULL{window_sql}
-               ORDER BY name ASC
+               ORDER BY name ASC, id ASC
                LIMIT ? OFFSET ?""",
             (account_id, *window_params, limit, offset),
         ).fetchall()

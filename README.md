@@ -110,7 +110,7 @@ You'll get a LinkedIn authentication link. Open it, connect LinkedIn, then say
 **Sending model:** campaigns are created as drafts and only start when you
 explicitly launch them. Every send passes rate limits, working-hours checks,
 and a 1st-degree connection guard before it goes out. HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time. Launching is also what
-commissions 24/7 cloud sending — in `observe` mode nothing is commissioned and
+commissions cloud sending — in `observe` mode nothing is commissioned and
 nothing is sent, from either machine.
 
 **Approval mode (hosted):** a workspace that has not chosen otherwise holds
@@ -200,7 +200,7 @@ HeyLead gives your AI 22 tools:
 
 **ICP Generation** — RAG-powered pipeline that crawls company context, generates buyer personas with pain points, fears, barriers, and maps them to LinkedIn search parameters.
 
-**Autonomous Scheduler** — Runs in the background, respects working hours and rate limits. On a hosted account, cloud is the default sender for every campaign. Launching commissions the cloud, so outreach continues 24/7 with your laptop closed: invitations, opening DMs, first-touch InMail, follow-ups, engagements, follows, endorsements, email fallbacks, prospect top-ups, auto-replies, inbound, warmup, signal collectors, and post-intel. This machine does not start a local scheduler engine for that work. Move the whole account here with `scheduler(action='send_from', host='local')`, which turns the cloud scheduler off. Observe still means nobody sends. Direct / self-hosted installs send from this machine only.
+**Autonomous Scheduler** — Runs in the background, respects working hours and rate limits. On a hosted account, cloud is the default sender for every campaign. Launching commissions the cloud, so outreach continues with your laptop closed, inside the sending window: invitations, opening DMs, first-touch InMail, follow-ups, engagements, follows, endorsements, email fallbacks, prospect top-ups, auto-replies, inbound, warmup, signal collectors, and post-intel. This machine does not start a local scheduler engine for that work. Move the whole account here with `scheduler(action='send_from', host='local')`, which turns the cloud scheduler off. Observe still means nobody sends. Direct / self-hosted installs send from this machine only.
 
 **Engagement Warm-ups** — Automatically engages with prospect posts before sending connection requests, building familiarity.
 
@@ -317,9 +317,9 @@ Also available on [ClawHub](https://clawhub.ai) — search "HeyLead".
 
 Sign in at [heylead.dev](https://heylead.dev) (hosted), or bring your own Unipile account and LLM API key (self-hosted).
 
-**Capabilities:** LinkedIn lead generation, cold outreach automation, ICP generation with buyer personas, voice-matched personalized messaging, multi-touch drip sequences, reply sentiment classification, engagement warm-ups, campaign analytics, and autonomous 24/7 scheduling.
+**Capabilities:** LinkedIn lead generation, cold outreach automation, ICP generation with buyer personas, voice-matched personalized messaging, multi-touch drip sequences, reply sentiment classification, engagement warm-ups, campaign analytics, and scheduled sending from the cloud with your laptop closed.
 
-**22 tools** covering the full SDR workflow: prospect discovery → outreach → follow-up → reply handling → deal closing.
+**22 tools**, from finding the right people to answering their replies: prospect discovery, ICP generation with buyer personas, connection invitations with a note, opening messages and follow-ups, warm-ups (profile views, follows, comments), reply handling that holds anything ambiguous for you, and outcome tracking.
 
 See [`AGENTS.md`](AGENTS.md) for the full agent integration guide.
 

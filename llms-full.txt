@@ -4,11 +4,11 @@
 
 ## What is HeyLead?
 
-HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. Through MCP (Model Context Protocol) tools it finds prospects on LinkedIn, sends personalized outreach that sounds like you wrote it, follows up automatically, tracks replies with sentiment classification, and closes deals — all through natural language commands.
+HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. Through MCP (Model Context Protocol) tools it finds prospects on LinkedIn, sends personalized outreach that sounds like you wrote it, follows up automatically, reads and classifies replies, answers the clear ones and holds anything ambiguous for you, all through natural language commands.
 
 Tell your AI "find me CTOs at fintech startups" and watch it work — or use the web dashboard at https://heylead.dev/dashboard, which runs the same campaigns.
 
-HeyLead is designed for founders, sales teams, and anyone who needs to fill their pipeline with qualified leads from LinkedIn without spending hours on manual outreach.
+HeyLead is built for founders and small teams who need to reach the right people on LinkedIn, to sell, hire, find a job, raise, buy or run research interviews, without hours of manual outreach.
 
 ## How It Works
 
@@ -73,7 +73,7 @@ claude mcp add heylead -- uvx heylead
 
 `project_brief` is required before launch: what you are building, go-live, volume, and what a vendor must confirm. Launch refuses a bare URL or a one-line blurb under 80 characters.
 
-Launch is the only step that starts sending; there is no separate scheduler step. On a hosted account, `campaign(action="launch")` marks the campaign active, resumes it on the HeyLead backend, switches the backend's 24/7 cloud scheduler on if it was off, and queues the first connection request. Outreach then runs from the cloud with your laptop closed; this machine sends only if you move sending here with the scheduler tool's `send_from` action. On a self-hosted install, launch turns this machine's scheduler on if it was off. In observe mode, launch activates the campaign for signal collection only and sends nothing.
+Launch is the only step that starts sending; there is no separate scheduler step. On a hosted account, `campaign(action="launch")` marks the campaign active, resumes it on the HeyLead backend, switches the backend's cloud scheduler on if it was off, and queues the first connection request. Outreach then runs from the cloud with your laptop closed; this machine sends only if you move sending here with the scheduler tool's `send_from` action. On a self-hosted install, launch turns this machine's scheduler on if it was off. In observe mode, launch activates the campaign for signal collection only and sends nothing.
 
 ## All 22 Tools
 
@@ -145,7 +145,7 @@ A hosted workspace is in one of two modes. `require_approval` (the default for a
 
 | Tool | Description |
 |------|-------------|
-| `scheduler` | Turn the autonomous scheduler on or off, and switch the daily report. Local or cloud (24/7, runs even when your laptop is off). |
+| `scheduler` | Turn the autonomous scheduler on or off, and switch the daily report. Local or cloud (the cloud runs with your laptop closed). |
 | `scheduler_status` | Read the scheduler: status, logs, activity, diagnostics. Reads only. |
 
 ## Beyond the default set
@@ -231,7 +231,7 @@ default; setting the variable gives a session the full set of 47.
 
 **ICP Generation** — RAG-powered pipeline that crawls company context, generates buyer personas with pain points, fears, barriers, and maps them to LinkedIn search parameters with confidence scores.
 
-**Autonomous Scheduler** — Runs in the background, respects working hours and rate limits. Enable cloud scheduling for 24/7 operation even when your laptop is off.
+**Autonomous Scheduler** — Runs in the background, respects working hours and rate limits. Cloud scheduling keeps it running with your laptop closed, inside the sending window.
 
 **Engagement Warm-ups** — Full warm-up sequence before cold outreach: Follow → Endorse skills → Comment/like posts → Send invitation → Follow-up DM → InMail (if no accept).
 

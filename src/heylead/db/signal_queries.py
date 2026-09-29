@@ -171,7 +171,7 @@ def list_signals(
     if order_by not in allowed_orders:
         order_by = "detected_at DESC"
 
-    query = f"SELECT * FROM signals WHERE {where} ORDER BY {order_by} LIMIT ? OFFSET ?"
+    query = f"SELECT * FROM signals WHERE {where} ORDER BY {order_by}, id DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
     db = get_db()

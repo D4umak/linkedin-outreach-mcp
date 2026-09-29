@@ -2,7 +2,7 @@
 
 > HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard.
 
-HeyLead gives AI agents 22 tools covering the full SDR workflow: prospect discovery, ICP generation with buyer personas, personalized connection invitations, follow-up DMs, engagement warm-ups (comments, likes, follows, endorsements), reply handling with sentiment classification, outcome tracking, and 24/7 autonomous scheduling.
+HeyLead gives AI agents 22 tools, from finding the right people to answering their replies: prospect discovery, ICP generation with buyer personas, connection invitations with a note, opening messages and follow-ups, warm-ups (profile views, follows, comments), reply handling that holds anything ambiguous for you, and outcome tracking. Sending runs from the cloud with your laptop closed.
 
 Brand and content, signals, bulk import, CRM sync and the shared network pool are registered only when the client is started with `HEYLEAD_TOOLS=all`, which brings the full set of 47.
 

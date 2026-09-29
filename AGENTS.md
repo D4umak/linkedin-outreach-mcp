@@ -40,7 +40,7 @@ Also known as: LinkedIn lead generation, cold outreach automation, B2B prospecti
 2. generate_icp(target_description="CTOs fintech") → Create buyer personas
 3. create_campaign(target_description="...", icp_id="...") → Find prospects (saved as a draft)
 4. campaign(action="launch", campaign_id="...") → Start outreach — nothing sends before this
-                                                   (hosted accounts: also starts 24/7 cloud sending)
+                                                   (hosted accounts: also starts cloud sending)
 5. scheduler(action="status")                   → Confirm sending is on the cloud (or send_from host=local)
 6. inspect() / check_replies() / show_status()  → Monitor pipeline and agent holds
 7. prospect(action="close", outcome="won")      → Track conversions

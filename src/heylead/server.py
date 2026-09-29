@@ -33,6 +33,12 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.421 (2026-09-29)
+- the copy gate allows 'works in ChatGPT' and 'works in claude.ai' as proven (#1123)
+- Fix: the rest of the audit: no closes-deals, full quota lines, six goals in the plugin and create_campaign (#1399)
+- Fix: every public file says what HeyLead is: no SDR workflow, no sales rep, no 24/7 (#1399)
+- Fix: every OFFSET page sorts by a unique key, so pages never overlap (#1926)
+
 ## v0.10.420 (2026-09-29)
 - Fix: every contact is exported, and statuses read as the dashboard says them (#1926)
 
@@ -1918,9 +1924,9 @@ mcp = FastMCP(
         "  - scheduler(action='status') to view the autonomous scheduler status\n"
         "  - scheduler(action='observe') to keep collecting and classifying signals while\n"
         "    this machine sends nothing — invitations, DMs and engagements all stop.\n"
-        "    Observe is local: if 24/7 cloud scheduling is on, the backend keeps sending\n"
+        "    Observe is local: if cloud scheduling is on, the backend keeps sending\n"
         "    from campaigns it already holds until you also turn that off\n"
-        "  - scheduler(action='toggle', enabled=True, cloud=True) to enable 24/7 cloud scheduling\n"
+        "  - scheduler(action='toggle', enabled=True, cloud=True) to enable cloud scheduling\n"
         "  - signals(action='show') to view buying signals from LinkedIn\n"
         "  - signals(action='strategy') to view strategy engine insights\n"
         "  - crm_sync(filter='won') to sync won deals to HubSpot CRM\n"
@@ -2360,9 +2366,10 @@ async def create_campaign(
     LinkedIn search. Everything else is unchanged: draft until launch, rate
     limits, sending window, opt-outs.
 
-    Describe your ideal customers and HeyLead will find them on LinkedIn.
-    Supports lead generation, prospect discovery, SDR automation, cold outreach,
-    and targeted B2B sales campaigns with AI-powered ICP-based targeting.
+    Describe who you need to reach and HeyLead finds them on LinkedIn:
+    customers (lead generation, B2B prospecting, cold outreach), candidates
+    (recruiting and sourcing), hiring managers and referrals (job search),
+    investors and partners, vendors, and user-interview or research participants.
     On first campaign, project_brief is asked explicitly, in the goal's words
     (see project_brief below) — a homepage alone is not enough.
 
@@ -3354,7 +3361,7 @@ async def _scheduler_impl(
             "toggle" — Enable or disable the scheduler
             "observe" — Collect and classify signals, and check replies, while this
                 machine sends nothing: no invitations, DMs, engagements, or
-                enrolments. Local only — it does not stop 24/7 cloud scheduling,
+                enrolments. Local only — it does not stop cloud scheduling,
                 which must be disabled separately with
                 scheduler(action='toggle', enabled=False, cloud=True)
             "always_on" — Enable/disable always-on mode (auto-re-enable + immediate email alerts)
@@ -3369,7 +3376,7 @@ async def _scheduler_impl(
                 Local turns the cloud scheduler off so both never send.
         enabled: True to enable, False to disable (for 'toggle').
             For 'report': True to enable email reports, False to disable.
-        cloud: If True, toggle the cloud scheduler for 24/7 operation (for 'toggle').
+        cloud: If True, toggle the cloud scheduler, which runs with your laptop closed (for 'toggle').
             Launching or resuming a campaign already switches it on for hosted
             accounts; pass cloud=True, enabled=False to stop the backend sending
             while leaving this machine's scheduler alone.
