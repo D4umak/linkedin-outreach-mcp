@@ -190,9 +190,14 @@ def source_badge(source: str, source_detail: str = "") -> str:
 
 
 def prospect_link(name: str, linkedin_url: str = "") -> str:
-    """Format a prospect name as a markdown hyperlink if URL is available."""
+    """Format a prospect name as a markdown hyperlink if URL is available.
+
+    The link is the profile, /in/<slug>: a stored search-card URL carries a
+    ?miniProfileUrn=… tail up to 182 characters long (heylead-api#1898)."""
     if linkedin_url:
-        return f"[{name}]({linkedin_url})"
+        from .linkedin_urls import profile_link_url
+
+        return f"[{name}]({profile_link_url(linkedin_url)})"
     return name
 
 
@@ -266,7 +271,9 @@ def why_line(why: dict | None) -> str:
         hits = [h for h in hits if evidence_hit_is_meaningful(h)]
     if isinstance(hits, list) and hits:
         n = len(hits)
-        reasons.append(f"{n} evidence hit{'s' if n != 1 else ''}")
+        # A profile term the campaign looks for, in plain words; "evidence
+        # hit" was our scoring word (heylead-api#1863, the api's wording).
+        reasons.append("1 match in their profile" if n == 1 else f"{n} matches in their profile")
     if not reasons:
         segment = str(why.get("segment") or "").strip()
         if segment:

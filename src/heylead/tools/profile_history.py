@@ -16,6 +16,7 @@ import time
 from ..db.async_bridge import run_db
 from ..db import aio as db
 from .profile_editor import apply_profile_change
+from ..services.campaign_naming import cut_at_word
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,8 @@ async def _show_history(field: str | None, limit: int) -> str:
             f"{_ts(c.get('created_at'))}{status_tag}"
         )
         if c["field"] not in ("photo", "cover_photo"):
-            old_trunc = old[:80] + ("..." if len(old) > 80 else "")
-            new_trunc = new[:80] + ("..." if len(new) > 80 else "")
+            old_trunc = cut_at_word(old, 80)
+            new_trunc = cut_at_word(new, 80)
             lines.append(f"    Old: {old_trunc}")
             lines.append(f"    New: {new_trunc}")
         else:
@@ -188,8 +189,7 @@ async def _show_current() -> str:
     lines.append(f"  Name:     {profile.get('first_name', '')} {profile.get('last_name', '')}")
     lines.append(f"  Headline: {profile.get('headline', '(not set)')}")
     summary = profile.get("summary", "(not set)")
-    if len(summary) > 200:
-        summary = summary[:200] + "..."
+    summary = cut_at_word(summary, 200)
     lines.append(f"  Summary:  {summary}")
     lines.append(f"  Location: {profile.get('location_id', '(not set)')}")
     link = profile.get("custom_link")

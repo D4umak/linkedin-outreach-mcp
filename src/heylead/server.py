@@ -33,6 +33,12 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.417 (2026-09-29)
+- Fix: a prospect's name links their profile, not the search card's tail (#1898)
+- Fix: the waiting people are one list, and a match reads in plain words (#1863)
+- Fix: sign-in names the server Claude Code lists, and warns against two HeyLead connections (#1514)
+- Fix: no tool line is cut mid-word; a held reason reads whole (#1862)
+
 ## v0.10.416 (2026-09-29)
 - Fix: the hosted status counts hot leads as the Overview tile does (#1831)
 - Fix: a count and its noun agree; never '1 prospects' (#1894)

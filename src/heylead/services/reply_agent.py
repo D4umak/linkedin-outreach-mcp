@@ -99,7 +99,9 @@ def persist_operator_hold(
     that parked it (heylead-api#1209); a hold from anything else clears it."""
     payload: dict[str, Any] = {
         "type": HOLD_FOR_OPERATOR,
-        "reason": (reason or "needs a human")[:240],
+        # Whole: a reason cut at 240 characters ended mid-word in the
+        # replies card, where the person reads what to decide (#1862).
+        "reason": " ".join((reason or "needs a human").split()),
         "decided_at": int(time.time()),
         "message_ts": int(message_ts or 0),
         "message_id": message_id or "",

@@ -18,6 +18,7 @@ from ..db.queries import (
 from ..db.schema import get_db
 from ..formatter import prospect_link, source_badge, stars
 from ..db.async_bridge import run_db
+from ..services.campaign_naming import cut_at_word
 
 logger = logging.getLogger(__name__)
 
@@ -183,7 +184,7 @@ async def run_show_conversation(outreach_id: str) -> str:
                 icon = "comment"
             content = item.get("content", "")
             if content:
-                content_preview = content[:80] + "..." if len(content) > 80 else content
+                content_preview = cut_at_word(content, 80)
                 output.append(f"{prefix}[{icon}] ({ts_str}) \"{content_preview}\"")
             else:
                 output.append(f"{prefix}[{icon}] ({ts_str})")
@@ -211,7 +212,7 @@ async def run_show_conversation(outreach_id: str) -> str:
                 else:
                     read_badge = " (unread)"
 
-            text_preview = text[:120] + "..." if len(text) > 120 else text
+            text_preview = cut_at_word(text, 120)
             output.append(f"{prefix}[{label}]{sentiment_badge}{read_badge} ({ts_str})")
             output.append(f"{prefix}  \"{text_preview}\"")
 
@@ -257,4 +258,7 @@ def _message_badge(role: str, sentiment: str) -> str:
         return f" [our move: {sentiment[len(_MOVE_PREFIX):].replace('_', ' ')}]"
     if not sentiment or sentiment == "neutral":
         return ""
-    return f" [{_SENTIMENT_BADGES.get(sentiment, sentiment)}]"
+    # A sentiment with no badge reads as words, never its stored code
+    # ('[not_now]'; heylead-api#1863).
+    label = _SENTIMENT_BADGES.get(sentiment) or sentiment.replace("_", " ")
+    return f" [{label}]"

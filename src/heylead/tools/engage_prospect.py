@@ -40,6 +40,7 @@ from ..linkedin import (
     get_account_id,
     get_linkedin_client,
 )
+from ..services.campaign_naming import cut_at_word
 
 logger = logging.getLogger(__name__)
 
@@ -615,9 +616,7 @@ async def run_engage_prospect(
         )
 
     # ── Step 7: Copilot vs Autopilot ──
-    post_preview = post_text[:150]
-    if len(post_text) > 150:
-        post_preview += "..."
+    post_preview = cut_at_word(post_text, 150)
 
 
     # Autopilot — send immediately
@@ -664,9 +663,7 @@ async def _handle_reaction(
 ) -> str:
     """Handle a reaction (LIKE) on a post."""
     prospect_name = candidate.get("name", "Unknown")
-    post_preview = target_post.get("text", "")[:100]
-    if len(target_post.get("text", "")) > 100:
-        post_preview += "..."
+    post_preview = cut_at_word(target_post.get("text", ""), 100)
     post_id = target_post.get("id", "")
 
     # Autopilot — reserve DB slot BEFORE calling LinkedIn API

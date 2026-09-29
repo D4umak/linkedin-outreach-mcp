@@ -50,6 +50,7 @@ from ..linkedin.circuit_breaker import CircuitBreakerOpen, CollectorCircuitBreak
 from ..services.inbox_match import index_contacts_for_inbox
 from ..services.waiting_on_you import HOLD, Waiting, render_waiting, who_is_waiting
 from ..timeutil import to_epoch
+from ..services.campaign_naming import cut_at_word
 
 logger = logging.getLogger(__name__)
 
@@ -1680,9 +1681,7 @@ async def run_check_replies() -> str:
         if reply.get("company"):
             role += f" at {reply['company']}" if role else reply["company"]
 
-        text_preview = reply["text"][:150]
-        if len(reply["text"]) > 150:
-            text_preview += "..."
+        text_preview = cut_at_word(reply["text"], 150)
 
         output.append(f"{icon} **{name}** ({role}):")
         output.append(f"   \"{text_preview}\"")

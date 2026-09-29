@@ -20,12 +20,13 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import unquote
 
+from ..db.async_bridge import run_db
 from ..db.queries import (
     assign_variant,
     enroll_prospect,
     find_active_campaign,
-    get_outreach,
     get_contacts_for_campaign,
+    get_outreach,
     get_setting,
     list_ab_tests,
     list_campaigns,
@@ -33,6 +34,7 @@ from ..db.queries import (
 )
 from ..formatter import table
 from ..linkedin import get_account_id, get_linkedin_client
+from ..services.campaign_naming import cut_at_word
 from ..services.dedup_service import (
     dedup_prospects,
     fetch_connection_ids,
@@ -42,7 +44,6 @@ from ..services.dedup_service import (
 )
 from ..services.icp_match_scorer import compute_icp_match
 from ..services.tabular_reader import TabularReadError, read_table
-from ..db.async_bridge import run_db
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ def _headers_for_echo(headers: list[str]) -> str:
     """The header row, short: a file with no Name column may not be a prospect
     file at all, and its first line must not come back whole (#1685)."""
     shown = [
-        h if len(h) <= _HEADER_ECHO_CHARS else h[: _HEADER_ECHO_CHARS - 1] + "…"
+        cut_at_word(h, _HEADER_ECHO_CHARS)
         for h in headers[:_HEADER_ECHO_COUNT]
     ]
     more = len(headers) - len(shown)

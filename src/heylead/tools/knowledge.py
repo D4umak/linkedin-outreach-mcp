@@ -15,6 +15,7 @@ from typing import Any
 
 from ..config import is_backend_mode
 from ..linkedin import UnipileError, get_linkedin_client
+from ..services.campaign_naming import cut_at_word
 
 
 ACTIONS = ("list", "add", "remove", "refresh", "search")
@@ -90,8 +91,7 @@ def _render_evidence(evidence: list[dict[str, Any]], query: str) -> str:
         # markup at ingest. Nothing here parses or sanitises; this only
         # reflows the whitespace so a chunk occupies one line.
         text = " ".join(str(chunk.get("text") or "").split())
-        if len(text) > 400:
-            text = text[:400].rstrip() + "…"
+        text = cut_at_word(text, 400)
         lines.append(f"     {text}")
         uri = chunk.get("source_uri")
         if uri:

@@ -11,7 +11,9 @@ HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes 
 /plugin install heylead@heylead
 ```
 
-Then run `/mcp`, pick `heylead` and choose Authenticate. You sign in to your HeyLead account in the browser; there is no key to paste. If your LinkedIn account is not connected yet, connect it at https://heylead.dev/dashboard/settings/accounts.
+Then sign in: run `/mcp`, pick `plugin:heylead:heylead` and choose Authenticate, or run `claude mcp login plugin:heylead:heylead` in a terminal. You sign in to your HeyLead account in the browser; there is no key to paste. If your LinkedIn account is not connected yet, connect it at https://heylead.dev/dashboard/settings/accounts.
+
+Use only one HeyLead connection, not both. If you also added HeyLead as a connector on claude.ai, sign that one in and skip the plugin's server, or remove it: with both in one account, Claude Code drops the plugin's server partway through a session.
 
 ## What it contains
 

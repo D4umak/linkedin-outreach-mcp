@@ -32,6 +32,7 @@ from typing import Any, Iterable
 from ..db import queries as q
 from ..db.schema import get_db
 from .reply_agent import is_fresh_hold, parse_operator_hold
+from .campaign_naming import cut_at_word
 
 REPLY = q.REPLY
 HANDOFF = q.HANDOFF
@@ -218,8 +219,8 @@ def needs_attention(*, min_age_seconds: int | None = None, now: int | None = Non
 
 
 def _one_line(text: str, limit: int) -> str:
-    flat = " ".join(str(text or "").split())
-    return flat if len(flat) <= limit else flat[: limit - 1].rstrip() + "…"
+    """One line within ``limit``, ending on a whole word (heylead-api#1862)."""
+    return cut_at_word(text, limit)
 
 
 def _person_lines(person: Waiting) -> list[str]:
@@ -229,7 +230,8 @@ def _person_lines(person: Waiting) -> list[str]:
                       title=person.title, company=person.company)
     lines = [f"• {who}", f"  {person.why}"]
     if person.held_because:
-        lines.append(f"  held: {_one_line(person.held_because, _RENDER_PREVIEW_CHARS)}")
+        # The reason is shown whole: it says what the person must decide.
+        lines.append(f"  held: {' '.join(str(person.held_because).split())}")
     if person.preview:
         lines.append(f'  "{_one_line(person.preview, _RENDER_PREVIEW_CHARS)}"')
     where = f"{person.campaign_name} · " if person.campaign_name else ""
@@ -245,7 +247,9 @@ def render_waiting(people: list[Waiting]) -> str:
     """
     if not people:
         return "Nobody is waiting on you."
+    # One list: a blank line after each person ended the markdown list, and
+    # five people read as five one-item lists (heylead-api#1863).
     lines = [f"Waiting on you ({len(people)}):", ""]
     for person in people:
-        lines += [*_person_lines(person), ""]
+        lines += _person_lines(person)
     return "\n".join(lines).rstrip()

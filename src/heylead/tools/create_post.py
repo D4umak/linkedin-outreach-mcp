@@ -11,6 +11,7 @@ import logging
 from ..db.queries import get_setting, log_action, save_published_post
 from ..linkedin import get_account_id, get_linkedin_client, UnipileError
 from ..db.async_bridge import run_db
+from ..services.campaign_naming import cut_at_word
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +261,7 @@ Return ONLY the tweet text, nothing else."""
         if len(tweet_text) < 10:
             return "X: Draft was made of claims you never gave and was not published."
         if len(tweet_text) > 280:
-            tweet_text = tweet_text[:277] + "..."
+            tweet_text = cut_at_word(tweet_text, 280)
         from ..ai.draft_guard import guard_draft
         tweet_text = await guard_draft(tweet_text, voice or {}, "post", 280)
         if not tweet_text:

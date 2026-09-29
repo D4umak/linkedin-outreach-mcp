@@ -44,6 +44,7 @@ from ..services.brand_service import (
 from ..services.health_score import coerce_daily_limit, compute_health_score
 from ..db.async_bridge import run_db
 from ..ai.voice_block import voice_prompt_block
+from ..services.campaign_naming import cut_at_word
 
 logger = logging.getLogger(__name__)
 
@@ -1646,9 +1647,7 @@ async def _handle_set_photo_library(folder: str) -> str:
 def _preview(value: str, width: int = 70) -> str:
     """One-line, length-capped rendering — a summary is many lines long."""
     flat = " ".join(value.split())
-    if len(flat) <= width:
-        return flat
-    return flat[: width - 1] + "…"
+    return cut_at_word(flat, width)
 
 
 async def _handle_set_profile_text(account_id: str, field: str, text: str) -> str:

@@ -11,7 +11,7 @@ This plugin connects the hosted HeyLead server at `https://heylead.dev/mcp`. The
 
 ## Steps
 
-1. **Sign in.** Connecting the server asks the user to sign in to their HeyLead account (with Google) in the browser. In Claude Code, run `/mcp`, pick `heylead` and choose Authenticate. The consent page asks for read access and write access; a campaign needs both. If the HeyLead tools are missing, or `/mcp` lists heylead as needing authentication, this step has not happened yet.
+1. **Sign in.** Connecting the server asks the user to sign in to their HeyLead account (with Google) in the browser. In Claude Code, run `/mcp`, pick `plugin:heylead:heylead` and choose Authenticate, or run `claude mcp login plugin:heylead:heylead` in a terminal. The consent page asks for read access and write access; a campaign needs both. If the HeyLead tools are missing, or `/mcp` lists plugin:heylead:heylead as needing authentication, this step has not happened yet. If the tools appear and then vanish mid-session, the account probably also has HeyLead as a claude.ai connector: tell the user to keep only one HeyLead connection, not both (sign the claude.ai one in, or remove it).
 2. **Check the setup.** Call `setup_profile`. It shows the profile, the voice it learned from the user's LinkedIn posts, and whether a LinkedIn account is connected.
 3. **Connect LinkedIn if it is missing.** LinkedIn is connected on heylead.dev, in Settings, Connected accounts (https://heylead.dev/dashboard/settings/accounts), not in chat. Give the user that link and wait until they say it is done, then call `setup_profile` again.
 4. **Show where things stand.** Call `show_status`. A new account has no campaigns; offer the `start-a-campaign` skill.
