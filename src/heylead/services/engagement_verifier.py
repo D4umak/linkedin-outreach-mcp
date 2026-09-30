@@ -278,7 +278,10 @@ async def post_send_verify_and_delete(
 
         # 5c: Rule-based validation on fetched text
         if not should_delete:
-            validation = validate_message(fetched_text, voice_signature, max_chars=500)
+            # This re-validates a message we already sent — not a first
+            # touch check (the send-time validate_message call already
+            # scoped that).
+            validation = validate_message(fetched_text, voice_signature, max_chars=500, first_touch=False)
             if not validation.is_valid:
                 critical_stages = {"Salesy", "AI-tells", "Voice"}
                 critical_issues = [

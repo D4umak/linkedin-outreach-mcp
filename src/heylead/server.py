@@ -33,6 +33,12 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.423 (2026-09-30)
+- New: every campaign carries an Offer card: what changes for the person you write to, in plain words, and one question. create_campaign writes it from your paste and shows it; launch confirms it; edit_campaign(offer_outcome=..., offer_ask=..., offer_confirm='on') edits and confirms it (#1993)
+- New: first messages on a campaign wait until its Offer card is confirmed; invitations, replies and follow-ups keep going (#1993)
+- Fix: a first message no longer says what you build, run or lead, and names no product the reader never used; replies may say it once (#1993)
+- Fix: no tool message says HeyLead sends 24/7 (#2025)
+
 ## v0.10.422 (2026-09-30)
 - Fix: stop listing X posting until it works (#1399)
 - Fix: a skipped outreach carries a reason, never the bare word "skipped"
@@ -2869,6 +2875,11 @@ async def edit_campaign(
     campaign_type: str = "",
     goal: str = "",
     project_brief: str = "",
+    offer_outcome: str = "",
+    offer_how: str = "",
+    offer_proof: str = "",
+    offer_ask: str = "",
+    offer_confirm: str = "",
     product: str = "",
     go_live: str = "",
     volume: str = "",
@@ -2941,6 +2952,14 @@ async def edit_campaign(
             campaign_intent to match. Empty keeps the current value.
         project_brief: Full project paste the model sees. Required before launch,
             resume, or auto-send.
+        offer_outcome: The Offer card's outcome: what changes for the reader,
+            in their words. Editing it unconfirms the card.
+        offer_how: The Offer card's how: what the sender does, said only in a
+            reply. Editing it unconfirms the card.
+        offer_proof: The Offer card's proof, used at most once per thread.
+            Editing it unconfirms the card.
+        offer_ask: The Offer card's one question. Editing it unconfirms the card.
+        offer_confirm: "on" confirms the Offer card; first messages resume.
         product: Optional structured fact: product / what you buy or sell.
         go_live: Optional structured fact: go-live date.
         volume: Optional structured fact: volume model.
@@ -3011,6 +3030,11 @@ async def edit_campaign(
                 campaign_id, name, mode, booking_link,
                 offerings, case_studies, social_proofs, campaign_preferences,
                 project_brief=project_brief,
+                offer_outcome=offer_outcome,
+                offer_how=offer_how,
+                offer_proof=offer_proof,
+                offer_ask=offer_ask,
+                offer_confirm=offer_confirm,
                 product=product,
                 go_live=go_live,
                 volume=volume,

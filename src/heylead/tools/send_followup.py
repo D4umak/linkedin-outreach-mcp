@@ -20,7 +20,7 @@ from ..ai.followup_generator import followup_char_limit, generate_followup
 from ..ai.llm_validator import llm_validate
 from ..ai.message_fixer import fix_message
 from ..ai.message_improver import improve_message
-from ..ai.message_validator import is_evaluator_refusal, validate_followup
+from ..ai.message_validator import is_evaluator_refusal, reader_text_for, validate_followup
 from ..ai.prospect_analyzer import analyze_prospect, is_data_gap_analysis
 from ..config import apply_free_monthly_caps, get_tier
 from ..constants import (
@@ -523,6 +523,10 @@ async def run_send_followup(
 
     from ..linkedin.profile_normalize import prospect_data_from_contact
     prospect_data = prospect_data_from_contact(candidate)
+    # Follow-up 1 is still the reader's first touch (validate_followup); a
+    # product noun they used themselves in their own headline/title/company/
+    # summary should not be held against that draft.
+    reader_text = reader_text_for(prospect_data)
 
     # ── Prospect Intelligence: load cached or generate ──
     prospect_analysis = None
@@ -657,6 +661,7 @@ async def run_send_followup(
         previous_messages=previous_sdr_messages,
         max_chars=max_chars,
         followup_number=this_followup,
+        reader_text=reader_text,
     )
 
     # LLM validation — context-sensitive checks (v63 validate prompt)
@@ -695,6 +700,7 @@ async def run_send_followup(
                 previous_messages=previous_sdr_messages,
                 max_chars=max_chars,
                 followup_number=this_followup,
+                reader_text=reader_text,
             )
         except Exception as e:
             logger.warning(f"Fix stage failed: {e}")
@@ -733,6 +739,7 @@ async def run_send_followup(
                 previous_messages=previous_sdr_messages,
                 max_chars=max_chars,
                 followup_number=this_followup,
+                reader_text=reader_text,
             )
         except Exception as e:
             logger.error(f"Regeneration failed: {e}")

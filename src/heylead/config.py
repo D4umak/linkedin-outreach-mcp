@@ -141,7 +141,7 @@ def load_config() -> dict[str, Any]:
             for key in ("api_keys", "working_hours"):
                 if key in _DEFAULT_CONFIG:
                     merged[key] = {**_DEFAULT_CONFIG[key], **data.get(key, {})}
-            # Migrate: the pre-24/7 defaults were weekdays 09:00–17:00.
+            # Migrate: the legacy defaults were weekdays 09:00–17:00.
             # Only that exact legacy pair is rewritten. A user-set window
             # (8–20, 9–18, …) must survive load_config().
             _LEGACY_START, _LEGACY_END = 9, 17
@@ -157,7 +157,7 @@ def load_config() -> dict[str, Any]:
             if needs_save:
                 merged["working_hours"] = wh
                 save_config(merged)
-                logger.info("Config migrated: working_hours upgraded to 24/7 autonomous")
+                logger.info("Config migrated: legacy 09:00-17:00 working_hours replaced with the current default")
             return merged
         except (json.JSONDecodeError, IOError) as e:
             # The unreadable bytes are the only copy of the backend JWT and the

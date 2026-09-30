@@ -41,6 +41,11 @@ async def run_edit_campaign(
     social_proofs: str = "",
     campaign_preferences: str = "",
     project_brief: str = "",
+    offer_outcome: str = "",
+    offer_how: str = "",
+    offer_proof: str = "",
+    offer_ask: str = "",
+    offer_confirm: str = "",
     product: str = "",
     go_live: str = "",
     volume: str = "",
@@ -105,6 +110,10 @@ async def run_edit_campaign(
         project_brief: Full project paste the model sees, in the goal's words
             (heylead.goals.BRIEF_ASKS; buy: what a vendor must confirm too).
             Required before launch.
+        offer_outcome, offer_how, offer_proof, offer_ask: The Offer card, the
+            lines every message lands. Editing any of them rewrites the card
+            and it waits for offer_confirm again.
+        offer_confirm: "on" confirms the card; first messages resume.
         product: Optional structured fact: product / what you buy or sell.
         go_live: Optional structured fact: go-live date.
         volume: Optional structured fact: volume model.
@@ -179,6 +188,7 @@ async def run_edit_campaign(
     has_context_fields = any([
         offerings, case_studies, social_proofs, campaign_preferences,
         project_brief, product, go_live, volume, must_confirm,
+        offer_outcome, offer_how, offer_proof, offer_ask, offer_confirm,
     ])
     has_toggle_settings = any([
         enable_follows, enable_endorsements, enable_engagements, enable_followups,
@@ -222,6 +232,8 @@ async def run_edit_campaign(
             "  booking_link: Calendar URL for reply auto-responses\n"
             "  project_brief: Full project paste (required before launch)\n"
             "  product / go_live / volume / must_confirm: optional project facts\n"
+            "  offer_outcome / offer_how / offer_proof / offer_ask: the Offer card\n"
+            "  offer_confirm: \"on\" confirms the Offer card\n"
             "  campaign_intent: sell, buy, partner, or recruit\n"
             "  campaign_type: outbound or job_search\n"
             "  goal: sell, job_search, hire, partner, buy, or research\n"
@@ -314,6 +326,10 @@ async def run_edit_campaign(
             return (
                 f"Invalid {label}: '{val}'. Must be 'on', 'off', or 'observe'."
             )
+
+    # ── Validate offer_confirm ──
+    if offer_confirm and offer_confirm.strip().lower() != "on":
+        return "❌ offer_confirm must be 'on'."
 
     # ── Validate engagement_mode ──
     if engagement_mode and engagement_mode not in _VALID_ENGAGEMENT_MODES:
@@ -650,31 +666,109 @@ async def run_edit_campaign(
         changes["config_json"] = config_updated
 
     # ── Update context fields (offerings, case_studies, social_proofs, preferences) ──
+    offer_confirm_refusal = ""
     if has_context_fields:
         existing_ctx = await db.get_campaign_context(campaign_id)
         ctx_changed = False
+        had_card = isinstance(existing_ctx.get("offer"), dict)
+        source_changed = False
         if offerings:
             existing_ctx["offerings"] = offerings
             ctx_changed = True
+            source_changed = True
             change_descriptions.append(f"Offerings: {offerings[:80]}{'...' if len(offerings) > 80 else ''}")
         if case_studies:
             existing_ctx["case_studies"] = case_studies
             ctx_changed = True
+            source_changed = True
             change_descriptions.append(f"Case studies: {case_studies[:80]}{'...' if len(case_studies) > 80 else ''}")
         if social_proofs:
             existing_ctx["social_proofs"] = social_proofs
             ctx_changed = True
+            source_changed = True
             change_descriptions.append(f"Social proofs: {social_proofs[:80]}{'...' if len(social_proofs) > 80 else ''}")
         if campaign_preferences:
             existing_ctx["campaign_preferences"] = campaign_preferences
             ctx_changed = True
+            source_changed = True
             change_descriptions.append(f"Preferences: {campaign_preferences[:80]}{'...' if len(campaign_preferences) > 80 else ''}")
         if project_brief:
             existing_ctx["project_brief"] = project_brief
             ctx_changed = True
+            source_changed = True
             change_descriptions.append(
                 f"Project brief: {project_brief[:80]}{'...' if len(project_brief) > 80 else ''}"
             )
+
+        # ── Offer card: re-distil on a source-field edit, overlay manual
+        #    edits, then confirm (#1993). Re-distil runs FIRST so a manual
+        #    offer_* edit in the same call is never clobbered by the fresh
+        #    text (offer_confirm's value is validated earlier, with the
+        #    other argument checks).
+        import time as _time
+
+        from ..services.offer_card import (
+            OfferCard,
+            card_from_context,
+            card_to_dict,
+            confirm_card,
+            distil_offer,
+            offer_card_defects,
+        )
+        from ..services.offer_card import source_hash as offer_source_hash
+
+        card = card_from_context(existing_ctx) or OfferCard()
+        redistilled_needs_review = False
+        offer_confirm_refusal = ""
+
+        if source_changed and had_card:
+            goal_for_distil = _goals.goal_from_config(config) or "sell"
+            try:
+                redistilled = await distil_offer(existing_ctx, goal=goal_for_distil)
+            except Exception:
+                redistilled = None
+            if redistilled is not None:
+                card = redistilled
+                redistilled_needs_review = card.needs_review
+                change_descriptions.append("Offer card rewritten from the new paste; confirm it again")
+            else:
+                card.confirmed_at = None
+                card.confirmed_by = ""
+            existing_ctx["offer"] = card_to_dict(card)
+            ctx_changed = True
+
+        edits = {"outcome": offer_outcome, "how": offer_how, "proof": offer_proof, "ask": offer_ask}
+        if any(edits.values()):
+            for key, value in edits.items():
+                if value:
+                    setattr(card, key, " ".join(value.split()))
+            card.confirmed_at = None
+            card.confirmed_by = ""
+            card.needs_review = False
+            redistilled_needs_review = False
+            card.source_hash = offer_source_hash(existing_ctx)
+            defects = offer_card_defects(card)
+            if defects:
+                return "❌ Offer card not saved: " + "; ".join(defects)
+            change_descriptions.append("Offer card: " + card.outcome[:80])
+            existing_ctx["offer"] = card_to_dict(card)
+            ctx_changed = True
+
+        if offer_confirm.strip().lower() == "on":
+            if not card.outcome:
+                return "❌ Nothing to confirm: this campaign has no Offer card yet."
+            if redistilled_needs_review:
+                offer_confirm_refusal = (
+                    "❌ HeyLead could not write the offer in plain words; "
+                    "edit offer_outcome/offer_ask, then confirm."
+                )
+            else:
+                card.source_hash = offer_source_hash(existing_ctx)
+                card = confirm_card(card, by="mcp:edit_campaign", now=int(_time.time()))
+                change_descriptions.append("Offer card confirmed; first messages resume")
+                existing_ctx["offer"] = card_to_dict(card)
+                ctx_changed = True
+
         if any([product, go_live, volume, must_confirm]):
             from ..services.project_brief import merge_project_facts
             existing_ctx = merge_project_facts(
@@ -816,6 +910,11 @@ async def run_edit_campaign(
             await sync_to_cloud(campaign_id=campaign_id)
         except Exception as e:
             logger.warning("Could not sync context_json for campaign %s: %s", campaign_id, e)
+
+    if offer_confirm_refusal:
+        if change_descriptions:
+            return offer_confirm_refusal + " Other edits were saved."
+        return offer_confirm_refusal
 
     # ── Format result ──
     output = [

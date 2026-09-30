@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 from typing import Any
 
+from .. import facts
 from ..config import (
     get_scheduler_mode,
     is_backend_mode,
@@ -247,7 +248,7 @@ async def run_scheduler_status() -> str:
     else:
         lines.append("- `scheduler(action='observe')` \u2014 collect signals without sending")
         lines.append("- `scheduler(action='toggle', enabled=False)` \u2014 pause the scheduler")
-        lines.append("- `scheduler(action='toggle', enabled=True, cloud=True)` \u2014 enable cloud 24/7 scheduling")
+        lines.append("- `scheduler(action='toggle', enabled=True, cloud=True)` \u2014 send from the cloud, with your laptop closed, inside the sending window")
     lines.append("- `scheduler(action='logs')` \u2014 detailed event log and job metrics")
     lines.append("- `scheduler(action='diagnostics')` \u2014 full system diagnostics")
     lines.append("- `show_status()` \u2014 view campaign dashboard")
@@ -434,7 +435,7 @@ async def _cloud_status_section() -> str:
                 for c in campaigns[:5]:
                     lines.append(f"  - {c.get('name', 'Unknown')} ({c.get('status', '?')})")
             lines.append("")
-            lines.append("The backend processes outreach every 5 min, 24/7.")
+            lines.append(f"The backend checks for outreach every 5 min. {facts.CLOUD_KEEPS_SENDING}")
 
             # Recent cloud activity
             recent = cloud.get("recent_activity", [])
@@ -463,7 +464,8 @@ async def run_toggle_scheduler(enabled: bool, cloud: bool = False) -> str:
 
     Args:
         enabled: Whether to enable (True) or disable (False).
-        cloud: If True, toggle the cloud (backend) scheduler for 24/7 operation.
+        cloud: If True, toggle the cloud (backend) scheduler, which keeps
+               running with the laptop closed and sends inside the sending window.
                If False, toggle the local (in-process) scheduler.
     """
     if cloud:
@@ -567,7 +569,7 @@ async def run_toggle_scheduler(enabled: bool, cloud: bool = False) -> str:
             "All actions respect working hours, rate limits, and daily caps.\n"
             "Copilot campaigns still require manual approval.\n\n"
             "Use `scheduler(action='status')` to monitor progress.\n\n"
-            "\U0001f4a1 **Tip**: For 24/7 scheduling (even when laptop is off), use:\n"
+            f"\U0001f4a1 **Tip**: {facts.CLOUD_KEEPS_SENDING} Switch it on with:\n"
             "`scheduler(action='toggle', enabled=True, cloud=True)`"
         )
     else:

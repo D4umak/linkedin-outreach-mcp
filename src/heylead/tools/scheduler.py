@@ -45,7 +45,8 @@ async def run_scheduler(
             'diagnostics', 'report', or 'backfill_cloud'.
         enabled: True to enable, False to disable (for 'toggle').
             For 'report': True to enable email reports, False to disable.
-        cloud: If True, toggle the cloud scheduler for 24/7 operation (for 'toggle').
+        cloud: If True, toggle the cloud scheduler (for 'toggle'), which keeps
+            running with the laptop closed and sends inside the sending window.
             Launching or resuming a campaign already switches it on for hosted
             accounts; pass cloud=True, enabled=False to stop the backend sending
             while leaving this machine's scheduler alone.

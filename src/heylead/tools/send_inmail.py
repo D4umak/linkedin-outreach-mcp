@@ -21,7 +21,7 @@ from ..ai.llm import LLMClient
 from ..ai.llm_validator import llm_validate
 from ..ai.message_fixer import fix_message
 from ..ai.message_improver import improve_message
-from ..ai.message_validator import validate_message
+from ..ai.message_validator import reader_text_for, validate_message
 from ..ai.prompt_loader import (
     build_context_block,
     get_prompt_temperature,
@@ -142,6 +142,11 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
     missing = refuse_without_project_brief(campaign)
     if missing:
         return missing
+
+    from ..services.offer_card import first_touch_hold_reason, hold_message
+    held = first_touch_hold_reason(campaign)
+    if held:
+        return hold_message(campaign["id"], held)
 
     try:
         campaign_cfg = json.loads(campaign.get("config_json") or "{}")
@@ -486,7 +491,10 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
         except Exception as e:
             logger.warning("InMail improve stage failed, using draft: %s", e)
 
-        validation = validate_message(body, voice_signature, body_max)
+        # An InMail is a first touch; a product noun the prospect already
+        # used in their own headline/title/company/summary is not a defect.
+        reader_text = reader_text_for(prospect_data)
+        validation = validate_message(body, voice_signature, body_max, reader_text=reader_text)
         if validation.is_valid:
             try:
                 llm_result = await llm_validate(
@@ -515,7 +523,7 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
                     intent=campaign_intent,
                     brief=message_brief,
                 )
-                validation = validate_message(body, voice_signature, body_max)
+                validation = validate_message(body, voice_signature, body_max, reader_text=reader_text)
             except Exception as e:
                 logger.warning("InMail fix stage failed: %s", e)
 

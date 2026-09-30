@@ -709,7 +709,7 @@ async def run_launch_campaign(campaign_id: str = "") -> str:
     elif config.is_backend_mode():
         lines.extend([
             "",
-            f"⚠️ 24/7 cloud sending could not be switched on ({cloud_detail}). "
+            f"⚠️ Cloud sending could not be switched on ({cloud_detail}). "
             "This machine will not take over. Retry later, or move sending "
             "here with `scheduler(action='send_from', host='local')`.",
         ])
@@ -992,7 +992,7 @@ async def run_resume_campaign(campaign_id: str = "") -> str:
         )
     elif config.is_backend_mode():
         cloud_note += (
-            f"\n\n⚠️ 24/7 cloud sending could not be switched on ({cloud_detail}). "
+            f"\n\n⚠️ Cloud sending could not be switched on ({cloud_detail}). "
             "This machine will not take over. Move sending here with "
             "`scheduler(action='send_from', host='local')` if you want it to."
         )

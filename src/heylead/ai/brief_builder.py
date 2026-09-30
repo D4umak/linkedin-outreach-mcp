@@ -31,6 +31,8 @@ class MessageBrief:
     must_say: str = ""
     must_not_say: list[str] = field(default_factory=list)
     constraints: list[str] = field(default_factory=list)
+    ask: str = ""
+    how: str = ""
 
 
 def _match_persona(prospect: dict[str, Any], icp_data: dict[str, Any]) -> dict[str, Any]:
@@ -169,7 +171,22 @@ def build_message_brief(
 
     # ── must_say ──
     facts = ctx.get("project_facts") if isinstance(ctx.get("project_facts"), dict) else {}
-    must_say = _one_point(ctx.get("project_brief"), facts)
+    ask = ""
+    how = ""
+    from ..services.offer_card import card_from_context
+    card = card_from_context(ctx)
+    if card is not None and _clean(card.outcome):
+        # The Offer card (#1993): the reader's outcome, confirmed by the owner.
+        must_say = _clean(card.outcome)
+        ask = _clean(card.ask)
+        if touch == "reply":
+            how = _clean(card.how)
+        else:
+            constraints.append(
+                "do not say what the sender builds, runs or leads; no product, platform or programme; the message is about them"
+            )
+    else:
+        must_say = _one_point(ctx.get("project_brief"), facts)
     if not must_say and intent == "buy":
         # The operator's own preferences, never a machine note (api #1663).
         from ..services.strategy_note import operator_preferences
@@ -226,6 +243,8 @@ def build_message_brief(
         must_say=must_say,
         must_not_say=must_not,
         constraints=constraints,
+        ask=ask,
+        how=how,
     )
 
 
@@ -245,6 +264,10 @@ def render_brief_block(brief: MessageBrief) -> str:
         lines.append(f"Goal of this touch: {brief.touch_goal}")
     if brief.must_say:
         lines.append(f"The one point to land: {brief.must_say}")
+    if brief.ask:
+        lines.append(f"The one question to ask: {brief.ask}")
+    if brief.how:
+        lines.append(f"What the sender does (say it once, now that they replied): {brief.how}")
     for ban in brief.must_not_say:
         lines.append(f"Do not: {ban}")
     for c in brief.constraints:

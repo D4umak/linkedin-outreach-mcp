@@ -1,6 +1,7 @@
 """Cloud sync service — push/pull state between MCP client and backend scheduler.
 
-MCP client pushes campaign/outreach state to the backend for 24/7 scheduling.
+MCP client pushes campaign/outreach state to the backend, which schedules it
+with the laptop closed and sends inside the sending window.
 Backend executes outreach jobs (invites, follow-ups, engagements, reply checks)
 via Cloud Scheduler every 5 minutes, even when the user's laptop is closed.
 
@@ -19,7 +20,7 @@ from typing import Any
 
 import httpx
 
-from .. import config, constants
+from .. import config, constants, facts
 from ..ai.copywriter.provenance import Provenance
 from ..db import queries, signal_queries
 from ..db.async_bridge import run_db
@@ -3768,8 +3769,8 @@ async def toggle_cloud_scheduler(enabled: bool, *, sync_first: bool = True) -> s
     if status == "enabled":
         return (
             "Cloud scheduler **enabled**.\n\n"
-            "The backend will now process outreach every 5 minutes, 24/7 "
-            "even when your laptop is off:\n"
+            "The backend now checks for outreach every 5 minutes. "
+            f"{facts.CLOUD_KEEPS_SENDING} It will:\n"
             "- Send invitations to pending prospects (autopilot campaigns)\n"
             "- Send follow-ups on schedule (day 1, 3, 7, 14)\n"
             "- Check for replies and classify sentiment\n"

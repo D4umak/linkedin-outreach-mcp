@@ -1093,6 +1093,19 @@ async def run_create_campaign(
     context = build_context_payload(
         company_context=company_context, project_brief=project_brief,
     )
+
+    # The Offer card: what every message will land (#1993). Distilled once
+    # from the paste; the owner reads it below and launch confirms it.
+    from ..services.offer_card import card_to_dict, distil_offer
+    offer_card = None
+    if context and wanted_goal != "job_search":
+        try:
+            offer_card = await distil_offer(context, goal=wanted_goal or "sell")
+        except Exception as e:  # a failed distil never blocks creating a draft
+            logger.warning("Offer card distil failed: %s", e)
+    if offer_card is not None:
+        context["offer"] = card_to_dict(offer_card)
+
     context_json = json.dumps(context) if context else ""
 
     campaign_id = await run_db(create_campaign, name=final_name,
@@ -1255,8 +1268,15 @@ async def run_create_campaign(
     summary = icp.get("summary", target_description)
     if summary:
         output_lines.append(summary)
-    if icp.get("relevance_hook"):
-        output_lines.append(f"Hook: {icp['relevance_hook']}")
+    if offer_card is not None:
+        output_lines.append("")
+        output_lines.append("**What every message will land (confirm at launch, or change with edit_campaign):**")
+        output_lines.append(f"- Outcome: {offer_card.outcome}")
+        output_lines.append(f"- Question: {offer_card.ask}")
+        if offer_card.how:
+            output_lines.append(f"- What you do (replies only): {offer_card.how}")
+        if offer_card.needs_review:
+            output_lines.append("- ⚠️ HeyLead could not write this in plain words from your paste. Edit it: edit_campaign(offer_outcome='…', offer_ask='…').")
     if search_acct_id != account_id:
         output_lines.append("Searched via premium account (Sales Navigator)")
     elif use_sales_nav:

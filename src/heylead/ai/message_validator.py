@@ -163,6 +163,85 @@ POST_EXEMPT_AI_TELLS = frozenset({
     r"How are you (using|leveraging|approaching) AI",
 })
 
+# ──────────────────────────────────────────────
+# Stage 8: the first touch is about the reader (D4umak/heylead-api#1993)
+# ──────────────────────────────────────────────
+# Nouns a sender uses for what they build. In a first touch they are the
+# sender's vocabulary, not the reader's; a reader who used one themselves
+# (RECIPIENT FACTS, their own message) may hear it back.
+# "stack", "engine", "layer" and "program" were dropped after they over-fired
+# on "graduate program", "search engine team" and "a layer of approvals"
+# (code review of D4umak/heylead-api#1993, 29 Sep 2026).
+PRODUCT_NOUNS: tuple[str, ...] = (
+    "platform", "gateway", "solution", "programme", "architecture",
+    "framework", "orchestration", "governance", "zero-trust",
+    "control point", "blueprint", "phase 0", "pipeline", "ecosystem",
+    "registry", "proxy", "endpoint", "endpoints",
+)
+
+# "I build X", "We run Y", and the contracted/progressive/perfect forms
+# ("I'm building", "I've built", "We're helping", "I am building",
+# "We have built"): a sentence whose subject is the sender and whose verb is
+# the sender's craft. Fine once the reader has replied; in a first touch it
+# is the pitch the reader never asked for. This is deliberately about the
+# GRAMMATICAL SUBJECT, not the topic: "I help teams cut spend" is flagged on
+# purpose even though it names the reader ("teams") — the sentence still
+# opens with the sender doing something, which is the shape a first touch
+# must not open with. A defect-free rewrite puts the reader's situation
+# first: "Your team's spend is untracked" states an outcome, not a service.
+SENDER_CENTRIC_LINE = re.compile(
+    r"^\s*(I|We)(?:'m|'re|'ve|\s+am|\s+are|\s+have)?\s+"
+    r"(build|built|building|run|running|lead|leading|help|helped|helping|deliver|"
+    r"delivering|design|designing|set\s+up|setting\s+up|specialise|"
+    r"specialize|specialising|specializing|create|creating|provide|"
+    r"providing|offer|offering|develop|developing|implement|implementing|"
+    r"manage|managing|deploy|deploying)\b",
+    re.IGNORECASE,
+)
+
+# A line break without a full stop still separates a hook sentence from a
+# pitch sentence; split on it too so the defect cannot hide behind a
+# newline instead of a period.
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
+
+
+def reader_text_for(prospect: dict[str, Any]) -> str:
+    """The reader's own words, for the ``reader_text`` param of
+    ``first_touch_offer_defects`` / ``validate_message`` / ``validate_followup``.
+
+    Pulled from the prospect dict's headline, title, company and summary so
+    a product noun the reader already used about themselves — "We run a
+    platform team" in their own headline — is not held against our draft.
+    Built the same way by every first-touch caller (generate_send,
+    send_followup, send_inmail) so they cannot drift apart.
+    """
+    return " ".join(
+        str((prospect or {}).get(k) or "") for k in ("headline", "title", "company", "summary")
+    )
+
+
+def first_touch_offer_defects(text: str, reader_text: str = "") -> list[str]:
+    """Defects a first touch (note, first DM, follow-up 1, InMail, email) must not have.
+
+    Returns human-readable defect names. Empty means clean. A product noun
+    the reader used themselves (``reader_text``) is not a defect.
+    """
+    if not text:
+        return []
+    defects: list[str] = []
+    for sentence in _SENTENCE_SPLIT.split(text.strip()):
+        if SENDER_CENTRIC_LINE.search(sentence):
+            defects.append(f"leads with the sender: {sentence.strip()[:80]}")
+            break
+    low = text.lower().replace("-", " ")
+    reader_low = (reader_text or "").lower().replace("-", " ")
+    for noun in PRODUCT_NOUNS:
+        noun_norm = noun.replace("-", " ")
+        if contains_term(low, noun_norm) and not contains_term(reader_low, noun_norm):
+            defects.append(f"product noun in a first touch: {noun}")
+    return defects
+
+
 # v63 guardrail: "DO NOT USE THE WORD 'hope' IN YOUR FIRST 3 SENTENCES"
 HOPE_IN_OPENING_PATTERN = re.compile(r"\bhope\b", re.IGNORECASE)
 
@@ -430,6 +509,9 @@ def validate_message(
     voice_signature: dict[str, Any] | None = None,
     max_chars: int = 200,
     message_type: str = "invitation",
+    *,
+    first_touch: bool = True,
+    reader_text: str = "",
 ) -> ValidationResult:
     """Run the 5-stage validation pipeline on a message.
 
@@ -441,6 +523,14 @@ def validate_message(
             exist because an invite is 200 chars of unsolicited text — the
             v63 note guardrails, the invite-filler half of the salesy list,
             and the ban on a closing question the post prompt asks for.
+        first_touch: Whether this is the reader's first message from us (the
+            invite note or follow-up 1). Only then do "leads with the
+            sender" / "product noun" count as defects — a reply, a comment,
+            or follow-up 2+ is allowed to talk about what we do once the
+            reader has engaged.
+        reader_text: The reader's own words (headline, title, company,
+            summary, or their reply), so a product noun they used themselves
+            is not held against the draft.
 
     Returns:
         ValidationResult with pass/fail and details
@@ -455,6 +545,10 @@ def validate_message(
             "Opens like a follow-up ('Following…') — the first in-thread "
             "message has to be an intro",
         )
+
+    if first_touch and not is_post:
+        for defect in first_touch_offer_defects(message, reader_text=reader_text):
+            result.fail("FirstTouchOffer", defect)
 
     # ── Stage 0: Evaluator refusal (skip rationale leaked as the draft) ──
     if is_evaluator_refusal(message):
@@ -644,6 +738,8 @@ def validate_followup(
     previous_messages: list[str] | None = None,
     max_chars: int = 500,
     followup_number: int | None = None,
+    *,
+    reader_text: str = "",
 ) -> ValidationResult:
     """Validate a follow-up DM message.
 
@@ -659,6 +755,9 @@ def validate_followup(
         previous_messages: List of previous message texts (for repetition check)
         max_chars: Character limit (default 500 for DMs)
         followup_number: 1 for the first DM after the invite note
+        reader_text: The reader's own words (headline, title, company,
+            summary), so a product noun they used themselves is not held
+            against a first-touch (follow-up 1) draft.
 
     Returns:
         ValidationResult with pass/fail and details
@@ -667,8 +766,13 @@ def validate_followup(
         from .followup_generator import FIRST_FOLLOWUP_MAX_CHARS
         max_chars = min(max_chars, FIRST_FOLLOWUP_MAX_CHARS)
 
-    # Run base validation with the higher char limit
-    result = validate_message(message, voice_signature, max_chars)
+    # Run base validation with the higher char limit. Only follow-up 1 is
+    # still the reader's first touch; follow-up 2+ may talk about what we do.
+    result = validate_message(
+        message, voice_signature, max_chars,
+        first_touch=(followup_number is not None and followup_number <= 1),
+        reader_text=reader_text,
+    )
 
     msg_lower = message.lower().strip()
 
@@ -752,8 +856,8 @@ def validate_comment(
     Returns:
         ValidationResult with pass/fail and details
     """
-    # Run base validation with comment char limit
-    result = validate_message(comment, voice_signature, max_chars)
+    # A comment is never the reader's first touch from us.
+    result = validate_message(comment, voice_signature, max_chars, first_touch=False)
 
     comment_lower = comment.lower().strip()
 
@@ -824,8 +928,8 @@ def validate_reply(
     # For negative sentiment, enforce shorter limit
     effective_max = min(max_chars, 200) if sentiment == "negative" else max_chars
 
-    # Run base validation with the appropriate char limit
-    result = validate_message(message, voice_signature, effective_max)
+    # A reply is never the reader's first touch from us.
+    result = validate_message(message, voice_signature, effective_max, first_touch=False)
 
     msg_lower = message.lower().strip()
 

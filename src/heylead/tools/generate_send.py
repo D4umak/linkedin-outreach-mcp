@@ -19,7 +19,7 @@ from ..ai.copywriter import provenance as copy_provenance
 from ..ai.message_fixer import fix_message
 from ..ai.message_generator import check_job_search_draft, generate_message
 from ..ai.message_improver import improve_message
-from ..ai.message_validator import is_evaluator_refusal, validate_message
+from ..ai.message_validator import is_evaluator_refusal, reader_text_for, validate_message
 from ..ai.llm_validator import llm_validate
 from ..ai.prospect_analyzer import analyze_prospect, is_data_gap_analysis
 from ..ai.targeting_recheck import (
@@ -285,6 +285,11 @@ async def run_generate_and_send(
     missing = refuse_without_project_brief(campaign)
     if missing:
         return missing
+
+    from ..services.offer_card import first_touch_hold_reason, hold_message
+    held = first_touch_hold_reason(campaign)
+    if held:
+        return hold_message(campaign["id"], held)
 
     # Block sends when campaign is paused
     if campaign.get("status") == "paused":
@@ -1275,7 +1280,7 @@ async def run_generate_and_send(
 
     def _validate(text: str):
         """validate_message, plus the job-search presumption check (api #1416)."""
-        checked = validate_message(text, voice_signature, note_max)
+        checked = validate_message(text, voice_signature, note_max, reader_text=reader_text_for(prospect_data))
         check_job_search_draft(
             checked, text, prospect=prospect_data, campaign_config=campaign_context,
             campaign_ctx=campaign_ctx, analysis=prospect_analysis,

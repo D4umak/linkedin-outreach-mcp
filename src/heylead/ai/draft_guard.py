@@ -21,13 +21,22 @@ async def guard_draft(
     voice_signature: dict[str, Any] | None,
     message_type: str,
     max_chars: int,
+    *,
+    first_touch: bool = False,
 ) -> str:
-    """Return text that passes validate_message, or "" if it cannot be fixed."""
+    """Return text that passes validate_message, or "" if it cannot be fixed.
+
+    first_touch: whether this draft is the reader's first message from us
+    (an invitation or a first DM). Every caller of guard_draft today —
+    inbound discovery, counter-pitch, email, posts — is a reply to
+    something the reader already sent, or a post nobody solicited, so the
+    default is False; a future invitation-shaped caller passes True.
+    """
     draft = (text or "").strip()
     if not draft:
         return ""
 
-    result = validate_message(draft, voice_signature, max_chars, message_type)
+    result = validate_message(draft, voice_signature, max_chars, message_type, first_touch=first_touch)
     if result.is_valid:
         return draft
 
@@ -50,7 +59,7 @@ async def guard_draft(
     if not fixed:
         return ""
 
-    again = validate_message(fixed, voice_signature, max_chars, message_type)
+    again = validate_message(fixed, voice_signature, max_chars, message_type, first_touch=first_touch)
     if again.is_valid:
         return fixed
 

@@ -740,7 +740,9 @@ async def _guard_inbound_result(
 
     out = dict(result)
     out["message"] = await read_back(
-        await guard_draft(result.get("message", ""), voice, message_type, max_chars),
+        # A stranger wrote first; our reply is never their first touch from
+        # us, so a defect like "leads with the sender" does not apply here.
+        await guard_draft(result.get("message", ""), voice, message_type, max_chars, first_touch=False),
         channel=channel_for_message_type(message_type), max_chars=max_chars,
     )
     return out

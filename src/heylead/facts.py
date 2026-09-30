@@ -110,13 +110,23 @@ def use_cases_block() -> str:
 # sentence is what every surface says instead; heylead-api app/facts.py and
 # heylead-dashboard src/marketing/facts.ts carry it verbatim, and
 # tests/test_onboarding_never_warns.py fails any surface that warns.
+SENDING_WINDOW = "Monday to Friday 08:00 to 22:00 in your time zone"
+
 PACE_SENTENCE = (
     "HeyLead sends from your own LinkedIn account at a human pace: at most "
     f"{_c.HOSTED_DAILY_INVITE_CAP_FREE} invitations a day and "
     f"{_c.HOSTED_WEEKLY_INVITE_CAP} a week on a free LinkedIn account (more on "
-    "Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time "
-    "zone, minutes apart. It backs off when LinkedIn pushes back and resumes on "
-    "its own. You can pause any campaign at any time."
+    f"Premium or Sales Navigator), {SENDING_WINDOW}, minutes apart. It backs "
+    "off when LinkedIn pushes back and resumes on its own. You can pause any "
+    "campaign at any time."
+)
+
+# What a tool says about cloud sending. The cloud keeps working when the
+# laptop is closed, but it sends only inside the window above: on 30 Sep 2026
+# (heylead-api#2025) the launch, resume and scheduler tools still said "24/7".
+CLOUD_KEEPS_SENDING = (
+    "The cloud keeps running with your laptop closed and sends inside the "
+    f"sending window, {SENDING_WINDOW}."
 )
 
 # How an assistant talks about pace. It fills the vacuum the model otherwise

@@ -45,8 +45,8 @@ CIRCUIT_BREAKER_RESET_SECONDS = 300  # 5 min cooldown after circuit breaker trip
 # Timing
 MIN_DELAY_MINUTES = 15               # Min gap between invitations
 MAX_DELAY_MINUTES = 45               # Max gap (randomized)
-DEFAULT_START_HOUR = 0               # Autonomous bot: 24/7
-DEFAULT_END_HOUR = 24                # Autonomous bot: 24/7
+DEFAULT_START_HOUR = 0               # Local working_hours default: no hour limit;
+DEFAULT_END_HOUR = 24                # hosted sending keeps facts.SENDING_WINDOW
 DEFAULT_ACTIVE_DAYS = [0, 1, 2, 3, 4, 5, 6]  # All days
 
 # Message limits
