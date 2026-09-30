@@ -26,12 +26,15 @@ import httpx
 
 from ..ai.voice_analyzer import analyze_voice
 from ..config import (
+    backend_url_problem,
     get_backend_config,
     get_unipile_config,
+    has_local_llm_key,
     is_backend_mode,
     load_config,
     save_config,
     set_active_org_id,
+    set_api_key,
     set_backend_config,
 )
 from ..constants import DEFAULT_BACKEND_URL, GEMINI_KEY_URL, LOGIN_URL_PATH
@@ -148,8 +151,7 @@ async def run_setup_profile(
 
     if llm_api_key:
         provider = llm_provider or "gemini"
-        cfg.setdefault("api_keys", {})[provider] = llm_api_key
-        save_config(cfg)
+        set_api_key(provider, llm_api_key)
 
     if backend_url or backend_jwt:
         current_url, current_jwt = get_backend_config()
@@ -164,6 +166,9 @@ async def run_setup_profile(
                     "The stored token authenticates your LinkedIn session — "
                     "it is never sent over plain http."
                 )
+            problem = backend_url_problem(backend_url)
+            if problem:
+                return f"❌ backend_url refused: {problem}."
             # A new host does not inherit the old host's token: carrying it
             # over would hand the credential to whoever supplied the URL. That
             # holds whether the token is left out or passed again explicitly.
@@ -269,8 +274,7 @@ async def run_setup_profile(
     # In backend mode, LLM calls are proxied through the backend — no local key needed.
     # Only require a local key for direct mode (self-hosted Unipile).
     if not is_backend_mode():
-        cfg = load_config()  # Reload in case we just saved
-        has_llm_key = any(v for v in cfg.get("api_keys", {}).values() if v)
+        has_llm_key = has_local_llm_key()
         if not has_llm_key:
             return (
                 "❌ No LLM API key configured.\n\n"
@@ -390,9 +394,9 @@ async def _setup_direct_mode() -> str:
             f"  1. Sign in at: {login_url}\n"
             "  2. Click 'Connect' on the LinkedIn row, then 'Copy' under 'Get Started'\n"
             "  3. Run: setup_profile(backend_jwt='YOUR_TOKEN')\n\n"
-            "Advanced: For self-hosted Unipile, add to ~/.heylead/config.json:\n"
-            '  "unipile_api_url": "https://apiXX.unipile.com:XXXXX"\n'
-            '  "unipile_api_key": "YOUR_UNIPILE_API_KEY"'
+            "Advanced: for self-hosted Unipile, run in a terminal:\n"
+            "  heylead config set unipile_api_url https://apiXX.unipile.com:XXXXX\n"
+            "  heylead secrets set unipile_api_key   (prompts; kept in the OS keychain)"
         )
 
     client = UnipileClient(api_url, api_key)
@@ -536,7 +540,7 @@ async def _fetch_and_analyze(
         await _restore()
         return (
             f"❌ Voice analysis failed: {e}\n\n"
-            "Check your LLM API key in ~/.heylead/config.json\n"
+            "Check your LLM API key: setup_profile(llm_api_key='...') replaces it\n"
             "Get a free Gemini key at: https://aistudio.google.com/apikey"
         )
 
@@ -738,7 +742,7 @@ async def _fetch_and_analyze(
 
     serper_hint = (
         "\n💡 Optional: Add a SERPER API key for news-enhanced messages:\n"
-        "   Add \"serper\" to api_keys in ~/.heylead/config.json\n"
+        "   Run `heylead secrets set api_key.serper` in a terminal\n"
         "   Get a free key at: https://serper.dev"
     )
 

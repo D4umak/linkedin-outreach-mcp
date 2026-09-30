@@ -90,13 +90,8 @@ def json_log_path() -> Path:
 
 _DEFAULT_CONFIG: dict[str, Any] = {
     "llm_priority": constants.DEFAULT_LLM_PRIORITY,
-    "api_keys": {
-        "gemini": "",
-        "claude": "",
-        "openai": "",
-        "serper": "",
-        "hume": "",
-    },
+    # No secret lives here (api #2061): provider keys, the Unipile key and
+    # the backend JWT are in heylead.secret_store. See _SECRET_KEYS_IN_FILE.
     "timezone": "",
     "working_hours": {
         "start": constants.DEFAULT_START_HOUR,
@@ -104,7 +99,6 @@ _DEFAULT_CONFIG: dict[str, Any] = {
         "days": constants.DEFAULT_ACTIVE_DAYS,
     },
     "unipile_api_url": "",
-    "unipile_api_key": "",
     "tier": constants.TIER_FREE,
     # Tool-call telemetry (api #1204): "on" unless the user ran
     # `heylead config telemetry off`. See telemetry_enabled().
@@ -127,68 +121,20 @@ _DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 
-def load_config() -> dict[str, Any]:
-    """Load config from disk, creating default if missing."""
-    ensure_dirs()
+def read_raw_config() -> dict[str, Any]:
+    """The config file's JSON as it is on disk, or {} (no migration, no writes)."""
     path = config_path()
-    if path.exists():
-        try:
-            with open(path, "r") as f:
-                data = json.load(f)
-            # Merge defaults for any missing keys
-            merged = {**_DEFAULT_CONFIG, **data}
-            # Deep-merge nested dicts
-            for key in ("api_keys", "working_hours"):
-                if key in _DEFAULT_CONFIG:
-                    merged[key] = {**_DEFAULT_CONFIG[key], **data.get(key, {})}
-            # Migrate: the legacy defaults were weekdays 09:00–17:00.
-            # Only that exact legacy pair is rewritten. A user-set window
-            # (8–20, 9–18, …) must survive load_config().
-            _LEGACY_START, _LEGACY_END = 9, 17
-            wh = merged.get("working_hours", {})
-            needs_save = False
-            if wh.get("days") == [0, 1, 2, 3, 4]:
-                wh["days"] = constants.DEFAULT_ACTIVE_DAYS
-                needs_save = True
-            if wh.get("start") == _LEGACY_START and wh.get("end") == _LEGACY_END:
-                wh["start"] = constants.DEFAULT_START_HOUR
-                wh["end"] = constants.DEFAULT_END_HOUR
-                needs_save = True
-            if needs_save:
-                merged["working_hours"] = wh
-                save_config(merged)
-                logger.info("Config migrated: legacy 09:00-17:00 working_hours replaced with the current default")
-            return merged
-        except (json.JSONDecodeError, IOError) as e:
-            # The unreadable bytes are the only copy of the backend JWT and the
-            # stored keys; the next save_config() would overwrite them with the
-            # defaults returned here, so move them aside first.
-            try:
-                path.replace(path.with_suffix(".json.corrupt"))
-            except OSError as move_err:
-                logger.error(f"Could not preserve corrupt config: {move_err}")
-            logger.error(
-                f"Config file corrupt, using defaults (previous file kept as "
-                f"config.json.corrupt): {e}"
-            )
-            return _default_config()
-    else:
-        save_config(_DEFAULT_CONFIG)
-        return _default_config()
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
-def _default_config() -> dict[str, Any]:
-    """A copy no caller can use to mutate the module-level defaults."""
-    return copy.deepcopy(_DEFAULT_CONFIG)
-
-
-def save_config(cfg: dict[str, Any]) -> None:
-    """Persist config to disk.
-
-    Written through a temp file in the same directory and renamed into place:
-    a failure part-way through serialisation must leave the previous config
-    readable rather than truncated.
-    """
+def _write_raw(cfg: dict[str, Any]) -> None:
+    """Atomic write of exactly ``cfg``: a temp file in the same directory,
+    renamed into place, so a failure leaves the previous file readable."""
     ensure_dirs()
     path = config_path()
     tmp_fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".config-", suffix=".json")
@@ -206,17 +152,231 @@ def save_config(cfg: dict[str, Any]) -> None:
         raise
 
 
+def record_secret_backend(name: str) -> None:
+    """Record which secret backend this install uses, once (api #2061)."""
+    if not config_path().exists():
+        _write_raw({**_default_config(), "secret_backend": name})
+        return
+    raw = read_raw_config()
+    if raw.get("secret_backend"):
+        return
+    raw["secret_backend"] = name
+    _write_raw(raw)
+
+
+def load_config() -> dict[str, Any]:
+    """Load config from disk, creating default if missing.
+
+    Secrets found in the file are moved to the secret store (api #2061). That
+    migration runs outside the parse error handling: a store failure must
+    never make a readable file look corrupt, and it never raises here.
+    """
+    ensure_dirs()
+    path = config_path()
+    if not path.exists():
+        save_config(_DEFAULT_CONFIG)
+        return _default_config()
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            raise json.JSONDecodeError("not an object", "", 0)
+    except (json.JSONDecodeError, IOError) as e:
+        # The unreadable bytes may be the only copy of the backend JWT and the
+        # stored keys; the next save_config() would overwrite them with the
+        # defaults returned here, so move them aside first.
+        try:
+            path.replace(path.with_suffix(".json.corrupt"))
+        except OSError as move_err:
+            logger.error(f"Could not preserve corrupt config: {move_err}")
+        logger.error(
+            f"Config file corrupt, using defaults (previous file kept as "
+            f"config.json.corrupt): {e}"
+        )
+        return _default_config()
+
+    merged = {**_DEFAULT_CONFIG, **data}
+    for key in ("working_hours",):
+        if key in _DEFAULT_CONFIG:
+            merged[key] = {**_DEFAULT_CONFIG[key], **data.get(key, {})}
+    # Migrate: the legacy defaults were weekdays 09:00–17:00.
+    # Only that exact legacy pair is rewritten. A user-set window
+    # (8–20, 9–18, …) must survive load_config().
+    _LEGACY_START, _LEGACY_END = 9, 17
+    wh = merged.get("working_hours", {})
+    needs_save = False
+    if wh.get("days") == [0, 1, 2, 3, 4]:
+        wh["days"] = constants.DEFAULT_ACTIVE_DAYS
+        needs_save = True
+    if wh.get("start") == _LEGACY_START and wh.get("end") == _LEGACY_END:
+        wh["start"] = constants.DEFAULT_START_HOUR
+        wh["end"] = constants.DEFAULT_END_HOUR
+        needs_save = True
+    if needs_save:
+        merged["working_hours"] = wh
+        logger.info("Config migrated: legacy 09:00-17:00 working_hours replaced with the current default")
+
+    if needs_save or _has_secret_fields(data):
+        try:
+            save_config(merged)  # moves confirmed secrets out of the file
+        except OSError as e:
+            logger.warning("config migration not written (%s); will retry", type(e).__name__)
+    for field in _secret_top_level():
+        merged.pop(field, None)
+    merged.pop("api_keys", None)
+    return merged
+
+
+def _default_config() -> dict[str, Any]:
+    """A copy no caller can use to mutate the module-level defaults."""
+    return copy.deepcopy(_DEFAULT_CONFIG)
+
+
+def save_config(cfg: dict[str, Any]) -> None:
+    """Persist config to disk, never with a secret the store holds.
+
+    Any secret ``cfg`` carries is written to the secret store and removed
+    from the file only once it reads back equal; a secret the store refused
+    stays in the file (and a warning names it), as does a legacy in-file
+    secret ``cfg`` no longer carries but the store does not hold yet. So a
+    broken keyring loses nothing and never stops a caller.
+    """
+    ensure_dirs()
+    _write_raw(_strip_secrets(cfg))
+
+
+# ──────────────────────────────────────────────
+# Secrets: never in the config file (api #2061)
+# ──────────────────────────────────────────────
+
+
+def _secret_top_level() -> tuple[str, ...]:
+    from . import secret_store
+
+    return secret_store.TOP_LEVEL_SECRET_FIELDS
+
+
+def _secret_items(cfg: dict[str, Any]) -> list[tuple[str, str]]:
+    """(store name, value) for every non-empty secret carried by ``cfg``."""
+    from . import secret_store
+
+    items: list[tuple[str, str]] = []
+    keys = cfg.get("api_keys")
+    if isinstance(keys, dict):
+        for provider, value in keys.items():
+            name = f"api_key.{provider}"
+            if value and isinstance(value, str) and name in secret_store.SECRET_FIELDS:
+                items.append((name, value))
+    for field in secret_store.TOP_LEVEL_SECRET_FIELDS:
+        value = cfg.get(field)
+        if value and isinstance(value, str):
+            items.append((field, value))
+    return items
+
+
+def _store_confirmed(name: str, value: str) -> bool:
+    """Store ``value`` and read it back. False (with a named warning) on any failure."""
+    from . import secret_store
+
+    try:
+        if secret_store.get_secret(name) != value:
+            secret_store.set_secret(name, value)
+        if secret_store.get_secret(name) == value:
+            return True
+        reason = "it did not read back"
+    except Exception as e:  # noqa: BLE001 - a store failure must not stop a save
+        reason = type(e).__name__
+    logger.warning(
+        "secret %s kept in the config file for now: the %s store failed (%s)",
+        name, secret_store.backend_name(), reason,
+    )
+    return False
+
+
+def _put_in_file(out: dict[str, Any], name: str, value: str) -> None:
+    if name.startswith("api_key."):
+        out.setdefault("api_keys", {})[name.split(".", 1)[1]] = value
+    else:
+        out[name] = value
+
+
+def _strip_secrets(cfg: dict[str, Any]) -> dict[str, Any]:
+    """What the config file may hold: ``cfg`` without any secret the store
+    confirmed. Unconfirmed ones (from ``cfg`` or already in the file) stay."""
+    from . import secret_store
+
+    carried = dict(_secret_items(cfg))
+    for name, value in _secret_items(read_raw_config()):
+        carried.setdefault(name, value)
+    out = {k: v for k, v in cfg.items() if k not in secret_store.TOP_LEVEL_SECRET_FIELDS}
+    out.pop("api_keys", None)
+    moved = []
+    for name, value in carried.items():
+        if _store_confirmed(name, value):
+            moved.append(name)
+        else:
+            _put_in_file(out, name, value)
+    recorded = read_raw_config().get("secret_backend")
+    if recorded and not out.get("secret_backend"):
+        out["secret_backend"] = recorded
+    if moved:
+        logger.info(
+            "moved %d secrets to %s: %s",
+            len(moved), secret_store.backend_name(), ", ".join(moved),
+        )
+    return out
+
+
+def _has_secret_fields(data: dict[str, Any]) -> bool:
+    from . import secret_store
+
+    return "api_keys" in data or any(f in data for f in secret_store.TOP_LEVEL_SECRET_FIELDS)
+
+
+def _secret(name: str) -> str:
+    """The store's value, else a legacy value still in the file, else ""."""
+    from . import secret_store
+
+    value = secret_store.get_secret(name)
+    if value:
+        return value
+    return dict(_secret_items(read_raw_config())).get(name, "")
+
+
+def migrate_secrets() -> list[str]:
+    """Run the config file -> secret store migration now; return the names moved."""
+    ensure_dirs()
+    before = [n for n, _ in _secret_items(read_raw_config())]
+    load_config()
+    after = {n for n, _ in _secret_items(read_raw_config())}
+    return [n for n in before if n not in after]
+
+
 def get_api_key(provider: str) -> str:
     """Return API key for a given LLM provider, or empty string."""
-    cfg = load_config()
-    return cfg.get("api_keys", {}).get(provider, "")
+    from . import secret_store
+
+    name = f"api_key.{provider}"
+    if name not in secret_store.SECRET_FIELDS:
+        return ""
+    return _secret(name)
 
 
 def set_api_key(provider: str, key: str) -> None:
-    """Store an API key."""
-    cfg = load_config()
-    cfg.setdefault("api_keys", {})[provider] = key
-    save_config(cfg)
+    """Store an API key (empty deletes it)."""
+    from . import secret_store
+
+    name = f"api_key.{provider}"
+    if name not in secret_store.SECRET_FIELDS:
+        raise ValueError(f"unknown API key provider: {provider!r}")
+    secret_store.set_secret(name, key)
+
+
+def get_api_keys() -> dict[str, str]:
+    """Every provider's key ("" when unset), keyed by provider name."""
+    from . import secret_store
+
+    return {p: _secret(f"api_key.{p}") for p in secret_store.API_KEY_PROVIDERS}
 
 
 def get_tier() -> str:
@@ -298,15 +458,17 @@ def set_timezone(tz: str) -> None:
 def get_unipile_config() -> tuple[str, str]:
     """Return (api_url, api_key) from config."""
     cfg = load_config()
-    return cfg.get("unipile_api_url", ""), cfg.get("unipile_api_key", "")
+    return cfg.get("unipile_api_url", ""), _secret("unipile_api_key")
 
 
 def set_unipile_config(api_url: str, api_key: str) -> None:
     """Store Unipile credentials."""
+    from . import secret_store
+
     cfg = load_config()
     cfg["unipile_api_url"] = api_url.strip()
-    cfg["unipile_api_key"] = api_key.strip()
     save_config(cfg)
+    secret_store.set_secret("unipile_api_key", api_key)
 
 
 # ──────────────────────────────────────────────
@@ -321,16 +483,55 @@ def get_backend_config() -> tuple[str, str]:
     """
     cfg = load_config()
     url = cfg.get("backend_url", "") or constants.DEFAULT_BACKEND_URL
-    jwt_token = cfg.get("backend_jwt", "")
-    return url, jwt_token
+    problem = backend_url_problem(url)
+    if problem:
+        # Enforced where the JWT is read, not only in the setters: a URL
+        # written into the file by hand must not receive the token.
+        logger.error("backend_url refused, using %s: %s", constants.DEFAULT_BACKEND_URL, problem)
+        url = constants.DEFAULT_BACKEND_URL
+    return url, _secret("backend_jwt")
+
+
+_LOCAL_BACKEND_HOSTS = ("localhost", "127.0.0.1")
+
+
+def backend_url_problem(url: str) -> str | None:
+    """Why ``url`` may not receive the backend JWT, or None when it may.
+
+    https on heylead.dev or a subdomain of it, or localhost/127.0.0.1 for
+    development. HEYLEAD_ALLOW_CUSTOM_BACKEND=1 allows any URL.
+    """
+    if str(os.environ.get("HEYLEAD_ALLOW_CUSTOM_BACKEND") or "").strip() == "1":
+        return None
+    from urllib.parse import urlparse
+
+    parsed = urlparse(str(url or "").strip())
+    host = (parsed.hostname or "").lower()
+    if host in _LOCAL_BACKEND_HOSTS and parsed.scheme in ("http", "https"):
+        return None
+    if parsed.scheme != "https":
+        return "the backend URL must use https"
+    if host == "heylead.dev" or host.endswith(".heylead.dev"):
+        return None
+    return (
+        f"{host or 'that host'} is not a HeyLead backend; the token is only sent to "
+        "heylead.dev (set HEYLEAD_ALLOW_CUSTOM_BACKEND=1 to allow your own)"
+    )
 
 
 def set_backend_config(backend_url: str, jwt_token: str) -> None:
     """Store backend proxy credentials."""
     cfg = load_config()
     cfg["backend_url"] = backend_url.strip()
-    cfg["backend_jwt"] = jwt_token.strip()
     save_config(cfg)
+    set_backend_jwt(jwt_token)
+
+
+def set_backend_jwt(jwt_token: str) -> None:
+    """Store the backend JWT in the secret store (empty deletes it)."""
+    from . import secret_store
+
+    secret_store.set_secret("backend_jwt", jwt_token)
 
 
 def get_active_org_id() -> str:
@@ -385,8 +586,7 @@ def dashboard_snapshots_enabled() -> bool:
 
 def has_local_llm_key() -> bool:
     """Check if the user has any local LLM API key configured."""
-    cfg = load_config()
-    return any(v for v in cfg.get("api_keys", {}).values() if v)
+    return any(v for v in get_api_keys().values() if v)
 
 
 # ──────────────────────────────────────────────
@@ -405,14 +605,12 @@ def kb_path() -> Path:
 
 def get_firecrawl_api_key() -> str:
     """Return the Firecrawl API key from config, or empty string."""
-    cfg = load_config()
-    return cfg.get("firecrawl_api_key", "")
+    return _secret("firecrawl_api_key")
 
 
 def get_serper_api_key() -> str:
     """Return the SERPER API key from config, or empty string."""
-    cfg = load_config()
-    return cfg.get("api_keys", {}).get("serper", "")
+    return get_api_key("serper")
 
 
 # ──────────────────────────────────────────────

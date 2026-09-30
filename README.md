@@ -74,8 +74,9 @@ campaigns and inboxes stay private.
 
 1. **A Unipile account** — this is what talks to LinkedIn. Sign up at
    [unipile.com](https://www.unipile.com), then put the DSN and API key from
-   the Access Tokens page into `~/.heylead/config.json` as `unipile_api_url`
-   and `unipile_api_key`.
+   the Access Tokens page, then run `heylead config set unipile_api_url <DSN>`
+   and `heylead secrets set unipile_api_key` (it prompts; the key is kept in
+   your OS keychain, never in the config file).
 2. **An LLM API key** — AI calls are billed to you. A free
    [Gemini key](https://aistudio.google.com/apikey) is enough to start.
 
@@ -232,6 +233,19 @@ Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 e
 > **Power users:** Pass your own LLM key (Gemini/Claude/OpenAI) during setup to use your own AI. Completely optional.
 
 ---
+
+## Where secrets are kept
+
+HeyLead keeps its backend token, the Unipile key and any LLM keys in the OS
+credential store (macOS Keychain, Windows Credential Manager, Linux Secret
+Service), or in an owner-only `secrets.json` in the HeyLead folder when none
+exists. The config file holds ordinary settings only. To inspect an install
+without seeing a secret:
+
+- `heylead config get backend_url` prints one ordinary setting
+- `heylead api get /api/v1/campaigns` makes an authenticated read of the hosted API, credentials masked
+- `heylead secrets status` lists which secrets are stored, never their values
+- `heylead secrets clean` moves secrets out of an older config file, drops keys a cloud-sending install does not use, and deletes old config backup copies
 
 ## Backend mode & env
 

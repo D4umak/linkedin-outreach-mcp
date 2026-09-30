@@ -67,7 +67,8 @@ In-process agents default to act. Use `edit_campaign(enable_reply_agent="observe
 ## Authentication
 
 - **Hosted (easiest):** take the 90-second quiz at <https://heylead.dev/quiz>, then Sign in (Google). That claims the quiz as an Account brief and a **draft** campaign. Connect LinkedIn on Account, launch the draft — nothing sends before that. Or sign in at <https://heylead.dev/auth/login-url> and land on Account. Copy the token message and paste it into chat → `setup_profile(backend_jwt="...")`. Hosted users share a professional directory; campaigns and inboxes stay private. Organizations let an owner invite editors (run campaigns) and viewers (stats only). Switch in the dashboard sidebar or with `organization(action="switch", org_id="...")`. The waitlist on `/quiz` is marketing-only and does not create a campaign.
-- **Self-hosted:** a Unipile account (LinkedIn access) plus the user's own LLM key in `~/.heylead/config.json`; run `setup_profile()` with no token.
+- **Self-hosted:** a Unipile account (LinkedIn access) plus the user's own LLM key, passed as `setup_profile(llm_api_key=...)` (kept in the OS keychain, not in a file).
+- **Inspecting an install or production:** never open the HeyLead config file. `heylead config get <setting>` prints one ordinary setting, `heylead api get /api/v1/...` makes an authenticated read with credentials masked, and `heylead secrets status` names the stored secrets without values.
 - Optional: bring your own key (Gemini/Claude/OpenAI) via `setup_profile(llm_api_key="...")`.
 
 ## All 22 Tools

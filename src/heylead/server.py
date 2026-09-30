@@ -33,6 +33,12 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.424 (2026-09-30)
+- Fix: API keys and the login token now live in the OS keychain (or an owner-only file when there is none), never in the plaintext config file. Existing installs move them over on first start, and nothing is removed from the file until the keychain reads it back (#2061)
+- New: `heylead config get <setting>`, `heylead api get /api/v1/...` (keys masked), `heylead secrets status`, `heylead secrets set <name>` and `heylead secrets clean` (#2061)
+- Fix: a locked or hung keychain never stops sending: one short wait, then the fallback for five minutes (#2061)
+- Fix: the login token is only ever sent to heylead.dev (#2061)
+
 ## v0.10.423 (2026-09-30)
 - New: every campaign carries an Offer card: what changes for the person you write to, in plain words, and one question. create_campaign writes it from your paste and shows it; launch confirms it; edit_campaign(offer_outcome=..., offer_ask=..., offer_confirm='on') edits and confirms it (#1993)
 - New: first messages on a campaign wait until its Offer card is confirmed; invitations, replies and follow-ups keep going (#1993)
@@ -1851,8 +1857,9 @@ mcp = FastMCP(
         "  They need two things, and setup_profile refuses to run without them:\n"
         "  1. A Unipile account (this is what talks to LinkedIn).\n"
         "     Sign up at https://www.unipile.com, then copy the DSN and API key\n"
-        "     from the Access Tokens page into ~/.heylead/config.json as\n"
-        "     unipile_api_url and unipile_api_key.\n"
+        "     from the Access Tokens page and run in a terminal:\n"
+        "     heylead config set unipile_api_url <the DSN>, then\n"
+        "     heylead secrets set unipile_api_key (it prompts; the key goes to the OS keychain).\n"
         "  2. An LLM API key of their own — a free Gemini key from\n"
         "     https://aistudio.google.com/apikey is enough.\n"
         "  Then walk them through:\n"

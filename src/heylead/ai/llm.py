@@ -138,7 +138,7 @@ class LLMClient:
 
     def __init__(self, transport: httpx.BaseTransport | None = None) -> None:
         cfg = config.load_config()
-        self.api_keys: dict[str, str] = cfg.get("api_keys", {})
+        self.api_keys: dict[str, str] = config.get_api_keys()
         self.priority: list[str] = cfg.get("llm_priority", constants.DEFAULT_LLM_PRIORITY)
         self._configured_models: dict[str, str] = {
             "gemini": cfg.get("gemini_model", ""),
@@ -207,10 +207,8 @@ class LLMClient:
         if not providers:
             raise LLMError(
                 "No LLM API keys configured.\n\n"
-                "Add at least one API key to ~/.heylead/config.json:\n"
-                '  "api_keys": {\n'
-                '    "gemini": "YOUR_KEY_HERE"\n'
-                "  }\n\n"
+                "Add one with setup_profile(llm_api_key='YOUR_KEY'); HeyLead keeps "
+                "it in the OS keychain, not in a file.\n\n"
                 "Get a free Gemini key at: https://aistudio.google.com/apikey"
             )
 

@@ -564,7 +564,7 @@ def _credits_from_balance(data: dict) -> int:
 class UnipileClient:
     """Async Unipile HTTP client for LinkedIn operations.
 
-    Config loaded from ~/.heylead/config.json:
+    Config: unipile_api_url from the config file, the key from the secret store:
         unipile_api_url: e.g. "https://apiXX.unipile.com:XXXXX"
         unipile_api_key: X-API-KEY header value
     """
@@ -4858,10 +4858,8 @@ class UnipileClient:
 # ──────────────────────────────────────────────
 
 def get_unipile_client() -> UnipileClient:
-    """Create a UnipileClient from config.json settings."""
-    cfg = config.load_config()
-    api_url = cfg.get("unipile_api_url", "")
-    api_key = cfg.get("unipile_api_key", "")
+    """Create a UnipileClient from the stored Unipile settings."""
+    api_url, api_key = config.get_unipile_config()
     if not api_url or not api_key:
         raise UnipileError(
             "Unipile not configured.\n\n"

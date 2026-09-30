@@ -38,6 +38,9 @@ def _parse_serve_args(args: list[str]) -> dict:
 USAGE = """usage: heylead [--transport stdio|sse|streamable-http] [--host H] [--port P]
        heylead init | version | reset
        heylead config telemetry on|off|status
+       heylead config get <setting> | config set <setting> <value>
+       heylead api get /api/v1/<path>
+       heylead secrets status | set <name> | clean [--yes]
        heylead daemon [--install [--load] | --uninstall | --status]
 
 With no command, heylead starts the MCP server. `heylead daemon` with no
@@ -94,10 +97,15 @@ def main() -> None:
             sys.exit(run_daemon())
 
     elif cmd == "config":
-        # Only one setting has a command so far: tool-call telemetry (api #1204).
+        # get/set never touch a secret (api #2061); telemetry is api #1204.
+        from .cli import secrets_cli
+        code = secrets_cli.main_config(args[1:])
+        if code is not None:
+            sys.exit(code)
         rest = [a.lower() for a in args[1:]]
         if len(rest) != 2 or rest[0] != "telemetry" or rest[1] not in ("on", "off", "status"):
-            print("usage: heylead config telemetry on|off|status", file=sys.stderr)
+            print("usage: heylead config telemetry on|off|status | get <setting> | set <setting> <value>",
+                  file=sys.stderr)
             sys.exit(2)
         from . import config
         if rest[1] != "status":
@@ -105,6 +113,14 @@ def main() -> None:
         state = "on" if config.telemetry_enabled() else "off"
         print(f"Tool-call telemetry is {state}. It sends the tool name, whether it worked "
               "and how long it took. Never what you or your prospects wrote.")
+
+    elif cmd == "api":
+        from .cli import secrets_cli
+        sys.exit(secrets_cli.main_api(args[1:]))
+
+    elif cmd == "secrets":
+        from .cli import secrets_cli
+        sys.exit(secrets_cli.main_secrets(args[1:]))
 
     elif cmd == "init":
         from . import config
@@ -136,6 +152,11 @@ def main() -> None:
             cookie_path = config.cookie_path()
             if cookie_path.exists():
                 cookie_path.unlink()
+
+            # Remove stored secrets (api #2061: they are not in the config file)
+            from . import secret_store
+            for name in secret_store.SECRET_FIELDS:
+                secret_store.delete_secret(name)
 
             # Remove config
             cfg_path = config.config_path()
