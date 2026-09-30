@@ -1,7 +1,7 @@
 """Tool: create_post — Generate and publish voice-matched posts.
 
-Creates posts on LinkedIn, X/Twitter, or both using the user's voice signature.
-Supports social selling by building authority and driving inbound connections.
+Creates LinkedIn posts in the user's voice. X posting is dormant: see
+X_POSTING_AVAILABLE.
 """
 
 from __future__ import annotations
@@ -15,6 +15,10 @@ from ..services.campaign_naming import cut_at_word
 
 logger = logging.getLogger(__name__)
 
+# X posting stays off until the hosted server holds X credentials (heylead-api#1399).
+X_POSTING_AVAILABLE = False
+X_NOT_AVAILABLE = "X posting isn't available in HeyLead yet; this post was not sent to X."
+
 
 async def run_create_post(
     topic: str = "",
@@ -22,14 +26,19 @@ async def run_create_post(
     platforms: str = "linkedin",
     image: str = "",
 ) -> str:
-    """Generate and publish a voice-matched post.
+    """Generate and publish a voice-matched LinkedIn post.
 
     Args:
         topic: What to post about.
         tone: Post tone: "professional", "casual", "thought-leader", "storytelling".
-        platforms: Comma-separated platforms: "linkedin", "x", or "linkedin,x".
-        image: Optional path to a photo to attach (LinkedIn only).
+        platforms: "linkedin". A request that names X gets X_NOT_AVAILABLE and
+            nothing is sent to X; LinkedIn, if also named, still posts.
+        image: Optional path to a photo to attach.
     """
+    platform_list = [p.strip().lower() for p in platforms.split(",")]
+    wants_x = "x" in platform_list or "twitter" in platform_list
+    if wants_x and not X_POSTING_AVAILABLE and "linkedin" not in platform_list:
+        return X_NOT_AVAILABLE
 
     # ── Pre-checks ──
     setup_done = await run_db(get_setting, "setup_complete", False)
@@ -48,8 +57,6 @@ async def run_create_post(
             '  create_post(topic="share a lesson learned this week")'
         )
 
-    platform_list = [p.strip().lower() for p in platforms.split(",")]
-
     # Check at least one platform has credentials.
     # Off the loop: get_account_id is a sync DB read and db.get_db refuses one
     # on the event loop thread. It caches after it succeeds once, so calling it
@@ -57,10 +64,11 @@ async def run_create_post(
     # want the account — a freshly restarted MCP server, exactly.
     account_id = await run_db(get_account_id)
     has_linkedin = "linkedin" in platform_list and bool(account_id)
-    has_x = ("x" in platform_list or "twitter" in platform_list)
+    has_x = wants_x and X_POSTING_AVAILABLE
 
     if not has_linkedin and not has_x:
-        return "No accounts connected. Run setup_profile first."
+        answer = "No accounts connected. Run setup_profile first."
+        return f"{answer}\n\n{X_NOT_AVAILABLE}" if wants_x else answer
 
     # Before generation: a rejected path should not cost an LLM call, and a
     # post that cannot carry its image should not go out without one.
@@ -108,6 +116,8 @@ async def run_create_post(
             profile=profile,
         )
         output_parts.append(result)
+    elif wants_x:
+        output_parts.append(X_NOT_AVAILABLE)
 
     return "\n\n---\n\n".join(output_parts)
 

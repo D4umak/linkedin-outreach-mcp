@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.422 (2026-09-30)
+- Fix: stop listing X posting until it works (#1399)
+- Fix: a skipped outreach carries a reason, never the bare word "skipped"
+
 ## v0.10.421 (2026-09-29)
 - the copy gate allows 'works in ChatGPT' and 'works in claude.ai' as proven (#1123)
 - Fix: the rest of the audit: no closes-deals, full quota lines, six goals in the plugin and create_campaign (#1399)
@@ -3422,26 +3426,24 @@ async def _scheduler_impl(
 # Tool 29: create_post
 # ──────────────────────────────────────────────
 
-@mcp.tool(annotations=_acts("Publish a post to LinkedIn or X"))
+@mcp.tool(annotations=_acts("Publish a post to LinkedIn"))
 async def create_post(
     topic: str = "",
     tone: str = "professional",
     platforms: str = "linkedin",
     image: str = "",
 ) -> str:
-    """Generate and publish a voice-matched post to LinkedIn, X/Twitter, or both.
+    """Generate and publish a voice-matched post to LinkedIn.
 
-    Creates posts using your voice signature for social selling.
-    Builds authority and drives inbound connections across platforms.
+    Writes the post in your voice and publishes it immediately on your own
+    LinkedIn account. LinkedIn is the only platform HeyLead posts to.
 
     Args:
         topic: What to post about (e.g., "share a tip about cold outreach",
             "comment on AI in sales", "share a success story").
         tone: Post tone: "professional", "casual", "thought-leader", "storytelling".
-        platforms: Comma-separated platforms: "linkedin", "x", or "linkedin,x".
-        image: Path to a photo to attach. LinkedIn only — a tweet is posted
-            without it. png, jpg, gif or webp, up to 10MB.
-        mode: "autopilot" (publishes immediately).
+        platforms: "linkedin" (the only one).
+        image: Path to a photo to attach. png, jpg, gif or webp, up to 10MB.
     """
     from .tools.create_post import run_create_post
     from .tools.organization import refuse_if_viewer

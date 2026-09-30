@@ -162,7 +162,10 @@ def _skip_underperformers(campaign_id: str) -> list[dict[str, Any]]:
             if (p.get("company", "") == seg_company
                     and p.get("title", "") == seg_title):
                 try:
-                    update_outreach(p["id"], status="skipped")
+                    update_outreach(
+                        p["id"], status="skipped",
+                        last_attempt_error="underperforming_segment",
+                    )
                     skipped_count += 1
                 except Exception:
                     pass

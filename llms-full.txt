@@ -213,7 +213,7 @@ default; setting the variable gives a session the full set of 47.
 | `signals` | Read the buying signals found for your campaigns. Reads only. |
 | `tune_signals` | Change how signals are found, scored or acted on. |
 | `manage_watchlist` | Add, remove, and list signal keyword watchlists. |
-| `create_post` | Generate and publish a voice-matched post to LinkedIn, X/Twitter, or both. |
+| `create_post` | Generate and publish a voice-matched post to LinkedIn. |
 | `brand_strategy` | Plan the personal-brand work, run it, or change your LinkedIn profile. |
 | `brand_progress` | Read the brand analysis and progress against the plan. Reads only. |
 | `partner` | Record a partner, vendor or investor follow-up, or change one. |

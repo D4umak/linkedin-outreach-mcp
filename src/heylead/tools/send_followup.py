@@ -622,7 +622,9 @@ async def run_send_followup(
         return f"Failed to generate follow-up: {e}"
 
     if is_evaluator_refusal(message):
-        await db.update_outreach(outreach_id, status="skipped")
+        await db.update_outreach(
+            outreach_id, status="skipped", last_attempt_error="evaluator_refusal",
+        )
         await db.log_action(
             "evaluator_refusal_skipped",
             outreach_id=outreach_id,

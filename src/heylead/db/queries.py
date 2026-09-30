@@ -1255,6 +1255,16 @@ _CONTACTED_STATUSES = frozenset({
 })
 
 
+def _caller_name() -> str:
+    """``module:function`` of the first frame outside this module."""
+    import inspect
+    for frame in inspect.stack()[2:8]:
+        mod = frame.frame.f_globals.get("__name__", "")
+        if not mod.endswith("db.queries"):
+            return f"{mod}:{frame.function}"
+    return "?"
+
+
 def update_outreach(outreach_id: str, **kwargs: Any) -> bool:
     expected_status = kwargs.pop("expected_status", None)
     from_cloud = kwargs.pop("from_cloud", False)
@@ -1288,7 +1298,13 @@ def update_outreach(outreach_id: str, **kwargs: Any) -> bool:
             return False
         if new_status == "skipped":
             if not kwargs.get("last_attempt_error"):
-                kwargs["last_attempt_error"] = "skipped"
+                # The bare word said nothing about why. Name the caller so the
+                # next reasonless site is one grep away (heylead-api#1969).
+                kwargs["last_attempt_error"] = "unrecorded"
+                logger.warning(
+                    "Outreach %s skipped without a reason (caller: %s)",
+                    outreach_id, _caller_name(),
+                )
             contacted = old_status in _CONTACTED_STATUSES or bool(invited_at)
             if not contacted:
                 msg = db.execute(

@@ -1210,7 +1210,10 @@ async def run_generate_and_send(
                     "last_msg": sdr_msgs[-1].get("text", "")[:100],
                 },
             )
-            await adb.update_outreach(outreach_id, status="skipped")
+            await adb.update_outreach(
+                outreach_id, status="skipped",
+                last_attempt_error="cross_campaign_thread",
+            )
             return (
                 f"⏭️ Skipped {prospect.get('name', 'Unknown')} — "
                 f"already messaged in another thread ({len(sdr_msgs)} prior message(s))."
@@ -1291,7 +1294,9 @@ async def run_generate_and_send(
     # and Fix would turn that into a sendable buyer ask to the wrong person.
     if is_evaluator_refusal(message):
         await _release_claim()
-        await adb.update_outreach(outreach_id, status="skipped")
+        await adb.update_outreach(
+            outreach_id, status="skipped", last_attempt_error="evaluator_refusal",
+        )
         await adb.log_action(
             "evaluator_refusal_skipped",
             outreach_id=outreach_id,
