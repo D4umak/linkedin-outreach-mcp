@@ -163,6 +163,11 @@ def secrets_status() -> int:
         print("Stored: " + ", ".join(names))
     else:
         print("Stored: none")
+    in_file = secret_store.file_store_names()
+    if secret_store.backend_name() == "keyring" and in_file:
+        in_keyring = [n for n in names if n not in in_file]
+        print("  in the keyring: " + (", ".join(in_keyring) or "none"))
+        print(f"  in the file store {secret_store._file_path().name}: " + ", ".join(in_file))
     leftovers = _backup_copies()
     if leftovers:
         print("Config backup copies that may hold secrets: "

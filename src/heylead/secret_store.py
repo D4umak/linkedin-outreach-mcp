@@ -140,6 +140,10 @@ def _record_backend(name: str) -> None:
 
     if _recorded_backend():
         return
+    if name == "keyring" and _read_file():
+        # Recording keyring now would be read later as "the file store is not
+        # in use"; wait until what is in the file has moved across.
+        return
     try:
         config.record_secret_backend(name)
     except OSError as e:
@@ -302,15 +306,43 @@ def get_secret(name: str) -> str:
     (config._secret).
     """
     _check_name(name)
-    if backend_name() == "keyring":
-        try:
-            if not _keyring_usable():
-                raise SecretStoreError("no usable keyring backend")
-            return _kr_get(name)
-        except SecretStoreError as e:
-            _warn_once("kr-read", "keyring unavailable (%s); reading %s from the file store", e, name)
-            return _read_file().get(name, "")
-    return _read_file().get(name, "")
+    if backend_name() != "keyring":
+        return _read_file().get(name, "")
+    try:
+        if not _keyring_usable():
+            raise SecretStoreError("no usable keyring backend")
+        value = _kr_get(name)
+    except SecretStoreError as e:
+        _warn_once("kr-read", "keyring unavailable (%s); reading %s from the file store", e, name)
+        return _read_file().get(name, "")
+    if value:
+        return value
+    # The keyring is empty for this name. An earlier build may have put the
+    # value in the file store (v0.10.424: the daemon lost its token that way),
+    # so read it there and move it across once the copy reads back.
+    value = _read_file().get(name, "")
+    if value:
+        _move_file_value_to_keyring(name, value)
+    return value
+
+
+def _move_file_value_to_keyring(name: str, value: str) -> None:
+    try:
+        _kr_set(name, value)
+        copied = _kr_get(name) == value
+    except SecretStoreError as e:
+        _warn_once(f"kr-move:{name}", "kept %s in the file store: keyring copy failed (%s)", name, e)
+        return
+    if not copied:
+        _warn_once(f"kr-move:{name}", "kept %s in the file store: keyring copy did not read back", name)
+        return
+    try:
+        data = _file_for_update()
+        if data.pop(name, None) is not None:
+            _write_file(data)
+        logger.info("moved %s from the file store to the keyring", name)
+    except OSError as e:
+        logger.warning("copied %s to the keyring; file store not updated (%s)", name, type(e).__name__)
 
 
 def set_secret(name: str, value: str) -> None:
@@ -357,8 +389,14 @@ def delete_secret(name: str) -> None:
 
 
 def stored_secret_names() -> list[str]:
-    """Names with a non-empty stored value. Never the values."""
+    """Names with a non-empty value in either store. Never the values."""
     return [n for n in SECRET_FIELDS if get_secret(n)]
+
+
+def file_store_names() -> list[str]:
+    """Names that still sit in the owner-only file store."""
+    data = _read_file()
+    return [n for n in SECRET_FIELDS if data.get(n)]
 
 
 def clear_cache() -> None:

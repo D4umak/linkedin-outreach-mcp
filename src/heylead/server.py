@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.425 (2026-09-30)
+- Fix: a key or token left in the fallback secrets file is found when the keychain is in use, and moved into the keychain (#2061)
+
 ## v0.10.424 (2026-09-30)
 - Fix: API keys and the login token now live in the OS keychain (or an owner-only file when there is none), never in the plaintext config file. Existing installs move them over on first start, and nothing is removed from the file until the keychain reads it back (#2061)
 - New: `heylead config get <setting>`, `heylead api get /api/v1/...` (keys masked), `heylead secrets status`, `heylead secrets set <name>` and `heylead secrets clean` (#2061)
