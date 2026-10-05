@@ -1248,130 +1248,20 @@ async def run_generate_and_send(
     from ..services.action_timeline import action_timeline_text
     action_timeline = await action_timeline_text(outreach_id)
 
-    # Attempt 1: Generate + Improve + Validate (+ Fix if needed)
-    try:
-        result = await generate_message(
-            prospect=prospect_data,
-            sender_profile=sender_profile,
-            voice_signature=voice_signature,
-            campaign_context=campaign_context,
-            prospect_analysis=prospect_analysis,
-            campaign_ctx=campaign_ctx,
-            conversation_history=conversation_history,
-            brief=message_brief,
-            max_chars=note_max,
-            action_timeline=action_timeline,
+    # A campaign may invite without a note (api #2171): nothing is written
+    # for the invitation, and the first words the person reads are the DM
+    # sent a working day after they accept.
+    from ..flags import flag_enabled
+    note_off = channel == CHANNEL_LINKEDIN and not flag_enabled(
+        campaign_config, "invite_note", default=True,
+    )
+    if note_off:
+        logger.info(
+            "Invitation to %s goes without a note: the campaign's invite_note is off",
+            prospect.get("name", "Unknown"),
         )
-        message = result["message"]
-        reasoning = result.get("reasoning", "")
-    except Exception as e:
-        logger.error(f"Message generation failed: {e}")
-        await _release_claim()
-        return f"❌ Failed to generate message: {e}"
-
-    # The job-search writer refused its own draft twice (api #1416). Held,
-    # not handed to Fix: Fix would write a message from nothing.
-    if result.get("held"):
-        await adb.log_action("validation_blocked", outreach_id=outreach_id, result="blocked",
-                   details={"issues": [result["held"]]})
-        await _release_claim()
-        return (
-            f"⚠️ Message for {prospect.get('name', 'Unknown')} was held: "
-            f"{result['held']}\n\nThe message was NOT sent."
-        )
-
-    def _validate(text: str):
-        """validate_message, plus the job-search presumption check (api #1416)."""
-        checked = validate_message(text, voice_signature, note_max, reader_text=reader_text_for(prospect_data))
-        check_job_search_draft(
-            checked, text, prospect=prospect_data, campaign_config=campaign_context,
-            campaign_ctx=campaign_ctx, analysis=prospect_analysis,
-        )
-        return checked
-
-    # Log reasoning for debugging/quality analysis
-    if reasoning:
-        await adb.log_action("message_reasoning", outreach_id=outreach_id,
-                   details={"reasoning": reasoning[:500]})
-    from dataclasses import asdict as _asdict
-    await adb.log_action("message_brief", outreach_id=outreach_id,
-               details=_asdict(message_brief))
-
-    # The model sometimes writes a skip rationale as the "message". Improve
-    # and Fix would turn that into a sendable buyer ask to the wrong person.
-    if is_evaluator_refusal(message):
-        await _release_claim()
-        await adb.update_outreach(
-            outreach_id, status="skipped", last_attempt_error="evaluator_refusal",
-        )
-        await adb.log_action(
-            "evaluator_refusal_skipped",
-            outreach_id=outreach_id,
-            result="skipped",
-            details={"draft": message[:300]},
-        )
-        return (
-            f"⏭️ Skipped {prospect.get('name', 'Unknown')} — model refused the "
-            f"brief (not an ICP match). The refusal was not sent."
-        )
-
-    # Improve stage — polish for naturalness
-    try:
-        message = await improve_message(
-            draft=message,
-            voice_signature=voice_signature,
-            message_type="invitation",
-            max_chars=note_max,
-            intent=campaign_intent,
-            brief=message_brief,
-        )
-    except Exception as e:
-        logger.warning(f"Improve stage failed, using raw message: {e}")
-
-    # Validate (rule-based)
-    validation = _validate(message)
-
-    # LLM validation — context-sensitive checks (guardrails, company names, etc.)
-    if validation.is_valid:
-        try:
-            sender_company = sender_profile.get("company", "")
-            prospect_co = prospect_data.get("company", prospect.get("company", ""))
-            llm_result = await llm_validate(
-                message=message,
-                history=[],
-                company=sender_company,
-                message_type="invitation",
-                prospect_company=prospect_co,
-                max_chars=note_max,
-                intent=campaign_intent,
-            )
-            if not llm_result.is_valid:
-                validation.issues.extend(llm_result.issues)
-                validation.is_valid = False
-                logger.info("LLM validation caught invitation issues: %s", llm_result.issues)
-        except Exception as e:
-            logger.warning(f"LLM validation skipped: {e}")
-
-    # Fix stage — if validation failed, surgically fix issues
-    if not validation.is_valid:
-        logger.info(f"Validation failed, attempting fix: {validation.issues}")
-        try:
-            message = await fix_message(
-                message=message,
-                issues=validation.issues,
-                voice_signature=voice_signature,
-                message_type="invitation",
-                max_chars=note_max,
-                intent=campaign_intent,
-                brief=message_brief,
-            )
-            validation = _validate(message)
-        except Exception as e:
-            logger.warning(f"Fix stage failed: {e}")
-
-    # Last resort: regenerate from scratch if still invalid
-    if not validation.is_valid:
-        logger.info(f"Fix failed, regenerating from scratch: {validation.issues}")
+    if not note_off:
+        # Attempt 1: Generate + Improve + Validate (+ Fix if needed)
         try:
             result = await generate_message(
                 prospect=prospect_data,
@@ -1381,9 +1271,65 @@ async def run_generate_and_send(
                 prospect_analysis=prospect_analysis,
                 campaign_ctx=campaign_ctx,
                 conversation_history=conversation_history,
+                brief=message_brief,
                 max_chars=note_max,
+                action_timeline=action_timeline,
             )
             message = result["message"]
+            reasoning = result.get("reasoning", "")
+        except Exception as e:
+            logger.error(f"Message generation failed: {e}")
+            await _release_claim()
+            return f"❌ Failed to generate message: {e}"
+
+        # The job-search writer refused its own draft twice (api #1416). Held,
+        # not handed to Fix: Fix would write a message from nothing.
+        if result.get("held"):
+            await adb.log_action("validation_blocked", outreach_id=outreach_id, result="blocked",
+                       details={"issues": [result["held"]]})
+            await _release_claim()
+            return (
+                f"⚠️ Message for {prospect.get('name', 'Unknown')} was held: "
+                f"{result['held']}\n\nThe message was NOT sent."
+            )
+
+        def _validate(text: str):
+            """validate_message, plus the job-search presumption check (api #1416)."""
+            checked = validate_message(text, voice_signature, note_max, reader_text=reader_text_for(prospect_data))
+            check_job_search_draft(
+                checked, text, prospect=prospect_data, campaign_config=campaign_context,
+                campaign_ctx=campaign_ctx, analysis=prospect_analysis,
+            )
+            return checked
+
+        # Log reasoning for debugging/quality analysis
+        if reasoning:
+            await adb.log_action("message_reasoning", outreach_id=outreach_id,
+                       details={"reasoning": reasoning[:500]})
+        from dataclasses import asdict as _asdict
+        await adb.log_action("message_brief", outreach_id=outreach_id,
+                   details=_asdict(message_brief))
+
+        # The model sometimes writes a skip rationale as the "message". Improve
+        # and Fix would turn that into a sendable buyer ask to the wrong person.
+        if is_evaluator_refusal(message):
+            await _release_claim()
+            await adb.update_outreach(
+                outreach_id, status="skipped", last_attempt_error="evaluator_refusal",
+            )
+            await adb.log_action(
+                "evaluator_refusal_skipped",
+                outreach_id=outreach_id,
+                result="skipped",
+                details={"draft": message[:300]},
+            )
+            return (
+                f"⏭️ Skipped {prospect.get('name', 'Unknown')} — model refused the "
+                f"brief (not an ICP match). The refusal was not sent."
+            )
+
+        # Improve stage — polish for naturalness
+        try:
             message = await improve_message(
                 draft=message,
                 voice_signature=voice_signature,
@@ -1392,24 +1338,91 @@ async def run_generate_and_send(
                 intent=campaign_intent,
                 brief=message_brief,
             )
-            validation = _validate(message)
         except Exception as e:
-            logger.error(f"Regeneration failed: {e}")
+            logger.warning(f"Improve stage failed, using raw message: {e}")
 
-    if not validation or not validation.is_valid:
-        issues_text = "\n".join(f"  ⚠️ {issue}" for issue in (validation.issues if validation else []))
-        # Never send a message that failed validation.
-        logger.warning(f"Blocked invalid message: {issues_text}")
-        await adb.log_action("validation_blocked", outreach_id=outreach_id, result="blocked",
-                   details={"issues": validation.issues if validation else []})
-        await _release_claim()
-        return (
-            f"⚠️ Message for {prospect.get('name', 'Unknown')} failed validation "
-            f"after Generate → Improve → Fix pipeline.\n\n"
-            f"Issues:\n{issues_text}\n\n"
-            "The message was NOT sent to protect your account.\n"
-            "Check message validation errors and try again."
-        )
+        # Validate (rule-based)
+        validation = _validate(message)
+
+        # LLM validation — context-sensitive checks (guardrails, company names, etc.)
+        if validation.is_valid:
+            try:
+                sender_company = sender_profile.get("company", "")
+                prospect_co = prospect_data.get("company", prospect.get("company", ""))
+                llm_result = await llm_validate(
+                    message=message,
+                    history=[],
+                    company=sender_company,
+                    message_type="invitation",
+                    prospect_company=prospect_co,
+                    max_chars=note_max,
+                    intent=campaign_intent,
+                )
+                if not llm_result.is_valid:
+                    validation.issues.extend(llm_result.issues)
+                    validation.is_valid = False
+                    logger.info("LLM validation caught invitation issues: %s", llm_result.issues)
+            except Exception as e:
+                logger.warning(f"LLM validation skipped: {e}")
+
+        # Fix stage — if validation failed, surgically fix issues
+        if not validation.is_valid:
+            logger.info(f"Validation failed, attempting fix: {validation.issues}")
+            try:
+                message = await fix_message(
+                    message=message,
+                    issues=validation.issues,
+                    voice_signature=voice_signature,
+                    message_type="invitation",
+                    max_chars=note_max,
+                    intent=campaign_intent,
+                    brief=message_brief,
+                )
+                validation = _validate(message)
+            except Exception as e:
+                logger.warning(f"Fix stage failed: {e}")
+
+        # Last resort: regenerate from scratch if still invalid
+        if not validation.is_valid:
+            logger.info(f"Fix failed, regenerating from scratch: {validation.issues}")
+            try:
+                result = await generate_message(
+                    prospect=prospect_data,
+                    sender_profile=sender_profile,
+                    voice_signature=voice_signature,
+                    campaign_context=campaign_context,
+                    prospect_analysis=prospect_analysis,
+                    campaign_ctx=campaign_ctx,
+                    conversation_history=conversation_history,
+                    max_chars=note_max,
+                )
+                message = result["message"]
+                message = await improve_message(
+                    draft=message,
+                    voice_signature=voice_signature,
+                    message_type="invitation",
+                    max_chars=note_max,
+                    intent=campaign_intent,
+                    brief=message_brief,
+                )
+                validation = _validate(message)
+            except Exception as e:
+                logger.error(f"Regeneration failed: {e}")
+
+        if not validation or not validation.is_valid:
+            issues_text = "\n".join(f"  ⚠️ {issue}" for issue in (validation.issues if validation else []))
+            # Never send a message that failed validation.
+            logger.warning(f"Blocked invalid message: {issues_text}")
+            await adb.log_action("validation_blocked", outreach_id=outreach_id, result="blocked",
+                       details={"issues": validation.issues if validation else []})
+            await _release_claim()
+            return (
+                f"⚠️ Message for {prospect.get('name', 'Unknown')} failed validation "
+                f"after Generate → Improve → Fix pipeline.\n\n"
+                f"Issues:\n{issues_text}\n\n"
+                "The message was NOT sent to protect your account.\n"
+                "Check message validation errors and try again."
+            )
 
     # ── Step 4: Copilot vs Autopilot ──
     prospect_name = prospect.get("name", "Unknown")

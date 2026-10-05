@@ -23,6 +23,7 @@ async def guard_draft(
     max_chars: int,
     *,
     first_touch: bool = False,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> str:
     """Return text that passes validate_message, or "" if it cannot be fixed.
 
@@ -31,6 +32,9 @@ async def guard_draft(
     inbound discovery, counter-pitch, email, posts — is a reply to
     something the reader already sent, or a post nobody solicited, so the
     default is False; a future invitation-shaped caller passes True.
+
+    conversation_history: the thread a reply continues, for the repair. A
+    repair that cannot see it rewrites the reply as a new message (api #2171).
     """
     draft = (text or "").strip()
     if not draft:
@@ -50,6 +54,7 @@ async def guard_draft(
             voice_signature=voice_signature or {},
             message_type=message_type,
             max_chars=max_chars,
+            conversation_history=conversation_history,
         )
     except Exception as e:
         logger.warning("guard_draft fix failed for %s: %s", message_type, e)

@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 from .length_fixer import shorten_to_limit
+from .message_improver import _recent_turns
 from .llm import LLMClient
 from .prompt_loader import get_prompt_temperature, has_prompt, load_fragment, render_prompt
 from .voice_block import voice_prompt_block
@@ -63,6 +64,7 @@ async def fix_message(
     max_chars: int = 200,
     intent: str = "sell",
     brief: Any = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> str:
     """Fix specific validation issues in a message while preserving intent.
 
@@ -74,6 +76,9 @@ async def fix_message(
         voice_signature: User's voice analysis (tone, vocabulary, patterns).
         message_type: Type of message: "invitation", "followup", or "comment".
         max_chars: Character limit for the message.
+        conversation_history: The thread a follow-up or reply continues. A
+            repair that cannot see it rewrites the continuation as a new
+            message (api #2171); the last turns go to the model.
 
     Returns:
         Fixed message string. Returns original message if fix fails.
@@ -96,6 +101,7 @@ async def fix_message(
                 voice=voice_signature,
                 message_type=message_type,
                 max_chars=max_chars,
+                conversation_history=_recent_turns(conversation_history) or None,
             )
         except Exception as e:
             logger.warning(f"Backend fix_message failed, returning original: {e}")
@@ -105,6 +111,15 @@ async def fix_message(
 
     # Format issues for the prompt
     issues_text = "\n".join(f"- {issue}" for issue in issues)
+    tail = _recent_turns(conversation_history)
+    if tail:
+        issues_text += (
+            "\n\nRECENT THREAD (the message continues this; keep it the next "
+            "turn of this conversation):\n"
+            + "\n".join(
+                f"- {'You' if t['role'] == 'sdr' else 'Them'}: {t['text']}" for t in tail
+            )
+        )
 
     tpl_vars = {
         "message_type": message_type,

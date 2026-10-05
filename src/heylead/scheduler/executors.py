@@ -881,6 +881,23 @@ async def _execute_send_dm(job: dict[str, Any]) -> str | JobResult:
     # the first visible bubble a "Following…" continuation. The first
     # send_dm after accept is the opener. Follow-up jobs handle the next
     # touch once a real DM exists.
+    #
+    # It waits one working day after an accepted note: the person has just
+    # read the note, and a second bubble minutes later reads as a sequence
+    # firing (api #2171). A reply inside the wait ends the job above, as a
+    # status that is no longer pending/connected.
+    from ..db.queries import first_dm_not_before
+    due = await run_db(first_dm_not_before, outreach_id) if outreach_id else 0
+    if due:
+        wait = max(int(due - time.time()), 60)
+        await db.log_action(
+            "dm_waits_after_invite_note", outreach_id=outreach_id,
+            campaign_id=campaign_id, result="deferred",
+            details={"due_at": int(due)},
+        )
+        message = "First DM waits a working day after an accepted invitation note"
+        await _track_plan_execution(job, "send_dm", message, outcome="deferred")
+        return JobResult("deferred", message, retry_after_seconds=wait)
 
     result = await run_generate_and_send(
         campaign_id=campaign_id,

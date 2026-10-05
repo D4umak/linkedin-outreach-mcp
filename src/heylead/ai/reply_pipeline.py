@@ -185,6 +185,7 @@ async def run_reply_pipeline(
                 max_chars=max_chars,
                 intent=campaign_intent,
                 brief=message_brief,
+                conversation_history=conversation_history,
             )
             validation = validate_reply(
                 message,
@@ -222,6 +223,7 @@ async def run_reply_pipeline(
                 max_chars=max_chars,
                 intent=campaign_intent,
                 brief=message_brief,
+                conversation_history=conversation_history,
             )
             validation = validate_reply(
                 message,

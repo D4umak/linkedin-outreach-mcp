@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.429 (2026-10-05)
+- Fix: client twin of #2171: the first DM after a note waits a day; rewrites see the thread
+
 ## v0.10.428 (2026-10-05)
 - Fix: a search result LinkedIn does not name is never enrolled (D4umak/heylead-api#2164)
 
@@ -1432,7 +1435,7 @@ _CHANGELOG = """\
 - Engagement mode: auto (30/70 react/comment), comment_only, or react_only
 - Follow-up customization: max_followups (1-5), followup_delay_days (custom schedule)
 - Send timing: send_in_business_hours (on/off), active_days (choose which days to send)
-- Stale invite settings: withdraw_stale_invites (on/off), stale_invite_days (7-60)
+- Invite settings: invite_note (on/off: invitations carry a note, default on), withdraw_stale_invites (on/off), stale_invite_days (7-60)
 - show_status now displays non-default campaign settings
 - All settings stored in config_json with backwards-compatible defaults
 
@@ -2937,6 +2940,7 @@ async def edit_campaign(
     max_followups: int = 0,
     weekly_meeting_target: int = -1,
     followup_delay_days: str = "",
+    invite_note: str = "",
     withdraw_stale_invites: str = "",
     stale_invite_days: int = 0,
     inmail_fallback: str = "",
@@ -3033,6 +3037,9 @@ async def edit_campaign(
             campaign is on track. 0 means no goal this week; -1 keeps current.
         followup_delay_days: Custom day intervals as comma-separated list
             (e.g., "1,3,7,14"). Leave empty to keep current.
+        invite_note: Invitations carry a note: "on" (default) or "off". Off sends
+            the bare invitation; the first words are the DM a working day after
+            they accept.
         withdraw_stale_invites: Auto-withdraw stale invites: "on" or "off".
         stale_invite_days: Days before withdrawing stale invites (7-60). 0 to keep current.
         inmail_fallback: Escalate quiet invitations with one InMail: "on" or "off".
@@ -3092,6 +3099,7 @@ async def edit_campaign(
                 max_followups=max_followups,
                 weekly_meeting_target=weekly_meeting_target,
                 followup_delay_days=followup_delay_days,
+                invite_note=invite_note,
                 withdraw_stale_invites=withdraw_stale_invites,
                 stale_invite_days=stale_invite_days,
                 inmail_fallback=inmail_fallback,

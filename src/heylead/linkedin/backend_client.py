@@ -3826,6 +3826,9 @@ class BackendClient:
             payload["role_frame"] = role_frame
         if conversation_history:
             payload["conversation_history"] = conversation_history
+            # The api's ImproveRequest names it history_tail; under the old
+            # name alone the thread never reached the refiner (api #2171).
+            payload["history_tail"] = conversation_history
         try:
             resp = await self._post(url, json=payload, headers=self._headers())
         except (httpx.ConnectError, httpx.TimeoutException) as e:
@@ -3844,16 +3847,24 @@ class BackendClient:
         voice: dict[str, Any],
         message_type: str = "invitation",
         max_chars: int = 200,
+        conversation_history: list[dict[str, Any]] | None = None,
     ) -> str:
-        """Fix validation issues in a message via the backend LLM proxy."""
+        """Fix validation issues in a message via the backend LLM proxy.
+
+        ``conversation_history`` is the end of the thread a follow-up or
+        reply continues; a repair that cannot see it rewrites the
+        continuation as a new message (api #2171).
+        """
         url = f"{self.base_url}/api/v1/llm/fix-message"
-        payload = {
+        payload: dict[str, Any] = {
             "message": message,
             "issues": issues,
             "voice": voice,
             "message_type": message_type,
             "max_chars": max_chars,
         }
+        if conversation_history:
+            payload["history_tail"] = conversation_history
         try:
             resp = await self._post(url, json=payload, headers=self._headers())
         except (httpx.ConnectError, httpx.TimeoutException) as e:

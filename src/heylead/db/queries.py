@@ -5750,6 +5750,43 @@ def outreach_has_invite_note(outreach_id: str) -> bool:
     )
 
 
+def one_working_day_after(ts: int) -> int:
+    """The same time of day one working day later, in UTC.
+
+    Saturday and Sunday are not working days: a Friday accept is answered on
+    Monday. Same rule as the hosted send_attempts.one_working_day_after.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    when = datetime.fromtimestamp(int(ts), tz=timezone.utc) + timedelta(days=1)
+    while when.weekday() >= 5:
+        when += timedelta(days=1)
+    return int(when.timestamp())
+
+
+def first_dm_not_before(outreach_id: str) -> int:
+    """When the first DM after an accepted invitation note may go, or 0.
+
+    The person has just read the note: LinkedIn shows it as the first bubble
+    of the chat the moment they accept. A second bubble minutes later read as
+    a sequence firing (Richard Holland, 16 minutes, 5 Oct 2026, api #2171),
+    so the first DM waits one working day after the acceptance. 0 when there
+    was no note, no acceptance on file, or the day has passed.
+    """
+    if not outreach_has_invite_note(outreach_id):
+        return 0
+    db = get_db()
+    row = db.execute(
+        "SELECT accepted_at FROM outreaches WHERE id = ?", (outreach_id,),
+    ).fetchone()
+    db.close()
+    accepted_at = int((row["accepted_at"] if row else 0) or 0)
+    if not accepted_at:
+        return 0
+    due = one_working_day_after(accepted_at)
+    return due if due > int(time.time()) else 0
+
+
 def has_real_sdr_message(outreach_id: str) -> bool:
     """Has anything beyond the invitation note gone out on this thread?"""
     return last_real_sdr_message_ts(outreach_id) > 0
