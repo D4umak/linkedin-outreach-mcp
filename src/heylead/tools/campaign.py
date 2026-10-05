@@ -5,6 +5,8 @@ Thin dispatcher that routes to existing run_* functions based on the action para
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 
@@ -217,7 +219,7 @@ async def _format_status_history(campaign_id: str = "") -> str:
     for e in entries:
         ts = e.get("timestamp", 0)
         ago = _time_ago(ts)
-        name = e.get("campaign_name", "?")[:30]
+        name = cut_at_word(e.get("campaign_name", "?"), 30)
         old = e.get("old_status", "?")
         new = e.get("new_status", "?")
         by = e.get("changed_by", "?")

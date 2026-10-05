@@ -172,7 +172,7 @@ async def _restore_change(change_id: str) -> str:
         return (
             f"Restored {field} to previous value.\n\n"
             f"  Field: {field}\n"
-            f"  Restored to: {old_value[:120]}\n"
+            f"  Restored to: {cut_at_word(old_value, 120)}\n"
             f"  Change {change_id} marked as reverted.\n"
             f"  New restore point: {result.get('change_id')}"
         )

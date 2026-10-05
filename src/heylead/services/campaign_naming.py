@@ -46,7 +46,9 @@ def cut_at_word(text: str, limit: int = CAMPAIGN_NAME_MAX) -> str:
     room = max(limit - len(ELLIPSIS), 1)
     head, sep, _tail = text[: room + 1].rpartition(" ")
     kept = head if sep and head.strip() else text[:room]
-    kept = kept.rstrip(" ,;:-—–.")
+    # A cut can land after a separator or a conjunction ("Engineer |",
+    # "Innovation &"); neither is a word to end a line on.
+    kept = kept.rstrip(" ,;:-\u2014\u2013.|/&+*\u2022\u00b7([{<")
     return (kept or text[:room]) + ELLIPSIS
 
 

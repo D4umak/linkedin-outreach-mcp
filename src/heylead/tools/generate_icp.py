@@ -7,6 +7,8 @@ Persists the result for reuse with create_campaign.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 from typing import Any
@@ -137,6 +139,11 @@ async def generate_icp_result_for_campaign(
     # was stripped of them again here (D4umak/heylead-api#1566).
     keep = [lvl for lvl in levels_named(target_description) if lvl not in DECISION_MAKER_LEVELS] if floor else []
     apply_seniority_policy(result, decision_makers_only=floor, keep=keep)
+    # An investor ICP carries investor vocabulary (D4umak/heylead-api#2156),
+    # whatever route produced the personas; enriching twice adds nothing.
+    from ..services.icp_vocabulary import enrich_investor_result
+
+    enrich_investor_result(result, goal)
     attach_signals_to_icp_result(result, target_description)
 
     # Goal <-> ICP audit (9 Sep 2026: campaign be5f78ff targeted an
@@ -248,7 +255,7 @@ async def run_generate_icp(
 
     # ── Step 4: Persist to DB ──
     best_confidence = max(icp.overall_confidence for icp in result.icps)
-    icp_id = await run_db(save_icp, name=result.campaign_name or target_description[:40],
+    icp_id = await run_db(save_icp, name=result.campaign_name or cut_at_word(target_description, 40),
         icp_json=icp_result_to_json(result),
         target_desc=target_description,
         source_url=company_context if company_context.startswith("http") else "",
@@ -267,7 +274,7 @@ async def run_generate_icp(
         wl_ids = await run_db(
             create_watchlists_from_icp,
             icp_json=icp_json_str,
-            icp_name=result.campaign_name or target_description[:40],
+            icp_name=result.campaign_name or cut_at_word(target_description, 40),
         )
         if wl_ids:
             watchlist_info = f"\n\nSignal monitoring: Created {len(wl_ids)} watchlist(s) from ICP keywords. The scheduler will monitor LinkedIn posts for these terms."
@@ -308,7 +315,7 @@ def _format_icp_output(
 ) -> str:
     """Format the ICP result for MCP tool output."""
     lines = [
-        f"ICP Generated: **{result.campaign_name or target_description[:40]}**",
+        f"ICP Generated: **{result.campaign_name or cut_at_word(target_description, 40)}**",
         f"ICP ID: `{icp_id[:8]}...`",
         "",
     ]
@@ -445,7 +452,7 @@ def _format_single_icp(index: int, icp: SingleIcp) -> list[str]:
                 for cit in fe.citations[:1]:  # One citation per field
                     source = cit.source_url or "source"
                     lines.append(
-                        f"    {fe.field_name}: \"{cit.snippet[:80]}...\" "
+                        f"    {fe.field_name}: \"{cut_at_word(cit.snippet, 80)}\" "
                         f"({source}, {cit.confidence:.0%})"
                     )
 

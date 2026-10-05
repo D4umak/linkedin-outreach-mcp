@@ -9,6 +9,8 @@ LinkedIn only allows deletion within 60 minutes of sending.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 import time
@@ -127,7 +129,7 @@ async def run_delete_message(
     if local_message:
         await run_db(mark_message_deleted, local_message["id"])
         await run_db(set_message_external_id, local_message["id"], unipile_message_id)
-        deleted_text = (local_message.get("text") or "")[:80]
+        deleted_text = cut_at_word(local_message.get("text") or "", 80)
     else:
         deleted_text = ""
 
@@ -156,7 +158,7 @@ async def run_delete_message(
             "deleted_text_preview": deleted_text,
         },)
 
-    preview = f'"{deleted_text}..."' if deleted_text else f"ID: {unipile_message_id}"
+    preview = f'"{deleted_text}"' if deleted_text else f"ID: {unipile_message_id}"
     return f"Message deleted successfully: {preview}"
 
 

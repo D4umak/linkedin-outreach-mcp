@@ -11,6 +11,8 @@ Core follow-up loop:
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 import time
@@ -458,7 +460,7 @@ async def run_send_followup(
     # pile automated follow-ups on top of their messages.
     prospect_msgs = [m for m in messages if m.get("role") == "prospect"]
     if prospect_msgs:
-        last_prospect_text = prospect_msgs[-1].get("text", "")[:100]
+        last_prospect_text = cut_at_word(prospect_msgs[-1].get("text", ""), 100)
         await client.close()
         await db.log_action(
             "followup_skipped_prospect_replied",
@@ -1192,7 +1194,7 @@ async def _send_email_followup(
         return (
             f"📧 Email follow-up #{new_count} sent to {prospect_name} ({role_str})\n"
             f"   Subject: {subject}\n"
-            f'   Body: "{body[:120]}..."\n\n'
+            f'   Body: "{cut_at_word(body, 120)}"\n\n'
             f"Follow-ups remaining: {remaining}/{max_followups}"
         )
 

@@ -10,6 +10,8 @@ Takes a target description like "Find me fintech CTOs" and:
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import re
 
 import json
@@ -1069,7 +1071,7 @@ async def run_create_campaign(
     )
 
     # ── Step 6: Create campaign in DB ──
-    final_name = campaign_name or icp.get("campaign_name", target_description[:40])
+    final_name = campaign_name or icp.get("campaign_name", cut_at_word(target_description, 40))
 
     # Build config — connections-only disables invitations + all warm-up
     is_connections_only = connections_only == "on"
@@ -1144,9 +1146,9 @@ async def run_create_campaign(
 
     # Save contacts + create outreach records
     _source = _internal_source or "linkedin_search"
-    _source_detail = f"ICP: {target_description[:100]}"
+    _source_detail = f"ICP: {cut_at_word(target_description, 100)}"
     if _internal_source == "strategy_spawn":
-        _source_detail = f"Auto-spawned: {target_description[:100]}"
+        _source_detail = f"Auto-spawned: {cut_at_word(target_description, 100)}"
     from ..db.queries import has_running_message_ab_test
     has_ab_test = await run_db(has_running_message_ab_test, campaign_id)
     for prospect in prospects_to_save:
@@ -1740,7 +1742,7 @@ def _icp_result_to_legacy(result: IcpResult, target_description: str) -> dict:
         "fears": list(first.fears) if first else [],
         "barriers": list(first.barriers) if first else [],
         "summary": result.summary or target_description,
-        "campaign_name": result.campaign_name or target_description[:40],
+        "campaign_name": result.campaign_name or cut_at_word(target_description, 40),
         "relevance_hook": result.relevance_hook or "",
     }
 

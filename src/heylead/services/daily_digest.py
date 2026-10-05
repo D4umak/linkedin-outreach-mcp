@@ -8,6 +8,8 @@ Triggered by JOB_DAILY_DIGEST scheduled once per day.
 
 from __future__ import annotations
 
+from .campaign_naming import cut_at_word
+
 import logging
 import time
 from datetime import datetime
@@ -208,7 +210,7 @@ async def compile_daily_digest() -> str:
             t = datetime.fromtimestamp(ts).strftime("%H:%M") if ts else "?"
             ctx = evt.get("context", {})
             severity = ctx.get("severity", "?")
-            summary = ctx.get("summary", "")[:80]
+            summary = cut_at_word(ctx.get("summary", ""), 80)
             severity_icon = "!!" if severity == "critical" else "!"
             lines.append(f"- [{t}] [{severity_icon} {severity}] {summary}")
         lines.append("")
@@ -223,7 +225,7 @@ async def compile_daily_digest() -> str:
             for eng in comment_entries:
                 name = person_name(eng.get("prospect_name"))
                 title = eng.get("prospect_title") or ""
-                text = (eng.get("comment_text") or "")[:120]
+                text = cut_at_word(eng.get("comment_text") or "", 120)
                 ts = eng.get("created_at", 0)
                 if ts:
                     t = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")

@@ -6,6 +6,8 @@ Delegates to collectors for detection and to signal_queries for persistence.
 
 from __future__ import annotations
 
+from .campaign_naming import cut_at_word
+
 import json
 import logging
 import time
@@ -420,7 +422,7 @@ def format_signal_dashboard(days: int = 7) -> str:
         for sig in recent:
             sig_type = sig.get("signal_type", "unknown").upper()
             name = sig.get("prospect_name") or "Unknown"
-            content_preview = (sig.get("content") or "")[:60]
+            content_preview = cut_at_word(sig.get("content") or "", 60)
             detected = sig.get("detected_at", 0)
             age = _format_time_ago(detected)
             lines.append(f"  \u2022 [{age}] {sig_type}: {content_preview}... by {name}")
@@ -471,7 +473,7 @@ def format_signal_feed(
         sig_type = sig.get("signal_type", "unknown")
         name = sig.get("prospect_name") or "Unknown"
         title = sig.get("prospect_title") or ""
-        content = (sig.get("content") or "")[:120]
+        content = cut_at_word(sig.get("content") or "", 120)
         intent = sig.get("intent") or "unclassified"
         confidence = sig.get("confidence", 0)
         stored_score = sig.get("signal_score", 0)
@@ -583,7 +585,7 @@ def _format_signal_metadata(sig_type: str, metadata: dict) -> str:
         if cats:
             parts.append(f"Intent: {', '.join(cats)}")
         if headline:
-            parts.append(f'"{headline[:80]}"')
+            parts.append(f'"{cut_at_word(headline, 80)}"')
         return " | ".join(parts)
 
     elif sig_type == "headline_change":
@@ -594,7 +596,7 @@ def _format_signal_metadata(sig_type: str, metadata: dict) -> str:
         old_h = metadata.get("old_headline", "")
         new_h = metadata.get("new_headline", "")
         if old_h and new_h:
-            return f'"{old_h[:50]}" → "{new_h[:50]}"'
+            return f'"{cut_at_word(old_h, 50)}" → "{cut_at_word(new_h, 50)}"'
 
     # Backward compat for old job_change signals
     elif sig_type == "job_change":

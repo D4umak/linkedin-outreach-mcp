@@ -12,6 +12,8 @@ Users, Customers, Shareholders, Data.
 
 from __future__ import annotations
 
+from .campaign_naming import cut_at_word
+
 import json
 import logging
 import time as _time
@@ -541,7 +543,7 @@ def evaluate_headline_tests() -> list[str]:
 
         winner_headline = t["variant_a"] if winner == "A" else t["variant_b"] if winner == "B" else "neither"
         if winner != "inconclusive":
-            verdict = f'Winner: {winner} — "{winner_headline[:60]}"'
+            verdict = f'Winner: {winner} — "{cut_at_word(winner_headline, 60)}"'
         else:
             verdict = "Inconclusive"
         results.append(

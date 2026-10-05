@@ -716,7 +716,7 @@ Return ONLY the post text, nothing else."""
             })
             # Before mark_action_completed, which is a whole-plan rewrite and
             # can lose to a concurrent one: the post is already public.
-            await _complete_brand_action(action_id, f"Published: {topic[:50]}")
+            await _complete_brand_action(action_id, f"Published: {cut_at_word(topic, 50)}")
 
             plan = await run_db(load_brand_plan)
             completed, total = count_plan_progress(plan) if plan else (0, 0)
@@ -738,7 +738,7 @@ Return ONLY the post text, nothing else."""
                 )
             return (
                 f"Brand Strategy: Post Published!\n\n"
-                f'   "{post_text[:300]}{"..." if len(post_text) > 300 else ""}"\n'
+                f'   "{cut_at_word(post_text, 300)}"\n'
                 f"   ({len(post_text)} chars)\n\n"
                 f"Tip: Reply to comments in the first 2 hours to boost reach.\n\n"
                 f"Progress: {completed}/{total} actions completed"
@@ -845,7 +845,7 @@ async def _execute_profile_action(action: dict[str, Any], action_id: str) -> str
             lines = [
                 f"Brand Strategy: Summary Updated Automatically!",
                 "",
-                f"  {result['summary'][:300]}{'...' if len(result.get('summary', '')) > 300 else ''}",
+                f"  {cut_at_word(result['summary'], 300)}",
                 "",
             ]
         lines.append(f"Progress: {completed}/{total} actions completed")
@@ -1023,7 +1023,7 @@ async def _execute_engagement_action(
                 comment_prompt = f"""Write a brief, authentic LinkedIn comment on this post.
 
 Post by {post['author']}:
-"{post['text'][:500]}"
+"{cut_at_word(post['text'], 500)}"
 
 You are {profile.get('name', '')} ({profile.get('title', '')}).
 Your voice:
@@ -1071,7 +1071,7 @@ Return ONLY the comment text."""
                             reasoning="brand_strategy",)
                         results.append(
                             f"Commented on {post['author']}'s post: "
-                            f'"{comment_text[:60]}{"..." if len(comment_text) > 60 else ""}"'
+                            f'"{cut_at_word(comment_text, 60)}"'
                         )
                         count += 1
                     else:
@@ -2064,7 +2064,7 @@ async def _handle_test_headline(focus: str) -> str:
     test_id = await run_db(
         create_ab_test,
         campaign_id=campaign_id,
-        name=f"Headline: {variant_a[:30]}... vs {variant_b[:30]}...",
+        name=f"Headline: {cut_at_word(variant_a, 33)} vs {cut_at_word(variant_b, 33)}",
         variant_a=variant_a,
         variant_b=variant_b,
         hypothesis="Which headline drives higher acceptance and reply rates?",

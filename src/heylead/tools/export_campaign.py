@@ -6,6 +6,8 @@ outreach status, fit score, messages sent, and engagement count.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import io
 import json
 import logging
@@ -90,8 +92,8 @@ async def run_export_campaign(campaign_id: str = "", format: str = "table") -> s
         row_data = [
             r.get("outreach_id", "")[:8],
             r.get("name", "Unknown"),
-            (r.get("title", "") or "")[:30],
-            (r.get("company", "") or "")[:20],
+            cut_at_word(r.get("title", "") or "", 30),
+            cut_at_word(r.get("company", "") or "", 20),
             status_label(r.get("status")),
             stars(r.get("fit_score", 0)),
             str(r.get("messages_sent", 0)),
@@ -109,7 +111,7 @@ async def run_export_campaign(campaign_id: str = "", format: str = "table") -> s
             if r.get("outcome_json"):
                 try:
                     odata = json.loads(r["outcome_json"])
-                    outcome_text = (odata.get("reason", "") or "")[:30]
+                    outcome_text = cut_at_word(odata.get("reason", "") or "", 30)
                 except (json.JSONDecodeError, TypeError):
                     pass
             row_data.append(outcome_text)

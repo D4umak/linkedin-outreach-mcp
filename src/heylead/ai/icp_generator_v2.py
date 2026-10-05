@@ -17,6 +17,7 @@ import time
 from typing import Any
 
 from ..db.async_bridge import run_db
+from ..services.icp_vocabulary import enrich_investor_result
 from ..services.seniority import DECISION_MAKER_LEVELS, apply_seniority_policy, levels_named
 from .icp_schemas import (
     HeadcountParam,
@@ -315,6 +316,10 @@ async def generate_icp_v2(
         )
         result.processing_time = time.time() - start_time
         apply_seniority_policy(result, decision_makers_only=floor, keep=keep)
+        # An investor ICP carries investor vocabulary (D4umak/heylead-api#2156).
+        # The api merges it too; the client must not depend on the backend's
+        # version, and enriching twice adds nothing.
+        enrich_investor_result(result, goal_key)
         # Enrich with LinkedIn codes
         await _enrich_result(result)
         return result
@@ -381,6 +386,8 @@ async def generate_icp_v2(
             result.icps = [best]
 
     apply_seniority_policy(result, decision_makers_only=floor, keep=keep)
+    # An investor ICP carries investor vocabulary (D4umak/heylead-api#2156).
+    enrich_investor_result(result, goal_key)
 
     # Enrich with LinkedIn codes
     await _enrich_result(result)

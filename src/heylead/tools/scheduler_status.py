@@ -6,6 +6,8 @@ Supports both local (in-process) and cloud (backend) scheduling modes.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 import time
@@ -1395,7 +1397,7 @@ async def _format_diagnostics_backend(data: dict[str, Any], campaign_id: str) ->
         lines.append("| Campaign | Mode | Pending | Invited | Connected | Replied | Error |")
         lines.append("|----------|------|---------|---------|-----------|---------|-------|")
         for c in campaigns:
-            name = (c.get("name") or "Unnamed")[:25]
+            name = cut_at_word(c.get("name") or "Unnamed", 25)
             statuses = c.get("outreach_statuses", {})
             # Infer mode from parent data if not in campaign dict
             mode = c.get("mode", "?")
@@ -1423,7 +1425,7 @@ async def _format_diagnostics_backend(data: dict[str, Any], campaign_id: str) ->
         lines.append("|----------|-----------|----------|----------|-------|-------------|")
         for c in campaigns:
             cid = c.get("id", "")
-            name = (c.get("name") or "Unnamed")[:25]
+            name = cut_at_word(c.get("name") or "Unnamed", 25)
             max_fu = await _followup_cap(c)
             bd = await db.get_followup_breakdown(cid, max_fu)
             connected = bd["by_status"].get("connected", 0)
@@ -1615,7 +1617,7 @@ async def _format_diagnostics_local(campaign_id: str) -> str:
         lines.append("|----------|------|---------|---------|-----------|---------|")
         for c in campaigns:
             cid = c["id"]
-            name = (c.get("name") or "Unnamed")[:25]
+            name = cut_at_word(c.get("name") or "Unnamed", 25)
             mode = c.get("mode", "?")
             pending = await db.count_outreaches_by_status(cid, "pending")
             invited = await db.count_outreaches_by_status(cid, "invited")
@@ -1633,7 +1635,7 @@ async def _format_diagnostics_local(campaign_id: str) -> str:
         lines.append("|----------|-----------|----------|----------|-------|-------------|")
         for c in campaigns:
             cid = c["id"]
-            name = (c.get("name") or "Unnamed")[:25]
+            name = cut_at_word(c.get("name") or "Unnamed", 25)
             max_fu = await _followup_cap(c)
             bd = await db.get_followup_breakdown(cid, max_fu)
             conn = bd["by_status"].get("connected", 0)

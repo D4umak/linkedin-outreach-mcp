@@ -8,6 +8,8 @@ its amount and marks the outreach won (services/crm_pull.py, heylead-api#1212).
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 from typing import Any
@@ -191,9 +193,9 @@ async def run_crm_sync(
                 crm_deal_id=hs_deal_id,)
 
             synced_rows.append([
-                name[:25],
-                (title or "—")[:25],
-                (company or "—")[:20],
+                cut_at_word(name, 25),
+                cut_at_word(title or "—", 25),
+                cut_at_word(company or "—", 20),
                 "✓ Contact" + (" + Deal" if hs_deal_id else ""),
             ])
 
@@ -255,7 +257,7 @@ async def _run_pull(api_key: str, campaign_id: str = "") -> str:
     if summary["changed"]:
         rows = [
             [
-                str(c["name"])[:25],
+                cut_at_word(str(c["name"]), 25),
                 revenue.format_amount(float(c["amount"]), c["currency"]) if c["amount"] is not None else "no amount",
                 "marked won" if c["marked_won"] else "amount updated",
             ]

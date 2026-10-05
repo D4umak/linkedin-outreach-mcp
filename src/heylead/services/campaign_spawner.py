@@ -7,6 +7,8 @@ to exploit those segments.
 
 from __future__ import annotations
 
+from .campaign_naming import cut_at_word
+
 import json
 import logging
 from typing import Any
@@ -279,6 +281,6 @@ def _pattern_to_target(pattern: dict[str, Any]) -> str:
     # Fall back to the description
     if desc:
         # Extract the actionable part
-        return desc.split(":")[0] if ":" in desc else desc[:100]
+        return desc.split(":")[0] if ":" in desc else cut_at_word(desc, 100)
 
     return key

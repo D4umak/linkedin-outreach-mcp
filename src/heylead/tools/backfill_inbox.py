@@ -7,6 +7,8 @@ inbound pipeline (classify → send discovery DM).
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import asyncio
 import logging
 import time
@@ -653,11 +655,11 @@ async def _backfill(
         headline = item.get("sender_headline", "")
         intent = sig.get("intent", "?")
         conf = sig.get("confidence", 0) or 0
-        text_preview = (item.get("text") or "")[:80].replace("\n", " ")
+        text_preview = cut_at_word(item.get("text") or "", 80)
 
         line = f"{i}. **{name}**"
         if headline:
-            line += f" — {headline[:50]}"
+            line += f" — {cut_at_word(headline, 50)}"
         line += f"\n   Intent: {intent} ({conf:.0%})"
         line += f"\n   Message: {text_preview}"
         if len(item.get("text", "")) > 80:

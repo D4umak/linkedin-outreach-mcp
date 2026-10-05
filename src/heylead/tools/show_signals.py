@@ -7,6 +7,8 @@ with recent signal context and individual signal scores.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -171,7 +173,7 @@ def _format_top_accounts(limit: int = 5) -> str:
                 recent = list_signals(linkedin_id=linkedin_id, limit=2)
                 for sig in recent:
                     sig_type = sig.get("signal_type", "")
-                    content = (sig.get("content") or "")[:80]
+                    content = cut_at_word(sig.get("content") or "", 80)
                     detected = sig.get("detected_at", 0)
                     age = _format_time_ago(detected)
                     sig_label = sig_type.replace("_", " ")

@@ -1477,8 +1477,8 @@ async def _handle_reply_comment(
             )
             return (
                 f"Replied to **{prospect_name}**'s comment ({role_str})\n\n"
-                f'   Their comment: "{reply_text[:80]}..."\n'
-                f'   Your reply: "{reply_content[:80]}..."\n\n'
+                f'   Their comment: "{cut_at_word(reply_text, 80)}"\n'
+                f'   Your reply: "{cut_at_word(reply_content, 80)}"\n\n'
                 "Thread engagement builds stronger relationships before connecting."
             )
         else:

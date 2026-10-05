@@ -11,6 +11,8 @@ Core reply loop:
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 from typing import Any
@@ -637,7 +639,7 @@ async def run_reply_to_prospect(
                    result="skipped", details={"text": reply_text[:200], "sentiment": sentiment})
         return (
             f"They declined:\n"
-            f"   \"{reply_text[:100]}\"\n"
+            f"   \"{cut_at_word(reply_text, 100)}\"\n"
             "HeyLead's cloud answers this with a short polite close and then closes "
             "the outreach. Nothing was sent from here."
         )
@@ -650,7 +652,7 @@ async def run_reply_to_prospect(
                    result="skipped", details={"text": reply_text[:200]})
         return (
             f"Vendor pitch detected (keyword match) from {candidate.get('name', 'Unknown')}.\n"
-            f"   \"{reply_text[:100]}\"\n"
+            f"   \"{cut_at_word(reply_text, 100)}\"\n"
             "They're selling to you, not buying. Auto-reply skipped.\n"
             "Use send_message(action='reply') to respond manually if needed."
         )
@@ -680,7 +682,7 @@ async def run_reply_to_prospect(
                 return (
                     f"Reverse pitch detected from {candidate.get('name', 'Unknown')} "
                     f"(type: {seller_type}, confidence: {seller_result.get('confidence', 0):.0%}).\n"
-                    f"   \"{reply_text[:100]}\"\n"
+                    f"   \"{cut_at_word(reply_text, 100)}\"\n"
                     "They're selling to you, not buying. Auto-reply skipped.\n"
                     "Use send_message(action='reply') to respond manually if needed."
                 )

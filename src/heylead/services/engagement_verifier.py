@@ -25,6 +25,7 @@ from ..constants import (
     VERIFIED,
 )
 from ..db.async_bridge import run_db
+from ..guardrails import text_landed
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,6 @@ async def verify_comment(
             return result
 
         # Primary match: by author_id
-        snippet = comment_text[:80].strip() if comment_text else ""
         for c in comments:
             author_id = c.get("author_id", "")
             if author_id and str(author_id) == str(our_provider_id):
@@ -82,11 +82,11 @@ async def verify_comment(
                 )
                 return result
 
-        # Fallback match: substring on text (if author_id wasn't returned)
-        if snippet:
+        # Fallback match: text folded on both sides (guardrails.text_landed),
+        # used when author_id wasn't returned.
+        if comment_text:
             for c in comments:
-                c_text = (c.get("text") or "")[:80].strip()
-                if c_text and snippet and snippet in c_text:
+                if text_landed(comment_text, c.get("text") or ""):
                     result["verified"] = True
                     result["comment_id"] = c.get("comment_id", "")
                     await run_db(

@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Any
 
+from ..constants import MIN_FIT_SCORE_THRESHOLD
 from ..db.async_bridge import run_db
 
-from ..textutil import contains_term
+from ..textutil import STOPWORDS, contains_term
 from .profile_signals import role_hit
 from .seniority import (
     DECISION_MAKER_LEVELS,
@@ -50,6 +52,25 @@ ICP_WEIGHT_KEYWORDS = 0.10
 # Neutral scores for unknown/missing data (don't penalize, don't reward)
 UNKNOWN_SCORE = 0.3
 LOCATION_UNKNOWN_SCORE = 0.5
+
+# An industry the ICP asks for and the contact does not show. The same value
+# as a stated industry that misses: not knowing is not "partly matches".
+# 5 Oct 2026: unknown scored UNKNOWN_SCORE, and that 0.06 was part of what
+# carried a law firm's Managing Partner over the hosted floor
+# (heylead-api#2149).
+INDUSTRY_MISS_SCORE = 0.1
+
+# A title alone is not a fit (Denys, 5 Oct 2026, heylead-api#2149). When the
+# ICP names industries or keywords, a row with no industry or keyword hit
+# besides the title is capped here, one hundredth under the lowest floor
+# either product applies (MIN_FIT_SCORE_THRESHOLD locally; the cloud's
+# DEFAULT_MIN_FIT_SCORE is 0.5). The same rule, with the same constant, is
+# heylead-api app/services/fit_rules.py; keep the two alike.
+TITLE_ONLY_FIT_CAP = round(MIN_FIT_SCORE_THRESHOLD - 0.01, 2)
+
+# A word of an industry label needs this many characters to stand as
+# evidence on its own ("tech", "space" do; "and", "of" are stopwords anyway).
+_EVIDENCE_WORD_MIN_CHARS = 4
 
 # Cap when the ICP names a product (AISP, open banking, …) and the contact
 # text has none of those terms. Title+seniority alone used to score ~0.3–0.6
@@ -161,6 +182,18 @@ def compute_icp_match(
     if vetoed:
         icp_match = min(icp_match, PRODUCT_KEYWORD_VETO_CAP)
         breakdown["product_keywords"] = 0.0
+    # A title alone is not a fit: with the ICP naming industries or keywords
+    # and none of them anywhere about the person, the title's 0.30 plus the
+    # unknown-data defaults cleared the hosted floor (0.6193 for a law firm's
+    # Managing Partner against a deep-tech VC persona, 5 Oct 2026).
+    icp_match, title_only = apply_title_only_cap(
+        icp_match,
+        _fit_evidence_text(contact),
+        industries=_get_include_exclude(icp, "industries")[0],
+        keywords=[str(k) for k in (icp.get("keywords") or []) if k]
+        if isinstance(icp.get("keywords"), list) else [],
+        titles=_get_include_exclude(icp, "job_titles")[0],
+    )
     if seniority_miss:
         # `weighted_score` is the six-dimension average; `icp_match_score` is
         # the intake answer. Callers that decide whether to *enrol* read the
@@ -171,13 +204,17 @@ def compute_icp_match(
         # decide whether to *close* a conversation already under way read
         # `weighted_score` instead: an intake rule is not grounds to hang up on
         # someone (see `ai/targeting_recheck._heuristic_recheck`).
-        return {
+        result: dict[str, Any] = {
             "icp_match_score": 0.0,
             "weighted_score": icp_match,
             "breakdown": breakdown,
             "seniority_miss": True,
         }
-    return {"icp_match_score": icp_match, "breakdown": breakdown}
+    else:
+        result = {"icp_match_score": icp_match, "breakdown": breakdown}
+    if title_only:
+        result["title_only"] = True
+    return result
 
 
 # ──────────────────────────────────────────────
@@ -483,21 +520,23 @@ def _score_industry_match(
     icp: dict,
     campaign_icp_json: str | dict | None = None,
 ) -> float:
-    """Score industry match against ICP industries (0.0-1.0)."""
-    parsed_icp = None
-    if isinstance(campaign_icp_json, str):
-        try:
-            parsed_icp = json.loads(campaign_icp_json)
-        except (json.JSONDecodeError, TypeError):
-            pass
-    elif isinstance(campaign_icp_json, dict):
-        parsed_icp = campaign_icp_json
+    """Score industry match against ICP industries (0.0-1.0).
 
-    industry = extract_industry(contact, parsed_icp)
-    if not industry:
-        return UNKNOWN_SCORE
-
+    `campaign_icp_json` is kept for callers; the contact's industry is read
+    without the ICP fallback `extract_industry` offers, as `_score_company_size`
+    already does: scoring against the ICP, not filling gaps from it. With the
+    fallback, a contact stating no industry read as the ICP's own first
+    industry and scored a perfect match against it.
+    """
+    del campaign_icp_json
     include, exclude = _get_include_exclude(icp, "industries")
+
+    industry = extract_industry(contact, None)
+    if not industry:
+        # The ICP asks for an industry and the person shows none: a miss,
+        # not "partly matches" (heylead-api#2149). With no industry asked
+        # for there is nothing to compare, and that stays neutral.
+        return INDUSTRY_MISS_SCORE if include else UNKNOWN_SCORE
 
     # Exclude check
     for term in exclude:
@@ -513,7 +552,7 @@ def _score_industry_match(
             return 1.0
 
     # No match
-    return 0.1
+    return INDUSTRY_MISS_SCORE
 
 
 def _states_seniority(title: str) -> bool:
@@ -798,6 +837,98 @@ def _score_keyword_overlap(contact: dict[str, Any], icp: dict) -> float:
         return 0.0
 
     return min(1.0, matches / max(len(keywords), 1))
+
+
+# ──────────────────────────────────────────────
+# A title alone is not a fit
+# ──────────────────────────────────────────────
+#
+# One rule, stated here and mirrored word for word in heylead-api
+# app/services/fit_rules.py: when the ICP names industries or keywords, a row
+# needs at least one industry or keyword hit besides the title, from its
+# title, headline, company name or profile industry, to clear the floor.
+# Without one the score is capped at TITLE_ONLY_FIT_CAP and the caller records
+# `title_only`.
+
+def _fit_evidence_text(contact: dict[str, Any]) -> str:
+    """Title, company, headline, about, analysis and the profile's industry."""
+    return " ".join(
+        part for part in (
+            _contact_keyword_text(contact),
+            extract_industry(contact, None),
+        ) if part
+    )
+
+
+def _evidence_words(term: str) -> set[str]:
+    return {w for w in re.findall(r"[0-9a-z]+", term.lower()) if w not in STOPWORDS}
+
+
+def fit_evidence_terms(
+    industries: list[str], keywords: list[str], titles: list[str],
+) -> list[str]:
+    """What can stand as evidence beside the title: each keyword as a phrase,
+    and each industry as a phrase or any of its words.
+
+    Industries are LinkedIn's category labels ("Venture Capital", "Aviation
+    and Aerospace"); nobody writes them out in a headline, but "3one4
+    Capital" and "Elev8 Venture Partners" say the industry in one word.
+    Keywords are the ICP's own phrases and match as phrases. A keyword that
+    is one of the titles ("Managing Partner" is both, in the campaign that
+    found this), and an industry word that is in a title ("investment" of
+    "Investment Director"), is the title match again and is dropped.
+    """
+    title_words = {w for t in titles for w in _evidence_words(t)}
+    title_list = [t for t in titles if t and t.strip()]
+    terms: list[str] = []
+    for raw in keywords:
+        kw = str(raw or "").lower().strip()
+        if not kw:
+            continue
+        # The shared title matcher, so "Chief Technology Officer" in the
+        # keywords is recognised as the "CTO" of the titles.
+        if title_list and role_hit(kw, title_list):
+            continue
+        terms.append(kw)
+    for raw in industries:
+        label = str(raw or "").lower().strip()
+        if not label:
+            continue
+        terms.append(label)
+        terms.extend(
+            w for w in sorted(_evidence_words(label))
+            if len(w) >= _EVIDENCE_WORD_MIN_CHARS and w not in title_words
+        )
+    return list(dict.fromkeys(terms))
+
+
+def has_fit_evidence(text: str, terms: list[str]) -> bool:
+    """True when any evidence term occurs in *text* as whole words."""
+    haystack = (text or "").lower()
+    return any(contains_term(haystack, term) for term in terms)
+
+
+def apply_title_only_cap(
+    score: float,
+    text: str,
+    *,
+    industries: list[str],
+    keywords: list[str],
+    titles: list[str],
+) -> tuple[float, bool]:
+    """(score, title_only): the fit capped under the floor when the ICP names
+    industries or keywords and *text* carries none of them.
+
+    A segment that names neither has nothing to ask for beyond the title and
+    is left alone. `title_only` is True only when the cap lowered the score:
+    a row already under it was not held by this rule.
+    """
+    terms = fit_evidence_terms(industries, keywords, titles)
+    if not terms or has_fit_evidence(text, terms):
+        return score, False
+    if score <= TITLE_ONLY_FIT_CAP:
+        return score, False
+    return TITLE_ONLY_FIT_CAP, True
 
 
 # ──────────────────────────────────────────────

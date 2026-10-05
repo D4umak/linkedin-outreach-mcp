@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .campaign_naming import cut_at_word
+
 import json
 import logging
 from dataclasses import dataclass
@@ -299,7 +301,7 @@ def _format_thread_sync(outreach_id: str) -> str:
     lines = []
     for message in messages:
         role = message.get("role") or "?"
-        text = (message.get("text") or "").replace("\n", " ")[:200]
+        text = cut_at_word(message.get("text") or "", 200)
         lines.append(f"{role}: {text}")
     return "\n".join(lines) or "(no messages)"
 

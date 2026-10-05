@@ -6,6 +6,8 @@ hot leads, outcomes, and conversion rate. Highlights the best performer.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import logging
 
 from ..db import aio as db
@@ -71,7 +73,7 @@ async def run_compare_campaigns(campaign_ids: str = "") -> str:
         })
 
     # ── Build comparison table ──
-    headers = ["Metric"] + [d["campaign"]["name"][:20] for d in campaign_data]
+    headers = ["Metric"] + [cut_at_word(d["campaign"]["name"], 20) for d in campaign_data]
 
     def _pct(val: float) -> str:
         return f"{val:.0%}" if val > 0 else "\u2014"

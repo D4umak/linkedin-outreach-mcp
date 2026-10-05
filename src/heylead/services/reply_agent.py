@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .campaign_naming import cut_at_word
+
 import json
 import logging
 import time
@@ -277,7 +279,7 @@ def _format_thread(outreach_id: str) -> str:
     for m in messages:
         role = m.get("role") or "?"
         sent = m.get("sentiment") or ""
-        text = (m.get("text") or "").replace("\n", " ")[:280]
+        text = cut_at_word(m.get("text") or "", 280)
         tag = f"{role}/{sent}" if sent else role
         lines.append(f"{tag}: {text}")
     return "\n".join(lines) or "(no messages)"

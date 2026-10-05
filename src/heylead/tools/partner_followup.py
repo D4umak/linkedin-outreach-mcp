@@ -7,6 +7,8 @@ and Unipile email infrastructure.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 import time
@@ -207,7 +209,7 @@ def _handle_list() -> str:
             notes_list = json.loads(p.get("notes", "[]") or "[]")
             if notes_list:
                 latest = notes_list[-1]
-                lines.append(f"   Latest note: {latest.get('text', '')[:80]}")
+                lines.append(f"   Latest note: {cut_at_word(latest.get('text', ''), 80)}")
         except (json.JSONDecodeError, TypeError):
             pass
 

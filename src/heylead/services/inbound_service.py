@@ -10,6 +10,8 @@ check_post_comments() is still active and called by the scheduler.
 
 from __future__ import annotations
 
+from .campaign_naming import cut_at_word
+
 import logging
 import time
 from typing import Any
@@ -322,7 +324,7 @@ async def send_discovery_dms() -> str:
                                     "message": "inbound_dm",
                                     "comment": "inbound_comment",
                                 }.get(_sig_type, "inbound_invitation")
-                                _content_snip = (signal.get("content") or "")[:80]
+                                _content_snip = cut_at_word(signal.get("content") or "", 80)
                                 _src_detail = f"{_sig_type}: {_content_snip}" if _content_snip else _sig_type
                                 outreach_id = await run_db(
                                     enroll_prospect,

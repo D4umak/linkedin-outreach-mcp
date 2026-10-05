@@ -29,7 +29,7 @@ from ..author_identity import (
     slug_from_profile_url,
 )
 from ..constants import UNIPILE_POLL_INTERVAL_SECONDS, UNIPILE_POLL_TIMEOUT_SECONDS
-from ..guardrails import check_message, prepare_outbound_text
+from ..guardrails import check_message, prepare_outbound_text, text_landed
 from .message_sender import sender_flag
 from .api_metrics import api_metrics
 from .relations import RelationsPage
@@ -2311,12 +2311,17 @@ class UnipileClient:
 
         Checks the most recent messages in the chat for a match against
         the expected text (first 50 chars). Returns True if found.
+
+        The match is guardrails.text_landed, folded on both sides:
+        send_new_message rewrote the body on the wire (a blank line after
+        each sentence), a raw-prefix comparison never found it, and the
+        engine read False as "not sent" and sent again (5 Oct 2026, one
+        person, three copies; D4umak/heylead-api#2142).
         """
         try:
             messages = await self.get_chat_messages(account_id, chat_id, limit=3)
-            snippet = expected_text[:50]
             for msg in messages:
-                if snippet in (msg.get("text") or ""):
+                if text_landed(expected_text, msg.get("text") or "", prefix=50):
                     return True
             return False
         except Exception as e:

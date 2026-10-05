@@ -6,6 +6,8 @@ conversion rates, stale lead detection, and engagement ROI.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 import time as _time
@@ -279,11 +281,11 @@ async def run_campaign_report(
             for eng in recent:
                 name = eng.get("prospect_name") or "Unknown"
                 action = eng.get("action_type", "")
-                post_snippet = (eng.get("post_text") or "")[:60]
+                post_snippet = cut_at_word(eng.get("post_text") or "", 60)
                 status = eng.get("status", "sent")
                 status_tag = f" [{status}]" if status != "sent" else ""
                 if action == "comment":
-                    comment = (eng.get("comment_text") or "")[:80]
+                    comment = cut_at_word(eng.get("comment_text") or "", 80)
                     output.append(f"  \u2022 {name}: commented{status_tag} \u2014 \"{comment}\"")
                     if post_snippet:
                         output.append(f"    on: \"{post_snippet}...\"")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 from datetime import datetime, timezone
 from typing import Any
 from ..services.count_words import count_noun
@@ -72,7 +74,7 @@ def _format_strategy(insights: dict[str, Any], campaign_id: str) -> str:
             icon = _pattern_icon(ptype)
             out.append(f"  {i}. {icon} **{pkey}** ({ptype})")
             if desc:
-                out.append(f"     {desc[:120]}")
+                out.append(f"     {cut_at_word(desc, 120)}")
             out.append(f"     Confidence: {conf:.0%} | Revenue impact: ${rev:,.0f}")
     else:
         out.append("\n**Patterns:** None yet (need more campaign data)")
@@ -156,7 +158,7 @@ def _status_icon(status: str) -> str:
 
 def _format_action_detail(atype: str, details: dict) -> str:
     if atype == "skip_segment":
-        return f"Skipped {count_noun(int(details.get('skipped_count') or 0), 'prospect')} ({details.get('reason', '')[:60]})"
+        return f"Skipped {count_noun(int(details.get('skipped_count') or 0), 'prospect')} ({cut_at_word(details.get('reason', ''), 60)})"
     if atype == "reorder_queue":
         return f"Reordered {details.get('reordered_count', '?')}/{details.get('total_pending', '?')} pending"
     if atype == "adjust_messaging":

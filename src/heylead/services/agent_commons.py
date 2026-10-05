@@ -6,6 +6,8 @@ Nothing here writes LinkedIn, email, or calendar.
 
 from __future__ import annotations
 
+from .campaign_naming import cut_at_word
+
 import time
 import uuid
 from collections.abc import Callable
@@ -275,7 +277,7 @@ def read_commons_text(
         for beat in beats:
             lines.append(
                 f"- {beat.get('agent')}: {beat.get('decision') or '?'} "
-                f"— {(beat.get('reason') or '')[:120]}"
+                f"— {cut_at_word(beat.get('reason') or '', 120)}"
             )
     else:
         lines.append("- (none)")

@@ -219,7 +219,7 @@ Return ONLY the post text, nothing else."""
                     pass
             return (
                 f"LinkedIn post published!\n\n"
-                f'   "{post_text[:200]}{"..." if len(post_text) > 200 else ""}"\n'
+                f'   "{cut_at_word(post_text, 200)}"\n'
                 f"   ({len(post_text)} chars)"
             )
         else:

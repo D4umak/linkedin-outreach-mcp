@@ -6,6 +6,8 @@ One master record per person across all campaigns.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import asyncio
 import io
 import json
@@ -369,13 +371,13 @@ async def _handle_view(contact_id: str) -> str:
             # Show messages
             for msg in msgs[-3:]:  # Last 3 messages
                 role = "You" if msg.get("role") == "sdr" else "Them"
-                text = (msg.get("text") or "")[:80]
+                text = cut_at_word(msg.get("text") or "", 80)
                 lines.append(f"      [{role}] {text}")
 
             # Show engagements
             for eng in engs[-2:]:  # Last 2 engagements
                 atype = eng.get("action_type", "?")
-                text = (eng.get("text") or eng.get("reaction_type") or "")[:60]
+                text = cut_at_word(eng.get("text") or eng.get("reaction_type") or "", 60)
                 lines.append(f"      [{atype}] {text}")
 
     # Signals
@@ -385,7 +387,7 @@ async def _handle_view(contact_id: str) -> str:
         lines.append("-" * 60)
         for sig in signals[:5]:
             stype = sig.get("signal_type", "?")
-            content = (sig.get("content") or "")[:60]
+            content = cut_at_word(sig.get("content") or "", 60)
             when = _ts_to_relative(sig.get("detected_at"))
             lines.append(f"  [{stype}] {content} ({when})")
 
@@ -589,8 +591,8 @@ async def _handle_export(lifecycle_stage: str, tag: str, fmt: str) -> str:
         rows = []
         for c in contacts[:50]:  # Cap table at 50 rows
             rows.append([
-                (c.get("name") or "?")[:25],
-                (c.get("company") or "—")[:20],
+                cut_at_word(c.get("name") or "?", 25),
+                cut_at_word(c.get("company") or "—", 20),
                 f"{_lifecycle_icon(c.get('lifecycle_stage', 'prospect'))} {c.get('lifecycle_stage', 'prospect')}",
                 stars(c.get("fit_score") or 0),
                 str(c.get("total_campaigns") or 0),
@@ -918,7 +920,7 @@ async def _handle_linkedin_search(query: str, limit: int) -> str:
                 location=person.get("location", ""),
                 profile_json=person.get("_profile_json", ""),
                 source="linkedin_lookup",
-                source_detail=f"Search: {query[:80]}",
+                source_detail=f"Search: {cut_at_word(query, 80)}",
             )
             saved_ids.append(gid)
         except Exception:
@@ -1486,7 +1488,7 @@ def _format_contact_list(
 
         details = f"   {stage}"
         if title_str:
-            details += f"  |  {title_str[:40]}"
+            details += f"  |  {cut_at_word(title_str, 60)}"
         details += f"  |  {stars(score)}"
         if tags:
             details += f"  |  #{', #'.join(tags[:3])}"

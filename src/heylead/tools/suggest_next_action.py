@@ -27,6 +27,8 @@ Priority order:
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import logging
 import time
 from typing import Any
@@ -216,7 +218,7 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
                 lines = ["All campaigns are currently paused.\n"]
                 lines.append("Resume one to restart outreach:")
                 for c in paused[:5]:
-                    name = c.get("name", "Unnamed")[:40]
+                    name = cut_at_word(c.get("name", "Unnamed"), 40)
                     cid = c["id"][:8]
                     lines.append(f"  campaign(action='resume', campaign_id='{cid}...')"
                                  f"  — {name}")
@@ -668,7 +670,7 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
                         "score": p.get("estimated_revenue_impact", 0) / 1000,
                         "icon": "\U0001f9e0",
                         "text": f"Strategy: {p.get('pattern_key', '')}",
-                        "action": f"High-revenue pattern detected — {p.get('description', '')[:80]}. "
+                        "action": f"High-revenue pattern detected — {cut_at_word(p.get('description', ''), 80)}. "
                                   "Run show_strategy() for details.",
                         "fit_score": p.get("confidence", 0),
                         "campaign": "",

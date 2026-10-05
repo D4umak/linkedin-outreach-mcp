@@ -262,7 +262,7 @@ async def _append_inbound_invitations(
         inv_line += badge
         output.append(inv_line)
         if inv_msg:
-            output.append(f"     \"{inv_msg[:100]}\"")
+            output.append(f"     \"{cut_at_word(inv_msg, 100)}\"")
     if len(invitations) > limit:
         output.append(f"   ... and {len(invitations) - limit} more")
 
@@ -1799,7 +1799,7 @@ async def run_check_replies() -> str:
         enrolled = [ub for ub in unsolicited_inbound if ub.get("enrolled")]
         for ub in unsolicited_inbound[:5]:
             name = ub.get("name", "Unknown")
-            text = (ub.get("text") or "")[:100]
+            text = cut_at_word(ub.get("text") or "", 100)
             tag = " — enrolled on a matching campaign" if ub.get("enrolled") else ""
             output.append(f"   • {name}: \"{text}\"{tag}")
         if len(unsolicited_inbound) > 5:
@@ -1845,7 +1845,7 @@ async def _dispatch_hot_lead_alert(
             name = contact.get("name", "Prospect")
             company = contact.get("company", "")
             title = contact.get("title", "")
-            msg = f"🔥 *Hot Lead Response*: {name} ({title} at {company})\n*Sentiment*: `{sentiment}`\n*Message*: {reply_text[:300]}"
+            msg = f"🔥 *Hot Lead Response*: {name} ({title} at {company})\n*Sentiment*: `{sentiment}`\n*Message*: {cut_at_word(reply_text, 300)}"
             if calendar_url:
                 msg += f"\n*Calendar Link*: {calendar_url}"
             payload = {

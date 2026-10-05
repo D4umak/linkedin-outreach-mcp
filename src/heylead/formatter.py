@@ -274,6 +274,11 @@ def why_line(why: dict | None) -> str:
         # A profile term the campaign looks for, in plain words; "evidence
         # hit" was our scoring word (heylead-api#1863, the api's wording).
         reasons.append("1 match in their profile" if n == 1 else f"{n} matches in their profile")
+    if why.get("title_only") is True:
+        # The one reason named for a miss: the row was held under the floor
+        # on this, and "title match" alone would read as a pass
+        # (heylead-api#2149).
+        reasons.append("held: title matches, no industry or keyword evidence")
     if not reasons:
         segment = str(why.get("segment") or "").strip()
         if segment:

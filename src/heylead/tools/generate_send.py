@@ -10,6 +10,8 @@ Core outreach loop:
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 import time
@@ -1151,7 +1153,7 @@ async def run_generate_and_send(
         )
         return (
             f"⏸️ Deferred {prospect.get('name', 'Unknown')} — could not check "
-            f"for an existing conversation ({conv_lookup_failed[:120]}).\n\n"
+            f"for an existing conversation ({cut_at_word(conv_lookup_failed, 120)}).\n\n"
             "Nothing was sent. Will retry automatically."
         )
 
@@ -1183,7 +1185,7 @@ async def run_generate_and_send(
 
         if prospect_msgs:
             # Prospect messaged us at some point — this is an existing conversation
-            last_prospect_text = prospect_msgs[-1].get("text", "")[:100]
+            last_prospect_text = cut_at_word(prospect_msgs[-1].get("text", ""), 100)
             await _release_claim()
             await adb.log_action(
                 "dm_skipped_existing_conversation",
@@ -2050,7 +2052,7 @@ async def _send_email_outreach(
             f"📧 Email sent to {prospect_name} ({role_str})\n"
             f"   To: {prospect_email}\n"
             f"   Subject: {subject}\n"
-            f'   Body: "{body[:150]}..."\n\n'
+            f'   Body: "{cut_at_word(body, 150)}"\n\n'
             "Open/click tracking enabled."
         )
 

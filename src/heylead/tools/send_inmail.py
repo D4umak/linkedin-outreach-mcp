@@ -11,6 +11,8 @@ go through HeyLead tools — there is no sidecar script for this.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 import re
@@ -621,7 +623,7 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
             return (
                 f"✅ InMail sent to {prospect_name}{open_note}\n"
                 f"   Subject: {subject}\n"
-                f'   "{body[:180]}{"…" if len(body) > 180 else ""}"\n'
+                f'   "{cut_at_word(body, 180)}"\n'
                 f"   Credits remaining: {'n/a' if is_open_profile else remaining_after}"
             )
 

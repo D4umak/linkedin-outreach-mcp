@@ -7,6 +7,8 @@ from names. Never AND product stems with identity tokens in one query.
 
 from __future__ import annotations
 
+from .campaign_naming import cut_at_word
+
 import json
 import logging
 import re
@@ -263,7 +265,7 @@ def compile_interest_signals(
             break
     return {
         "kind": "interest",
-        "label": (text or "").strip()[:80],
+        "label": cut_at_word(text or "", 80),
         "code": "",
         "recall_queries": queries,
         "evidence": {

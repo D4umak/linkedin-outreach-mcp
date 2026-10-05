@@ -16,6 +16,8 @@ Unsupported providers return the URL for manual booking.
 
 from __future__ import annotations
 
+from .campaign_naming import cut_at_word
+
 from ..textutil import first_name as _first_name
 
 import asyncio
@@ -635,7 +637,7 @@ async def _book_browser_agent(
             return {
                 "success": False,
                 "provider": provider_name,
-                "error": f"Browser agent could not complete booking: {final_text[:300]}",
+                "error": f"Browser agent could not complete booking: {cut_at_word(final_text, 300)}",
                 "url": url,
             }
     except asyncio.TimeoutError:

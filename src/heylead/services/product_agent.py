@@ -216,8 +216,8 @@ def run_allowlisted_tests(repo: Path, paths: str) -> str:
     )
     output = (result.stdout or "") + (result.stderr or "")
     if result.returncode != 0:
-        return f"failed:\n{output[:800]}"
-    return f"ok\n{output[:400]}"
+        return f"failed:\n{output[:800]}"  # nosemgrep: a-tool-line-cut-mid-word (a subprocess stream)
+    return f"ok\n{output[:400]}"  # nosemgrep: a-tool-line-cut-mid-word (a subprocess stream)
 
 
 def open_pull_request(repo: Path, title: str, body: str, files: list[str]) -> str:
@@ -241,7 +241,7 @@ def open_pull_request(repo: Path, title: str, body: str, files: list[str]) -> st
     if commit.returncode != 0:
         return f"refused: git commit failed: {(commit.stderr or commit.stdout)[:240]}"
     created = subprocess.run(
-        ["gh", "pr", "create", "--title", headline, "--body", (body or headline)[:2000]],
+        ["gh", "pr", "create", "--title", headline, "--body", (body or headline)[:2000]],  # nosemgrep: a-tool-line-cut-mid-word (a PR body cap)
         cwd=repo,
         capture_output=True,
         text=True,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .campaign_naming import cut_at_word
+
 import logging
 import time
 from typing import Any
@@ -76,7 +78,7 @@ def format_action_timeline(
             age = ""
         text = " ".join(str(event.get("text") or "").split())
         if text:
-            lines.append(f"- {label}{age}: {text[:180]}")
+            lines.append(f"- {label}{age}: {cut_at_word(text, 180)}")
         else:
             lines.append(f"- {label}{age}")
     if last_at:

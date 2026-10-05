@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import logging
 
 from ..db.async_bridge import run_db
@@ -41,6 +43,6 @@ async def _status() -> str:
     if product:
         last = (
             f"last: {product.get('decision') or '?'} — "
-            f"{(product.get('reason') or '')[:160]}"
+            f"{cut_at_word(product.get('reason') or '', 160)}"
         )
     return f"product mode: {mode}\n{gate}\n{last}"

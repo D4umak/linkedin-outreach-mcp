@@ -33,6 +33,14 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.427 (2026-10-05)
+- New: an investor ICP carries investor vocabulary (D4umak/heylead-api#2156)
+- Fix: a line that quotes a person's text ends on a whole word, part 1 (#2136)
+- Fix: a keyword that names a title is dropped through the shared title matcher
+- Fix: a title alone is not a fit — a row needs industry or keyword evidence to clear the floor (#2149)
+- Fix: a landed message is recognised whatever line breaks it got (#2142)
+- Fix: a line that quotes a person's text ends on a whole word (#2136)
+
 ## v0.10.426 (2026-10-05)
 - Fix: a prospect nobody has written to cannot be closed as won, and close needs an outcome (#2122)
 - Fix: a contact's company stops where the headline's self-description begins (#2128)

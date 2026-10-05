@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import asyncio
 import logging
 import time
@@ -523,7 +525,7 @@ async def _list_inbox(client: Any, account_id: str, limit: int) -> str:
         unread = ci["unread"]
         cid = ci["chat_id"]
 
-        preview = text[:80].replace("\n", " ") if text else "(no preview)"
+        preview = cut_at_word(text, 80) if text else "(no preview)"
         if text and len(text) > 80:
             preview += "..."
 
@@ -532,7 +534,7 @@ async def _list_inbox(client: Any, account_id: str, limit: int) -> str:
 
         line = f"{i}. **{contact_name}**{unread_badge}"
         if headline:
-            line += f" — {headline[:60]}"
+            line += f" — {cut_at_word(headline, 60)}"
         if time_str:
             line += f" ({time_str})"
         line += f"\n   {preview}"

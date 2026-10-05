@@ -18,6 +18,8 @@ the settings table, exactly as create_campaign does.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 from typing import Any
@@ -183,7 +185,7 @@ async def _goal_match(
     header = (
         f"ICP `{record['id'][:8]}` — {record.get('name') or 'unnamed'}\n"
         f"{campaign_note}"
-        f"Goal: {goal_text[:200]}\n\n"
+        f"Goal: {cut_at_word(goal_text, 200)}\n\n"
     )
     tail = ""
     if verdict.blocks_campaign:
@@ -407,6 +409,9 @@ async def _preview(icp_id: str, persona: int, limit: int) -> str:
         breakdown = scored.get("breakdown") or {}
         breakdowns.append(breakdown)
         p["why"] = enrolment_why(p, breakdown, segment_name)
+        if scored.get("title_only"):
+            # Held on the title alone (heylead-api#2149); why_line says so.
+            p["why"]["title_only"] = True
     profiles.sort(key=lambda p: p.get("fit_score", 0.0), reverse=True)
 
     lines.append(_fit_block(profiles, breakdowns, persona_idx))
@@ -696,7 +701,7 @@ def _seniority_explain(profiles: list[dict], segment: dict) -> str:
     ]
     for p, v in verdicts[:15]:
         name = p.get("name") or "Unknown"
-        lines.append(f"  {name[:26]:<28}{(v['level'] or '—'):<10}{v['explain']}")
+        lines.append(f"  {cut_at_word(name, 26):<28}{(v['level'] or '—'):<10}{v['explain']}")
     return "\n".join(lines)
 
 
@@ -719,10 +724,12 @@ def _fit_block(
         lines.append(f"  {label:<14}{mean:.2f}   (weight {weight:.2f})")
     lines.append(
         "  compute_icp_match returns 0.30 for a dimension it has nothing to "
-        "compare — either the search row does not carry it (industry and company "
-        "size usually don't until a full profile is fetched) or this persona does "
+        "compare — either the search row does not carry it (company size "
+        "usually doesn't until a full profile is fetched) or this persona does "
         "not set it — and 0.50 for location in the same situation. Those values "
-        "mean \"no signal\", not \"poor match\"."
+        "mean \"no signal\", not \"poor match\". Industry is the exception: when "
+        "this persona names industries and the row shows none, that is 0.10, "
+        "a miss."
     )
 
     floor, floor_note = _applicable_fit_floor()
@@ -731,6 +738,13 @@ def _fit_block(
         f"{below} of {n} score below {floor}, the floor {floor_note} drops "
         "prospects at before queueing them."
     )
+    held = sum(1 for p in profiles if (p.get("why") or {}).get("title_only"))
+    if held:
+        lines.append(
+            f"  {held} of those {below} are held on the title alone: the title "
+            "matches, and nothing about them says this persona's industries or "
+            "keywords. A title alone is not a fit."
+        )
     if persona_idx > 1:
         lines.append(
             f"Note: create_campaign scores every prospect against persona 1, "
@@ -916,7 +930,7 @@ async def _list_icps_for_preview() -> str:
     for r in records[:25]:
         lines.append(
             f"  `{r['id'][:8]}`  {r.get('name') or 'unnamed'}"
-            + (f"  — {r['target_desc'][:60]}" if r.get("target_desc") else "")
+            + (f"  — {cut_at_word(r['target_desc'], 60)}" if r.get("target_desc") else "")
         )
     if len(records) > 25:
         lines.append(f"  ... and {len(records) - 25} more")

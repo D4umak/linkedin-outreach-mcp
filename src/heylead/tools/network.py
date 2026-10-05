@@ -19,6 +19,8 @@ is read directly, and only because it already fetches the pool status.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 from typing import Any
@@ -211,7 +213,7 @@ async def _handle_status(client: Any) -> str:
             status = "Active" if a.get("is_active") else "Inactive"
             health = a.get("health_status", "?")
             rows.append([
-                a.get("account_name", "")[:20] or a.get("account_id", "")[:12],
+                cut_at_word(a.get("account_name", ""), 20) or a.get("account_id", "")[:12],
                 status,
                 health,
                 str(a.get("connection_count", 0)),
@@ -447,8 +449,8 @@ async def _handle_parallel(client: Any, linkedin_ids: list[str]) -> str:
             degree = p.get("best_degree", "?")
             has_contact = bool(p.get("contact_info", {}).get("emails"))
             rows.append([
-                prof.get("name", lid)[:25],
-                prof.get("headline", "")[:35],
+                cut_at_word(prof.get("name", lid), 25),
+                cut_at_word(prof.get("headline", ""), 35),
                 str(degree),
                 "Yes" if has_contact else "—",
             ])
@@ -480,8 +482,8 @@ async def _handle_search(client: Any, query: str, title: str, max_accounts: int)
             headline = r.get("headline") or ""
             lid = r.get("provider_id") or r.get("id") or ""
             rows.append([
-                name[:25],
-                headline[:40],
+                cut_at_word(name, 25),
+                cut_at_word(headline, 40),
                 lid[:15],
             ])
         lines.append(table(
@@ -507,7 +509,7 @@ async def _handle_reach(client: Any, linkedin_id: str) -> str:
             deg = a.get("degree", 0)
             deg_str = "1st" if deg == 1 else "Unknown"
             rows.append([
-                a.get("account_name", "")[:20] or a.get("account_id", "")[:12],
+                cut_at_word(a.get("account_name", ""), 20) or a.get("account_id", "")[:12],
                 deg_str,
                 str(a.get("connection_count", 0)),
             ])
@@ -532,8 +534,8 @@ async def _handle_intros(client: Any, linkedin_id: str) -> str:
         for c in connections:
             rows.append([
                 c.get("account_id", "")[:12],
-                c.get("target_name", "")[:25],
-                c.get("target_headline", "")[:35],
+                cut_at_word(c.get("target_name", ""), 25),
+                cut_at_word(c.get("target_headline", ""), 35),
             ])
         lines.append(table(
             ["Account", "Contact Name", "Headline"],
@@ -579,9 +581,9 @@ async def _handle_insights(
         desc = value.get("description", "") if isinstance(value, dict) else ""
         rows.append([
             ins.get("insight_type", "")[:15],
-            ins.get("insight_key", "")[:25],
-            ins.get("segment", "")[:20] or "—",
-            desc[:40] or "—",
+            cut_at_word(ins.get("insight_key", ""), 25),
+            cut_at_word(ins.get("segment", ""), 20) or "—",
+            cut_at_word(desc, 40) or "—",
             f"{ins.get('confidence', 0):.0%}",
             str(ins.get("sample_size", 0)),
         ])
@@ -682,12 +684,12 @@ async def _handle_patterns(client: Any, insight_type: str) -> str:
         action = value.get("recommended_action", "") if isinstance(value, dict) else ""
 
         rows.append([
-            ins.get("insight_key", "")[:25],
-            ins.get("segment", "all")[:15],
-            desc[:35] or "—",
+            cut_at_word(ins.get("insight_key", ""), 25),
+            cut_at_word(ins.get("segment", "all"), 15),
+            cut_at_word(desc, 35) or "—",
             f"{pct}%" if pct else "—",
             f"{ins.get('confidence', 0):.0%}",
-            action[:30] or "—",
+            cut_at_word(action, 30) or "—",
         ])
 
     lines.append(table(
