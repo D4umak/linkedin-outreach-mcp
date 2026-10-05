@@ -30,6 +30,7 @@ from ..author_identity import (
 )
 from ..constants import UNIPILE_POLL_INTERVAL_SECONDS, UNIPILE_POLL_TIMEOUT_SECONDS
 from ..guardrails import check_message, prepare_outbound_text, text_landed
+from ..services.nameless import is_nameless_profile
 from .message_sender import sender_flag
 from .api_metrics import api_metrics
 from .relations import RelationsPage
@@ -1288,7 +1289,9 @@ class UnipileClient:
                 name_parts.append(item.get("last_name") or item.get("lastName") or "")
             name = " ".join(name_parts).strip() or item.get("name") or ""
 
-            if not name:
+            # A private or out-of-network result comes back as "LinkedIn
+            # Member" with its headline intact (D4umak/heylead-api#2164).
+            if is_nameless_profile({"name": name}):
                 continue
 
             headline = item.get("headline") or ""

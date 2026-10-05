@@ -1008,6 +1008,16 @@ async def run_create_campaign(
         except Exception as e:
             logger.warning("Connection enrichment failed (non-critical): %s", e)
 
+    # A result LinkedIn does not name (a private or out-of-network profile
+    # comes back as "LinkedIn Member" with its headline intact) is left out
+    # before it is scored: the title alone would clear the floor, and the
+    # cloud invited two such people on 5 Oct 2026 (D4umak/heylead-api#2164).
+    from ..services.nameless import is_nameless_profile
+    nameless_dropped = sum(1 for p in unique_prospects if is_nameless_profile(p))
+    if nameless_dropped:
+        unique_prospects = [p for p in unique_prospects if not is_nameless_profile(p)]
+        logger.info("Left out %d search results with no name", nameless_dropped)
+
     # Full ICP score (with enriched data for connections-only top candidates).
     # The per-dimension breakdown is kept as `why` on each prospect: it is
     # stored on the contact, pushed to the cloud, and rendered next to the
@@ -1284,6 +1294,11 @@ async def run_create_campaign(
     elif use_sales_nav:
         output_lines.append("Searched with Sales Navigator")
     output_lines.append(f"{count_noun(len(prospects_to_save), 'prospect')} queued")
+    if nameless_dropped:
+        output_lines.append(
+            f"{count_noun(nameless_dropped, 'result')} left out: LinkedIn withholds "
+            "the name (a private or out-of-network profile), so nobody could be addressed"
+        )
     if dedup_summary:
         output_lines.append(f"🔍 {dedup_summary}")
     if known_contacts_warning:

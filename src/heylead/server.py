@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.428 (2026-10-05)
+- Fix: a search result LinkedIn does not name is never enrolled (D4umak/heylead-api#2164)
+
 ## v0.10.427 (2026-10-05)
 - New: an investor ICP carries investor vocabulary (D4umak/heylead-api#2156)
 - Fix: a line that quotes a person's text ends on a whole word, part 1 (#2136)

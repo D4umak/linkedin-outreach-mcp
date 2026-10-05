@@ -19,6 +19,7 @@ Runs every hour via the scheduler as JOB_CAMPAIGN_REFILL.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import copy
 import json
 import logging
@@ -128,6 +129,7 @@ async def refill_campaigns(budget_seconds: float | None = None) -> str:
     total_added = 0
     passed_over: dict[str, int] = {}
     now = int(time.time())
+    _DROPPED.set({})  # a fresh tally for this run
 
     def _passed_over(reason: str) -> None:
         passed_over[reason] = passed_over.get(reason, 0) + 1
@@ -252,6 +254,9 @@ async def refill_campaigns(budget_seconds: float | None = None) -> str:
     # Sorted so the same situation always reads the same way run to run.
     for reason, count in sorted(passed_over.items()):
         parts.append(f"{count} {reason}")
+    nameless = dropped_this_run().get("nameless", 0)
+    if nameless:
+        parts.append(f"{count_noun(nameless, 'result')} left out, LinkedIn withholds the name")
     return "; ".join(parts) or "No campaigns to enrich"
 
 
@@ -493,6 +498,14 @@ async def _score_dedup_save(
             } - {""} & existing_ids
         ]
 
+    # A result LinkedIn does not name ("LinkedIn Member": a private or
+    # out-of-network profile) is left out before the floor is applied; its
+    # title alone would clear it (D4umak/heylead-api#2164).
+    unique, nameless = _drop_nameless(unique)
+    if nameless:
+        _record_dropped("nameless", nameless)
+        logger.info("Refill left out %d results with no name for campaign %s",
+                    nameless, campaign_id[:8])
     unique = _drop_below_send_threshold(unique, config)
     if not unique:
         return 0
@@ -522,6 +535,35 @@ async def _score_dedup_save(
         client, account_id, to_save, max_lookups=max_lookups,
     )
     return await _save_prospects(campaign_id, to_save)
+
+
+def _drop_nameless(prospects: list[dict]) -> tuple[list[dict], int]:
+    """Prospects somebody can address, and how many had no name."""
+    from .nameless import is_nameless_profile
+
+    kept = [p for p in prospects if not is_nameless_profile(p)]
+    return kept, len(prospects) - len(kept)
+
+
+# What this run left out, by reason, for the summary. A context variable
+# rather than a return value: the drop happens in _score_dedup_save and the
+# summary is written in refill_campaigns, three calls up, and nothing in
+# between needs the number (the cloud's refill funnel does the same).
+_DROPPED: contextvars.ContextVar[dict[str, int] | None] = contextvars.ContextVar(
+    "refill_dropped", default=None,
+)
+
+
+def _record_dropped(reason: str, count: int) -> None:
+    tally = _DROPPED.get()
+    if tally is None:
+        tally = {}
+        _DROPPED.set(tally)
+    tally[reason] = tally.get(reason, 0) + int(count or 0)
+
+
+def dropped_this_run() -> dict[str, int]:
+    return dict(_DROPPED.get() or {})
 
 
 async def _save_prospects(campaign_id: str, to_save: list[dict]) -> int:

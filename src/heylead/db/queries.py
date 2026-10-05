@@ -891,11 +891,19 @@ def refuse_junk_at_enrol(
     per-campaign setting compared against that campaign's start date.
     """
     from ..services.dedup_service import is_company_profile
+    from ..services.nameless import NAMELESS_REASON, is_nameless_profile
     from ..services.own_identity import is_own_identity
     from ..services.provider_id_resolver import is_sendable_invite_id
 
     if is_own_identity(prospect):
         return "own_account"
+
+    # A person nobody can address never joins a campaign, whichever lane
+    # found them: LinkedIn withholds the name of a private or out-of-network
+    # profile ("LinkedIn Member") and the search card's title still scores
+    # (D4umak/heylead-api#2164). First of the lane-independent refusals.
+    if is_nameless_profile(prospect):
+        return NAMELESS_REASON
 
     if _first_degree_refusal(prospect, campaign_id):
         return "first_degree"

@@ -18,6 +18,7 @@ from heylead import __version__
 from ..author_identity import parse_author_identity
 from ..constants import UNIPILE_POLL_INTERVAL_SECONDS, UNIPILE_POLL_TIMEOUT_SECONDS
 from ..guardrails import check_message, prepare_outbound_text, text_landed
+from ..services.nameless import is_nameless_profile
 from .message_sender import sender_flag
 from .api_metrics import api_metrics
 from .relations import RelationsPage
@@ -1326,7 +1327,9 @@ class BackendClient:
                 if not name and isinstance(item.get("profile"), dict):
                     prof = item.get("profile") or {}
                     name = prof.get("name") or " ".join(filter(None, [prof.get("first_name"), prof.get("last_name")])).strip()
-                if not name:
+                # A private or out-of-network result comes back as "LinkedIn
+                # Member" with its headline intact (D4umak/heylead-api#2164).
+                if is_nameless_profile({"name": name}):
                     continue
 
                 headline_val = item.get("headline") or item.get("headline_text") or ""
