@@ -767,9 +767,7 @@ def cloud_owns_outbound(campaign_id: str) -> bool:
 
     Called once per job creation and once more per execution.
     """
-    if not campaign_id or not config.is_backend_mode():
-        return False
-    if config.get_sending_host() != "cloud":
+    if not campaign_id or not local_cloud_owns_sending():
         return False
 
     # Exactly what the backend schedules, and nothing else. A copilot campaign
@@ -835,8 +833,8 @@ def cloud_sends_this_job(
 
 
 def cancel_cloud_owned_pending_jobs() -> int:
-    """Cancel leftover local jobs the cloud now owns. sending_host=cloud only."""
-    if not config.is_backend_mode() or config.get_sending_host() != "cloud":
+    """Cancel leftover local jobs the cloud now owns. Hosted accounts only."""
+    if not local_cloud_owns_sending():
         return 0
     from ..db.queries import cancel_pending_jobs_of_type
 
@@ -849,11 +847,21 @@ def cancel_cloud_owned_pending_jobs() -> int:
     return cancelled
 
 
+def local_cloud_owns_sending() -> bool:
+    """True for every hosted account; the twin of local_scheduler_engine_enabled."""
+    return config.is_backend_mode()
+
+
 def local_scheduler_engine_enabled() -> bool:
-    """False when hosted cloud owns every job — MCP/daemon must not start the engine."""
-    if not config.is_backend_mode():
-        return True
-    return config.get_sending_host() != "cloud"
+    """False for every hosted account: the cloud owns every job, so neither
+    the MCP server nor the daemon starts SchedulerEngine here.
+
+    This used to read ``sending_host``, and a stored ``local`` opted the
+    laptop back in. That is how a new user's laptop sent, spawned and alerted
+    overnight on 4-5 Oct 2026 (heylead-api#2120). Only an install with no
+    backend runs the engine.
+    """
+    return not config.is_backend_mode()
 
 
 # A cloud-owned workspace is written by the cloud: it plans the jobs, sends the
@@ -932,9 +940,7 @@ def cloud_owns_account_sending() -> bool:
     because the backend plans brand work from the strategy this client sends
     it and cannot post from a plan it has never received.
     """
-    if not config.is_backend_mode():
-        return False
-    if config.get_sending_host() != "cloud":
+    if not local_cloud_owns_sending():
         return False
 
     log = get_push_log()
@@ -1102,8 +1108,10 @@ def _host_quiet_takeover_lines() -> list[str]:
     return [
         "⚠️ Host went quiet on "
         + ", ".join(quiet)
-        + " — this machine is not sending. "
-        "Use `scheduler(action='send_from', host='local')` to move sending here."
+        + " — the cloud has not sent for it lately, and this machine never "
+        "sends for a hosted account. Check `scheduler_status(action="
+        "'diagnostics')`; if the cloud scheduler is off, "
+        "`scheduler(action='toggle', cloud=True, enabled=True)` switches it on."
     ]
 
 
@@ -3878,8 +3886,6 @@ async def ensure_hosted_sending_default() -> tuple[bool, str]:
     """
     if not config.is_backend_mode():
         return False, "not hosted"
-    if config.get_sending_host() != "cloud":
-        return False, "sending_host is local"
     if config.get_scheduler_mode() == "observe":
         return False, "observe"
     state = await run_db(get_cloud_scheduler_state)
@@ -4186,7 +4192,7 @@ def hosted_queue_refusal(action: str) -> str:
     2026), so a local rewrite changed nothing that sends while the reply said
     it had. Returns "" when this computer's queue is the one that sends.
     """
-    if not config.is_backend_mode() or config.get_sending_host() != "cloud":
+    if not local_cloud_owns_sending():
         return ""
     return (
         f"{action} was not run. On a hosted account your HeyLead workspace "

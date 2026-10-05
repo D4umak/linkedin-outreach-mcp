@@ -26,6 +26,11 @@ async def call_llm(
     tier: str = "quality",
 ) -> str:
     """Run one prompt through whichever LLM path this install is configured for."""
+    from ..withdrawn_sentence import strip_withdrawn_sentence
+
+    # The backend path skips LLMClient; strip here too (heylead-api #1766).
+    prompt = strip_withdrawn_sentence(prompt)
+    system = strip_withdrawn_sentence(system)
     if json_mode and "JSON" not in prompt.upper():
         prompt = f"{prompt}\n\nReturn ONLY valid JSON, no prose and no code fences."
 

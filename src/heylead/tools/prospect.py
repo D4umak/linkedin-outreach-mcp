@@ -14,7 +14,7 @@ async def run_prospect(
     action: str,
     outreach_id: str = "",
     campaign_id: str = "",
-    outcome: str = "won",
+    outcome: str = "",
     reason: str = "",
     meeting_link: str = "",
     confirm: bool = False,

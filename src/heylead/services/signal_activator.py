@@ -24,6 +24,7 @@ import time
 from typing import Any
 
 from ..db.async_bridge import run_db
+from ..linkedin.headline_split import company_from_headline
 from .post_freshness import MISSING_SOURCE_TIME, STALE_SOURCE, post_date_decline
 from .signal_linker import _match_best_campaign
 
@@ -1716,9 +1717,7 @@ def _extract_company(signal: dict[str, Any]) -> str:
     company = metadata.get("new_company") or metadata.get("company") or ""
     if not company:
         # Try to extract from prospect title
-        title = signal.get("prospect_title") or ""
-        if " at " in title:
-            company = title.split(" at ")[-1].strip()
+        company = company_from_headline(signal.get("prospect_title") or "")
     return company
 
 

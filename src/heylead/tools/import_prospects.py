@@ -34,6 +34,7 @@ from ..db.queries import (
 )
 from ..formatter import table
 from ..linkedin import get_account_id, get_linkedin_client
+from ..linkedin.headline_split import company_from_headline
 from ..services.campaign_naming import cut_at_word
 from ..services.dedup_service import (
     dedup_prospects,
@@ -520,9 +521,9 @@ async def run_import_prospects(
                         if not p.get("title") and profile.get("headline"):
                             p["title"] = profile["headline"]
                         if not p.get("company"):
-                            headline = profile.get("headline", "")
-                            if " at " in headline:
-                                p["company"] = headline.rsplit(" at ", 1)[1]
+                            company = company_from_headline(profile.get("headline", ""))
+                            if company:
+                                p["company"] = company
                         enriched_count += 1
                 except Exception as e:
                     logger.debug("Enrich failed for %s: %s", lid, e)

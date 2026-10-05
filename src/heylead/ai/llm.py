@@ -26,6 +26,7 @@ def _retry_after_seconds(resp: httpx.Response, default: float) -> float:
     return default
 
 from .. import config, constants
+from ..withdrawn_sentence import strip_withdrawn_sentence
 from .copywriter import provenance as copy_provenance
 
 logger = logging.getLogger(__name__)
@@ -302,6 +303,11 @@ class LLMClient:
         tier: str,
         schema: dict[str, Any] | None = None,
     ) -> str:
+        # Past sent text reaches a prompt through history lines and examples;
+        # the withdrawn sentence in it would be copied into new copy
+        # (heylead-api #1766).
+        prompt = strip_withdrawn_sentence(prompt)
+        system = strip_withdrawn_sentence(system)
         model = self._model_for(provider, tier)
         if provider == "gemini":
             return await self._call_gemini(

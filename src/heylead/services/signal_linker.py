@@ -24,6 +24,7 @@ import time
 from typing import Any
 
 from ..flags import flag_enabled
+from ..linkedin.headline_split import company_from_headline
 from ..textutil import contains_term
 from .post_freshness import post_date_decline
 
@@ -754,6 +755,5 @@ def _extract_company(signal: dict[str, Any]) -> str:
     company = meta.get("new_company") or meta.get("company") or ""
     if not company:
         title = signal.get("prospect_title") or ""
-        if " at " in title:
-            company = title.rsplit(" at ", 1)[1]
+        company = company_from_headline(title)
     return company

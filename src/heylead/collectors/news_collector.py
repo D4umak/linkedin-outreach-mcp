@@ -14,6 +14,8 @@ import logging
 import time
 from typing import Any
 
+from ..linkedin.headline_split import company_from_headline
+
 logger = logging.getLogger(__name__)
 
 
@@ -429,10 +431,4 @@ def _extract_company_from_contact(contact: dict[str, Any]) -> str | None:
     if not headline:
         return None
 
-    for sep in [" at ", " @ ", " | "]:
-        if sep in headline:
-            parts = headline.split(sep, 1)
-            if len(parts) == 2:
-                return parts[1].strip()
-
-    return None
+    return company_from_headline(headline) or None

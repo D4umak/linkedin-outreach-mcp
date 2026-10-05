@@ -77,13 +77,11 @@ async def refuse_if_hosted_send() -> str | None:
     because a send can run here at all. When the cloud owns sending, it is
     the only sender, so the question never arises.
 
-    The question is NOT ``is_backend_mode()``. A hosted account can opt this
-    machine back in with ``sending_host='local'``, and then the daemon runs
-    SchedulerEngine, whose executors call run_generate_and_send themselves
-    (scheduler/executors.py). Refusing there would both break a setup the
-    user deliberately chose and be recorded as a SEND: the executors classify
-    an unrecognised result string as success (ops_log.classify_result), so a
-    refusal would be logged as outreach that never happened.
+    Until 5 Oct 2026 a hosted account could opt this machine back in with a
+    stored ``sending_host``, and the daemon then ran SchedulerEngine here;
+    that is how a new user's laptop sent, spawned and alerted overnight
+    (heylead-api#2120). The opt-in is gone: for a hosted account the cloud
+    is the only sender.
 
     ``local_scheduler_engine_enabled`` is the same predicate the daemon uses
     to decide whether to start that engine, so the two cannot drift apart.

@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .experience import apply_current_role, experience_from_payload
+from .headline_split import split_headline
 
 
 def _as_dict(data: Any) -> dict[str, Any]:
@@ -50,16 +51,6 @@ def _skills(data: dict[str, Any]) -> list[str]:
     return skills
 
 
-def _title_company_from_headline(headline: str) -> tuple[str, str]:
-    title = headline
-    company = ""
-    if " at " in headline:
-        parts = headline.rsplit(" at ", 1)
-        title = parts[0]
-        company = parts[1]
-    return title, company
-
-
 def normalize_linkedin_profile(data: Any) -> dict[str, Any]:
     """Map a Unipile user payload to HeyLead's stored profile dict.
 
@@ -75,7 +66,7 @@ def normalize_linkedin_profile(data: Any) -> dict[str, Any]:
     first_name = _first_text(data.get("first_name"), data.get("firstName"))
     last_name = _first_text(data.get("last_name"), data.get("lastName"))
     headline = _first_text(data.get("headline"), data.get("occupation"))
-    parsed_title, parsed_company = _title_company_from_headline(headline)
+    parsed_title, parsed_company = split_headline(headline)
     title = _first_text(data.get("title"), parsed_title)
     company = _first_text(data.get("company"), parsed_company)
 

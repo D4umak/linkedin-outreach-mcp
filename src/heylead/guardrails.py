@@ -15,6 +15,8 @@ import os
 import re
 import unicodedata
 
+from .withdrawn_sentence import strip_withdrawn_sentence
+
 EM_DASH = "—"
 
 # Zero-width / format chars that are not Unicode Zs but still eat a "space"
@@ -70,7 +72,9 @@ def prepare_outbound_text(text: str, *, kind: str = "dm") -> str:
     is ever appended: the copy the validators passed is the copy that goes
     (D4umak/heylead-api#1766).
     """
-    prepared = normalize_outbound_spaces(text or "")
+    # A model shown an old message that ended with the withdrawn sentence can
+    # still write it; it never reaches the wire (heylead-api #1766).
+    prepared = normalize_outbound_spaces(strip_withdrawn_sentence(text or ""))
     if kind == "dm":
         prepared = break_dm_sentences(prepared)
     return prepared

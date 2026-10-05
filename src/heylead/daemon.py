@@ -114,11 +114,7 @@ def daemon_status() -> dict:
     from .services.cloud_sync import install_source, local_scheduler_engine_enabled
 
     src = install_source()
-    sync_only = (
-        config.is_backend_mode()
-        and config.get_sending_host() == "cloud"
-        and not local_scheduler_engine_enabled()
-    )
+    sync_only = not local_scheduler_engine_enabled()
     return {
         "daemon_configured": flag_on,
         "plist_installed": _plist_path().exists(),

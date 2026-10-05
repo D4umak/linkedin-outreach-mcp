@@ -23,6 +23,7 @@ from ..linkedin import (
     get_linkedin_client,
 )
 from ..formatter import source_badge, stars, table
+from ..linkedin.headline_split import company_from_headline
 from ..db.async_bridge import run_db
 from ..services.count_words import count_noun
 
@@ -218,11 +219,14 @@ async def run_contacts(
         return await _handle_search(query, lifecycle_stage, tag, min_fit_score, limit)
     elif action == "view":
         return await _handle_view(contact_id)
-    elif action == "tag":
-        return await _handle_tag(contact_id, tag)
-    elif action == "note":
-        return await _handle_note(contact_id, note)
-    elif action == "stage":
+    elif action in ("tag", "note", "stage"):
+        refused = _hosted_label_refusal(action)
+        if refused:
+            return refused
+        if action == "tag":
+            return await _handle_tag(contact_id, tag)
+        if action == "note":
+            return await _handle_note(contact_id, note)
         return await _handle_stage(contact_id, lifecycle_stage)
     elif action == "stats":
         return await _handle_stats()
@@ -388,6 +392,30 @@ async def _handle_view(contact_id: str) -> str:
     lines.append("")
     lines.append(f"ID: {contact_id}")
     return "\n".join(lines)
+
+
+def _hosted_label_refusal(action: str) -> str:
+    """A hosted account's tags, notes and stages live in its workspace.
+
+    This tool writes global_contacts on this machine, which the workspace
+    never reads. On 4 Oct 2026 five stage changes and five notes on a hosted
+    account landed here and nowhere else (heylead-api#2122). There is no
+    route for this client to write them to the workspace yet, so the honest
+    answer is a refusal that says where they do live.
+    """
+    from ..config import is_backend_mode
+
+    if not is_backend_mode():
+        return ""
+    what = {"tag": "Tags", "note": "Notes", "stage": "Stages"}[action]
+    return (
+        f"{what} for a hosted account live in your HeyLead workspace, and "
+        "this client has no way to write them there: a change here would "
+        "stay on this machine. Nothing was changed. Use the dashboard, or "
+        "the hosted assistant's update_contact. To leave a prospect out of "
+        "a campaign, prospect(action='skip', reason_code='not_a_fit') works "
+        "from here."
+    )
 
 
 async def _handle_tag(contact_id: str, tag: str) -> str:
@@ -825,9 +853,9 @@ async def _handle_linkedin_search(query: str, limit: int) -> str:
                     if not person.get("title") and profile.get("headline"):
                         person["title"] = profile["headline"]
                     if not person.get("company"):
-                        headline = profile.get("headline", "")
-                        if " at " in headline:
-                            person["company"] = headline.rsplit(" at ", 1)[1]
+                        company = company_from_headline(profile.get("headline", ""))
+                        if company:
+                            person["company"] = company
                     enriched_count += 1
             except Exception as e:
                 logger.debug("Enrich failed for %s: %s", lid, e)

@@ -56,16 +56,10 @@ async def run_scheduler_status() -> str:
         lines.append("")
 
     if is_backend_mode():
-        from ..config import get_sending_host
-        host = get_sending_host()
-        if host == "local":
-            lines.append("**Sending from this machine** — the cloud scheduler is stood down.")
-        else:
-            lines.append(
-                "**Sending from the cloud** — this machine stands down for "
-                "campaign outbound. Move it here with "
-                "`scheduler(action='send_from', host='local')`."
-            )
+        lines.append(
+            "**Sending from the cloud** — this machine never sends for a "
+            "hosted account."
+        )
         lines.append("")
 
     if observing:
@@ -602,7 +596,7 @@ def _cloud_scheduler_reports_disabled(msg: str) -> bool:
 async def run_send_from(host: str) -> str:
     """Move all campaign outbound to the cloud or to this machine."""
     from .. import config
-    from ..config import set_sending_host, set_scheduler_mode
+    from ..config import set_scheduler_mode
     from ..services.cloud_sync import toggle_cloud_scheduler
 
     host = str(host or "").strip().lower()
@@ -615,49 +609,30 @@ async def run_send_from(host: str) -> str:
                 "This install has no hosted account. Sending stays on this "
                 "machine."
             )
-        set_sending_host("local", caller="mcp_tool", reason="send_from local")
         set_scheduler_mode(
             "full", caller="mcp_tool", reason="send_from local",
         )
         return "Sending is on this machine. There is no cloud scheduler here."
 
     if host == "local":
-        # Switch the cloud off FIRST. Until 9 Sep 2026 this set
-        # sending_host=local and scheduler_mode=full and only then called
-        # toggle_cloud_scheduler(False), which returns a plain
-        # "... failed: ..." string on any HTTP error and rolls nothing back.
-        # A backend blip therefore left a laptop that sends AND a cloud that
-        # still sends -- the delivery-level duplicate, by configuration
-        # (duplicate-intro review).
-        cloud_msg = await toggle_cloud_scheduler(False)
-        if not _cloud_scheduler_reports_disabled(cloud_msg):
-            return (
-                "Sending was NOT moved. The cloud scheduler could not be "
-                "switched off, so it is still the sender and this machine "
-                "stays on standby \u2014 moving first would have left both "
-                "sending.\n\n"
-                f"{cloud_msg}\n\n"
-                "Retry `scheduler(action='send_from', host='local')` once the "
-                "backend answers."
-            )
-        set_sending_host("local", caller="mcp_tool", reason="send_from local")
-        set_scheduler_mode(
-            "full", caller="mcp_tool", reason="send_from local",
-        )
+        # Refused without touching the cloud. Until 5 Oct 2026 this switched
+        # the cloud scheduler OFF and then started SchedulerEngine here; a
+        # new hosted user did exactly that, and his laptop sent, spawned
+        # and alerted overnight (heylead-api#2120). Standing the cloud down
+        # first and then refusing would leave the account with no sender.
         return (
-            "Sending moved to this machine.\n\n"
-            f"{cloud_msg}\n\n"
-            "Every active campaign now sends from here. Move it back with "
-            "`scheduler(action='send_from', host='cloud')`."
+            "A hosted account sends from the cloud; this machine cannot be "
+            "its sender, so nothing was moved and the cloud scheduler was "
+            "left as it is. Your active campaigns send on their own; "
+            "`scheduler(action='toggle', cloud=True, enabled=True)` switches "
+            "the cloud scheduler on if it is off."
         )
 
-    set_sending_host("cloud", caller="mcp_tool", reason="send_from cloud")
     cloud_msg = await toggle_cloud_scheduler(True)
     return (
-        "Sending moved to the cloud.\n\n"
+        "Sending runs in the cloud.\n\n"
         f"{cloud_msg}\n\n"
-        "This machine stands down for campaign outbound. Move it back with "
-        "`scheduler(action='send_from', host='local')`."
+        "This machine never sends for a hosted account."
     )
 
 

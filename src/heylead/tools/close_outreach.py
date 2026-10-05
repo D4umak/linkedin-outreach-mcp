@@ -33,9 +33,15 @@ _OUTCOME_MAP = {
 }
 
 
+def _never_contacted(record: dict) -> bool:
+    """No invitation, message or reply has gone to this person."""
+    status = str(record.get("status") or "")
+    return status in ("pending", "skipped", "sending") and not record.get("invited_at")
+
+
 async def run_close_outreach(
     outreach_id: str = "",
-    outcome: str = "won",
+    outcome: str = "",
     reason: str = "",
     meeting_link: str = "",
     reason_code: str = "",
@@ -72,6 +78,16 @@ async def run_close_outreach(
         )
 
     # ── Validate outcome ──
+    if not outcome:
+        # Until 5 Oct 2026 the default was "won": five never-contacted
+        # prospects became wins when Claude was only removing them
+        # (heylead-api#2122).
+        return (
+            "Pass an outcome: 'won', 'lost' or 'opt_out'. Nothing was changed.\n\n"
+            "To leave someone out because they are not a fit, skip them "
+            "instead: prospect(action='skip', outreach_id='...', "
+            "reason_code='not_a_fit')."
+        )
     if outcome not in _OUTCOME_MAP:
         return (
             f"Invalid outcome: '{outcome}'\n\n"
@@ -113,6 +129,20 @@ async def run_close_outreach(
         return (
             f"**{prospect_name}** is already closed ({outcome_label(old_status)}).\n"
             "No changes made."
+        )
+
+    # A win or a loss is a result of a conversation. A row nobody has written
+    # to has no result to record; closing it as won counts at every funnel
+    # bar and teaches the targeting learner that its segment converts
+    # (heylead-api#2122). Opting someone out before any contact is fine.
+    if outcome in ("won", "lost") and _never_contacted(record):
+        return (
+            f"**{prospect_name}** was never contacted (no invitation, message "
+            f"or reply), so there is nothing to close as {outcome}. Nothing was "
+            "changed.\n\n"
+            "To leave them out of this campaign, skip them: "
+            f"prospect(action='skip', outreach_id='{outreach_id}', "
+            "reason_code='not_a_fit')."
         )
 
     # ── Build outcome data ──

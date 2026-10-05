@@ -14,6 +14,8 @@ import json
 import re
 from typing import Any
 
+from ..linkedin.headline_split import company_from_headline
+
 EXCLUDE_COMPETITORS_KEY = "exclude_competitors"
 COMPETITOR_COMPANIES_KEY = "competitor_companies"
 
@@ -136,8 +138,9 @@ def person_employer(person: dict[str, Any] | None) -> str:
     for blob in blobs:
         for key in _HEADLINE_KEYS:
             text = str(blob.get(key) or "")
-            if " at " in text:
-                return text.rsplit(" at ", 1)[-1].strip()
+            company = company_from_headline(text)
+            if company:
+                return company
     return ""
 
 

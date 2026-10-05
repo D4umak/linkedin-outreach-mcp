@@ -745,18 +745,16 @@ SENDING_HOSTS = ("cloud", "local")
 def get_sending_host() -> str:
     """Which machine is allowed to send campaign outbound.
 
-    cloud  hosted default — this machine stands down for everything the
-           backend sends. Existing installs with no key stored read as cloud.
-    local  explicit opt-in — this machine sends; the cloud scheduler is off.
-
-    Direct / self-hosted installs have no backend, so the answer is always
-    local regardless of what is stored.
+    cloud  every hosted account. The cloud plans, sends, spawns and alerts;
+           this machine syncs. A stored ``sending_host`` has no say: until
+           5 Oct 2026 a stored ``local`` started SchedulerEngine here, and a
+           new user's laptop then sent 7 invitations and 4 DMs overnight
+           through the api's proxy, spawned 7 "[Auto]" drafts and emailed
+           him stall alerts at 01:45 his time (heylead-api#2120).
+    local  direct / self-hosted installs, which have no backend.
     """
     if not is_backend_mode():
         return "local"
-    host = str(load_config().get("sending_host") or "").strip().lower()
-    if host in SENDING_HOSTS:
-        return host
     return "cloud"
 
 
@@ -775,6 +773,11 @@ def set_sending_host(
     if host not in SENDING_HOSTS:
         raise ValueError(
             f"Unknown sending_host {host!r} — expected one of {SENDING_HOSTS}"
+        )
+    if host == "local" and is_backend_mode():
+        raise ValueError(
+            "A hosted account sends from the cloud; this machine cannot be "
+            "its sender (heylead-api#2120)."
         )
     was = get_sending_host()
     cfg = load_config()

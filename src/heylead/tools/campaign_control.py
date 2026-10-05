@@ -703,15 +703,14 @@ async def run_launch_campaign(campaign_id: str = "") -> str:
         lines.extend([
             "",
             "☁️ Sending from the cloud — this campaign keeps going every 5 "
-            "minutes with your laptop closed. This machine sends only after "
-            "`scheduler(action='send_from', host='local')`.",
+            "minutes with your laptop closed.",
         ])
     elif config.is_backend_mode():
         lines.extend([
             "",
             f"⚠️ Cloud sending could not be switched on ({cloud_detail}). "
-            "This machine will not take over. Retry later, or move sending "
-            "here with `scheduler(action='send_from', host='local')`.",
+            "This machine will not take over. Retry "
+            "`scheduler(action='toggle', cloud=True, enabled=True)` later.",
         ])
     lines.extend([
         "",
@@ -987,14 +986,13 @@ async def run_resume_campaign(campaign_id: str = "") -> str:
     if cloud_commissioned:
         cloud_note += (
             "\n\n☁️ Sending from the cloud — this campaign keeps going with "
-            "your laptop closed. This machine sends only after "
-            "`scheduler(action='send_from', host='local')`."
+            "your laptop closed."
         )
     elif config.is_backend_mode():
         cloud_note += (
             f"\n\n⚠️ Cloud sending could not be switched on ({cloud_detail}). "
-            "This machine will not take over. Move sending here with "
-            "`scheduler(action='send_from', host='local')` if you want it to."
+            "This machine will not take over. Retry "
+            "`scheduler(action='toggle', cloud=True, enabled=True)` later."
         )
 
     return (
