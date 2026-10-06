@@ -3615,6 +3615,34 @@ class BackendClient:
             logger.debug(f"get_email failed: {e}")
             return {}
 
+    async def set_brand_engagement(self, enabled: bool) -> dict[str, Any]:
+        """Turn this workspace's brand engagement on or off in the cloud (api #2221).
+
+        Off unless someone turns it on. On, the cloud likes and follows as the
+        brand plan says, and the comments it writes wait in Approvals.
+        Returns the cloud's answer ({enabled, pending_actions,
+        comments_awaiting_approval}), or {"error": ...}.
+        """
+        url = f"{self.base_url}/api/v1/brand/engagement"
+        try:
+            resp = await self._client.put(url, json={"enabled": bool(enabled)}, headers=self._headers())
+            if resp.status_code != 200:
+                return {"error": f"Backend returned {resp.status_code}"}
+            return resp.json()
+        except Exception as e:
+            return {"error": f"Brand engagement change failed: {e}"}
+
+    async def get_brand_engagement(self) -> dict[str, Any]:
+        """This workspace's brand engagement setting in the cloud, or {"error": ...}."""
+        url = f"{self.base_url}/api/v1/brand/engagement"
+        try:
+            resp = await self._client.get(url, headers=self._headers())
+            if resp.status_code != 200:
+                return {"error": f"Backend returned {resp.status_code}"}
+            return resp.json()
+        except Exception as e:
+            return {"error": f"Brand engagement read failed: {e}"}
+
     async def mark_email(
         self,
         account_id: str,

@@ -35,7 +35,7 @@ SOURCE_FIELDS = ("project_brief", "offerings", "case_studies", "social_proofs", 
 # card_from_context coercion: text fields are always str(); these timestamp
 # fields are always int() (or None on a bad value, including a bool).
 TEXT_FIELDS = ("for_", "outcome", "how", "proof", "ask", "confirmed_by", "source_hash")
-INT_FIELDS = ("confirmed_at", "generated_at", "alert_sent_at")
+INT_FIELDS = ("confirmed_at", "generated_at", "alert_sent_at", "edited_at")
 
 _PLACEHOLDER_RE = re.compile(r"\[[A-Za-z][^\]\n]{0,30}\]")
 
@@ -53,6 +53,10 @@ class OfferCard:
     confirmed_by: str = ""
     needs_review: bool = False
     alert_sent_at: int | None = None
+    # When a person last changed the text or unconfirmed the card. The
+    # server keeps whichever copy changed last (heylead-api#2256), so an
+    # edit made here must say when, or an older confirmed copy outranks it.
+    edited_at: int | None = None
     version: int = CARD_VERSION
     extra: dict[str, Any] = field(default_factory=dict)
 

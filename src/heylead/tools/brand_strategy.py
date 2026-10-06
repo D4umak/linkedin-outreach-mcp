@@ -111,6 +111,8 @@ async def run_brand_strategy(
         return await _handle_set_summary(account_id, focus)
     elif action == "set_photo_library":
         return await _handle_set_photo_library(focus)
+    elif action == "set_engagement":
+        return await _handle_set_engagement(focus)
     elif action == "makeover":
         return await _handle_makeover(account_id)
     elif action == "photo_enhance":
@@ -1555,6 +1557,58 @@ async def _handle_set_link(account_id: str, url: str) -> str:
             return f"Failed to set custom link: {error}"
     except Exception as e:
         return f"Failed to set custom link: {e}"
+
+
+# Brand engagement (liking, following and commenting on other people's posts
+# as the plan says) is off until the user turns it on (api #2221). For a seat
+# the cloud sends from, the switch is the cloud's; for a local seat it is this
+# setting, which plan_brand_engagement reads.
+BRAND_ENGAGEMENT_SETTING = "brand_engagement_enabled"
+
+
+def brand_engagement_enabled_locally() -> bool:
+    return str(get_setting(BRAND_ENGAGEMENT_SETTING, "") or "").strip().lower() == "on"
+
+
+async def _handle_set_engagement(choice: str) -> str:
+    """Turn brand engagement on or off ("on" / "off"); no choice shows the setting."""
+    from ..db.queries import save_setting
+    from ..services import cloud_sync
+
+    choice = (choice or "").strip().lower()
+    if choice not in ("", "on", "off"):
+        return 'Use focus="on" or focus="off".'
+    if await run_db(cloud_sync.cloud_owns_account_sending):
+        client = get_linkedin_client()
+        if not hasattr(client, "set_brand_engagement"):
+            return "This connection cannot change the cloud setting. Change it on heylead.dev."
+        result = (
+            await client.get_brand_engagement() if not choice
+            else await client.set_brand_engagement(choice == "on")
+        )
+        if result.get("error"):
+            return f"Brand engagement was not changed: {result['error']}"
+        if not result.get("enabled"):
+            return (
+                "Brand engagement is off. Nothing is liked, followed or commented on in your name."
+                + (f" {result.get('pending_actions', 0)} plan actions are waiting." if result.get("pending_actions") else "")
+            )
+        return (
+            "Brand engagement is on. HeyLead likes posts and follows their authors as your "
+            "brand plan says, and the comments it writes wait in Approvals on heylead.dev "
+            "until you approve them."
+        )
+    if not choice:
+        on = await run_db(brand_engagement_enabled_locally)
+        return f"Brand engagement is {'on' if on else 'off'} on this machine."
+    await run_db(save_setting, BRAND_ENGAGEMENT_SETTING, "on" if choice == "on" else "")
+    await run_db(log_action, "brand_engagement_set", details={"enabled": choice == "on"})
+    if choice == "on":
+        return (
+            "Brand engagement is on on this machine: the scheduler will like, follow and "
+            "comment on posts as your brand plan says."
+        )
+    return "Brand engagement is off on this machine. Nothing is liked, followed or commented on."
 
 
 async def _handle_set_photo_library(folder: str) -> str:

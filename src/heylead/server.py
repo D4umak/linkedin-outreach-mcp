@@ -33,6 +33,17 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.430 (2026-10-06)
+- Fix: an Offer card edit says when it happened, so the server keeps the newer copy (heylead-api#2256)
+- Fix: name the invitee through sent_invitations, never the invitation id (api #2257)
+- New: brand engagement is off until the user turns it on (api #2221)
+- New: a fix PR names its production invariant (#2214)
+- the case analyst reads the product-event ledger through the staff routes (#2212)
+- New: an outcome names its events, and pr_gate refuses a code PR without ## Events (#2210)
+- Fix: investor vocabulary only for a partner brief about investors (#2156)
+- what an agent does without asking, and what still needs Denys (#2216)
+- New: own-post likes and comments are behavioural signals, as on the api (heylead-api#2203)
+
 ## v0.10.429 (2026-10-05)
 - Fix: client twin of #2171: the first DM after a note waits a day; rewrites see the thread
 
@@ -3556,6 +3567,9 @@ async def _brand_strategy_impl(
                 posts may attach (pass the folder path via focus; "off" clears it).
                 Files named "NNN - what it shows.jpeg"; personal or family subfolders
                 are never used. Local posting only: a cloud-owned seat posts text only.
+            "set_engagement" — Turn brand engagement on or off (focus="on" or "off"; empty
+                shows it). Off by default. On, HeyLead likes and follows as the plan says;
+                in the cloud its comments wait in Approvals until approved.
         focus: Focus area for analyze/plan ("headline", "summary", "content", "engagement", ""),
             URL string for set_link, the literal text for set_headline / set_summary,
             or the folder path for set_photo_library.
@@ -4152,7 +4166,7 @@ _MOVED: dict[str, dict[str, str]] = {
     "brand_strategy": {"analyze": "brand_progress", "progress": "brand_progress"},
     "brand_progress": {a: "brand_strategy" for a in (
         "plan", "execute", "upload_photo", "upload_cover", "set_link",
-        "set_headline", "set_summary", "set_photo_library")},
+        "set_headline", "set_summary", "set_photo_library", "set_engagement")},
     "partner": {"list": "partners"},
     "partners": {a: "partner" for a in ("add", "update", "complete", "snooze", "cancel")},
     "knowledge": {a: "update_knowledge" for a in ("add", "remove", "refresh")},
@@ -4554,7 +4568,7 @@ async def brand_strategy(action: str, focus: str = "", photo: str = "") -> str:
 
     Args:
         action: "plan", "execute", "upload_photo", "upload_cover", "set_link",
-            "set_headline", "set_summary" or "set_photo_library".
+            "set_headline", "set_summary", "set_photo_library" or "set_engagement".
         focus: Which pillar to work on.
         photo: A file path or base64 image.
     """

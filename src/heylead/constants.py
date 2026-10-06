@@ -1099,9 +1099,12 @@ SIGNAL_BOOST_INTENTS = frozenset({"buying_signal", "pain_point", "competitor_eva
 # on a competitor's page, so it is engagement, not interest in the sender
 # (heylead-api#1590 keeps it admitting as a declared limitation). Equal to the
 # api's signal_admission.BEHAVIOURAL_TYPES through the shared parity table.
+# post_commenter / post_reactor: a comment on or reaction to the user's OWN
+# post, the plainest interest in the sender there is (heylead-api#2203).
 SIGNAL_BEHAVIORAL_TYPES = frozenset({
     "profile_view", "company_follower", "website_visit", "website_high_intent",
     "company_post_reaction", "company_post_comment",
+    "post_commenter", "post_reactor",
 })
 SIGNAL_BEHAVIORAL_ICP_THRESHOLD = 0.25  # Min ICP match score for behavioral → outreach
 SIGNAL_BEHAVIORAL_AUTO_THRESHOLD = 0.40  # Lower threshold for behavioral signals (direct interest)

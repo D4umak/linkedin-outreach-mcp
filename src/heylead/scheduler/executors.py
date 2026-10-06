@@ -2050,11 +2050,12 @@ async def _execute_withdraw_stale_invites(job: dict[str, Any]) -> str:
                 # or it sits at 'invited' forever, unable to escalate and still
                 # counted as outstanding.
                 from ..db.queries import close_withdrawn_invitation
+                from ..linkedin.sent_invitations import invitee_provider_id, invitee_public_id
 
                 closed = await run_db(
                     close_withdrawn_invitation,
-                    inv.get("invited_user_id") or "",
-                    inv.get("invited_user_public_id") or "",
+                    invitee_provider_id(inv),
+                    invitee_public_id(inv),
                 )
                 await db.log_action(
                     "stale_invite_withdrawn",

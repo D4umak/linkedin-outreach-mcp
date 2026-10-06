@@ -143,7 +143,7 @@ async def generate_icp_result_for_campaign(
     # whatever route produced the personas; enriching twice adds nothing.
     from ..services.icp_vocabulary import enrich_investor_result
 
-    enrich_investor_result(result, goal)
+    enrich_investor_result(result, goal, target_description)
     attach_signals_to_icp_result(result, target_description)
 
     # Goal <-> ICP audit (9 Sep 2026: campaign be5f78ff targeted an

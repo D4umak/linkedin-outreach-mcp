@@ -319,7 +319,7 @@ async def generate_icp_v2(
         # An investor ICP carries investor vocabulary (D4umak/heylead-api#2156).
         # The api merges it too; the client must not depend on the backend's
         # version, and enriching twice adds nothing.
-        enrich_investor_result(result, goal_key)
+        enrich_investor_result(result, goal_key, target_description)
         # Enrich with LinkedIn codes
         await _enrich_result(result)
         return result
@@ -387,7 +387,7 @@ async def generate_icp_v2(
 
     apply_seniority_policy(result, decision_makers_only=floor, keep=keep)
     # An investor ICP carries investor vocabulary (D4umak/heylead-api#2156).
-    enrich_investor_result(result, goal_key)
+    enrich_investor_result(result, goal_key, target_description)
 
     # Enrich with LinkedIn codes
     await _enrich_result(result)

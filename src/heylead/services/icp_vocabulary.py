@@ -17,12 +17,20 @@ equity Investor | Cactus Partners (General Partner)" were held as title-only,
 while 3one4 Capital and Elev8 Venture Partners passed only because "Capital"
 and "Venture" happen to be in their names.
 
-The rule: a segment generated for goal `partner`, or any segment whose titles
-name an investor's title, takes the vocabulary below into its keywords (and
-into its industries when it names industries), without duplicates and after
-the model's own words. Enriching twice adds nothing. A stored campaign is not
-rewritten by this module: it runs on generation only, and the rescore route
-shows the effect on an existing campaign on request.
+The rule: a segment whose titles name a distinct investor's title (any
+goal), or a goal-`partner` segment whose brief or own text names investors
+(INVESTOR_BRIEF_TERMS, matched as whole words through heylead.textutil.contains_term),
+takes the vocabulary below into its keywords (and into its industries when it
+names industries), without duplicates and after the model's own words.
+Enriching twice adds nothing.
+
+Goal `partner` is "Find partners or investors": affiliates, resellers,
+agencies and tutors are partners too. Until 6 Oct 2026 the goal alone made a
+segment an investor's, so Scholify's "Preferred Partners" campaign
+(6b9f51d6, org 69df1ecc), which recruits ACCA tutors and academies as
+affiliates, took Fund, Investor, Angel, Capital, Ventures, Investment and the
+industries Venture Capital, Investment Management and Private Equity on all
+three segments. The api's repair-investor-vocabulary route takes that tail off stored rows.
 """
 
 from __future__ import annotations
@@ -30,6 +38,7 @@ from __future__ import annotations
 from typing import Any
 
 from .. import goals
+from ..textutil import contains_term
 from .profile_signals import role_hit
 
 INVESTOR_VOCABULARY: dict[str, list[str]] = {
@@ -54,6 +63,23 @@ INVESTOR_TITLES: tuple[str, ...] = (
 DISTINCT_INVESTOR_TITLES: tuple[str, ...] = (
     "General Partner", "Angel Investor", "Investment Director", "Venture Partner",
     "Limited Partner", "Fund Manager", "Investor",
+)
+
+# The words that make a partner brief an investor's, matched as whole words
+# (plurals are spelled out: "investor" does not match "investors"). Not
+# "Capital", "Ventures", "Investment" or "Portfolio": those are an
+# affiliate's or an agency's words too ("working capital", "a portfolio of
+# clients", "return on investment").
+INVESTOR_BRIEF_TERMS: tuple[str, ...] = (
+    "investor", "investors", "angel", "angels", "angel investor", "angel investors",
+    "business angel", "business angels", "venture capital", "venture capitalist",
+    "venture capitalists", "VC", "VCs", "venture fund", "venture funds",
+    "fund", "funds", "fund manager", "fund managers", "fundraise", "fundraising",
+    "seed round", "seed funding", "pre-seed", "series A", "series B",
+    "family office", "family offices", "private equity", "limited partner",
+    "limited partners", "general partner", "general partners", "investment fund",
+    "investment funds", "investment firm", "investment firms", "raise capital",
+    "raising capital", "raise funding", "raising funding",
 )
 
 
@@ -86,16 +112,44 @@ def segment_titles(segment: dict[str, Any]) -> list[str]:
     return _clean(segment.get("titles"))
 
 
-def is_investor_segment(segment: dict[str, Any], goal: str | None = None) -> bool:
-    """True for goal `partner`, and for a segment whose titles name an
-    investor's title under any goal."""
-    if (goals.normalize_goal(goal) or "") == goals.PARTNER:
-        return True
+def _segment_text(segment: dict[str, Any]) -> list[str]:
+    """The model's own words about a segment: its name, description, titles,
+    keywords and industries, one field per entry."""
+    fields = [str(segment.get("name") or ""), str(segment.get("description") or "")]
+    fields += segment_titles(segment)
+    fields += _clean(segment.get("keywords"))
+    industries = segment.get("industries")
+    fields += _clean(industries.get("include") if isinstance(industries, dict) else industries)
+    return [f for f in fields if f]
+
+
+def names_investors(*texts: str | None) -> bool:
+    """True when any of *texts* names investors (INVESTOR_BRIEF_TERMS), as
+    whole words."""
+    return any(contains_term(text, term) for text in texts if text for term in INVESTOR_BRIEF_TERMS)
+
+
+def is_investor_segment(
+    segment: dict[str, Any], goal: str | None = None, brief: str | None = None,
+) -> bool:
+    """True for a segment whose titles name a distinct investor's title,
+    under any goal; and under goal `partner`, for a segment whose *brief*
+    (the campaign's target description) or own text names investors.
+
+    The goal alone never decides: "Find partners or investors" also recruits
+    affiliates, resellers and tutors (6 Oct 2026, #2156).
+    """
     titles = segment_titles(segment)
-    return bool(titles) and bool(role_hit(titles, DISTINCT_INVESTOR_TITLES))
+    if titles and role_hit(titles, DISTINCT_INVESTOR_TITLES):
+        return True
+    if (goals.normalize_goal(goal) or "") != goals.PARTNER:
+        return False
+    return names_investors(brief, *_segment_text(segment))
 
 
-def enrich_investor_segment(segment: dict[str, Any], goal: str | None = None) -> dict[str, Any]:
+def enrich_investor_segment(
+    segment: dict[str, Any], goal: str | None = None, brief: str | None = None,
+) -> dict[str, Any]:
     """The segment with INVESTOR_VOCABULARY merged into its keywords, and
     into its industries when it names industries. A new dict; the model's
     own words stay first; a segment that is not an investor's is returned
@@ -104,7 +158,7 @@ def enrich_investor_segment(segment: dict[str, Any], goal: str | None = None) ->
     Keywords are a list on a generated persona and a comma-separated string
     on a stored segment; each keeps its shape.
     """
-    if not isinstance(segment, dict) or not is_investor_segment(segment, goal):
+    if not isinstance(segment, dict) or not is_investor_segment(segment, goal, brief):
         return segment
     out = dict(segment)
     raw_keywords = segment.get("keywords")
@@ -122,33 +176,47 @@ def enrich_investor_segment(segment: dict[str, Any], goal: str | None = None) ->
     return out
 
 
-def enrich_investor_icp(icp: Any, goal: str | None = None) -> Any:
+def icp_brief(icp: dict[str, Any], brief: str | None = None) -> str:
+    """The brief an ICP was generated from: *brief* when given, else the
+    target description it stores, with the model's summary beside it."""
+    parts = [brief or icp.get("target_description") or "", icp.get("summary") or ""]
+    return " | ".join(str(p) for p in parts if p)
+
+
+def enrich_investor_icp(icp: Any, goal: str | None = None, brief: str | None = None) -> Any:
     """Every persona (`icps`) or stored segment (`segments`) of an ICP through
-    enrich_investor_segment. Anything that is not a dict is returned as it came."""
+    enrich_investor_segment, judged against *brief* (or the ICP's own target
+    description and summary). Anything that is not a dict is returned as it came."""
     if not isinstance(icp, dict):
         return icp
     out = dict(icp)
+    text = icp_brief(icp, brief)
     for key in ("icps", "segments"):
         personas = icp.get(key)
         if isinstance(personas, list):
-            out[key] = [enrich_investor_segment(p, goal) for p in personas]
+            out[key] = [enrich_investor_segment(p, goal, text) for p in personas]
     return out
 
 
-def enrich_investor_result(result: Any, goal: str | None = None) -> Any:
+def enrich_investor_result(result: Any, goal: str | None = None, brief: str | None = None) -> Any:
     """The client's generator holds SingleIcp dataclasses, not dicts: each
     persona's titles, keywords and industries go through
     enrich_investor_segment and the keywords and industries come back onto
-    it, in place (the shape apply_seniority_policy uses). Returns *result*."""
+    it, in place (the shape apply_seniority_policy uses). Each persona is
+    judged against *brief* (the target description) and the result's summary.
+    Returns *result*."""
+    text = " | ".join(str(t) for t in (brief, getattr(result, "summary", None)) if t)
     for icp in getattr(result, "icps", None) or []:
         titles = getattr(icp, "job_titles", None)
         industries = getattr(icp, "industries", None)
         segment = {
+            "name": getattr(icp, "name", None) or "",
+            "description": getattr(icp, "description", None) or "",
             "job_titles": {"include": list(getattr(titles, "include", None) or [])},
             "keywords": getattr(icp, "keywords", None),
             "industries": {"include": list(getattr(industries, "include", None) or [])},
         }
-        enriched = enrich_investor_segment(segment, goal)
+        enriched = enrich_investor_segment(segment, goal, text)
         if enriched is segment:
             continue
         icp.keywords = enriched["keywords"]

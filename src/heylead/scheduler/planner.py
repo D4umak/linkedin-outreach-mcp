@@ -2288,6 +2288,13 @@ async def plan_brand_engagement() -> None:
         load_brand_plan,
     )
 
+    from ..tools.brand_strategy import brand_engagement_enabled_locally
+
+    # Opt-in (api #2221): off, nothing is queued and the plan's engagement
+    # actions wait. A seat the cloud sends from never runs this job here.
+    if not await run_db(brand_engagement_enabled_locally):
+        return
+
     plan = await run_db(load_brand_plan)
     if not plan:
         return

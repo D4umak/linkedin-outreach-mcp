@@ -1751,15 +1751,13 @@ class UnipileClient:
             if resp.status_code == 200:
                 inv_data = resp.json()
                 invitations = _extract_items(inv_data, "items", "data")
+                from .sent_invitations import invitee_ids
+
+                wanted = str(provider_id or "").strip()
                 for inv in invitations:
                     if not isinstance(inv, dict):
                         continue
-                    inv_prov_id = (
-                        inv.get("invited_user_id")
-                        or inv.get("provider_id") or inv.get("id")
-                        or inv.get("to_member_id") or ""
-                    )
-                    if str(inv_prov_id) == str(provider_id):
+                    if wanted and wanted in invitee_ids(inv):
                         result["pending_invite"] = True
                         break
         except Exception as e:

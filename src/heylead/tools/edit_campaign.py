@@ -746,6 +746,7 @@ async def run_edit_campaign(
             else:
                 card.confirmed_at = None
                 card.confirmed_by = ""
+                card.edited_at = int(_time.time())
             existing_ctx["offer"] = card_to_dict(card)
             ctx_changed = True
 
@@ -757,6 +758,7 @@ async def run_edit_campaign(
             card.confirmed_at = None
             card.confirmed_by = ""
             card.needs_review = False
+            card.edited_at = int(_time.time())
             redistilled_needs_review = False
             card.source_hash = offer_source_hash(existing_ctx)
             defects = offer_card_defects(card)
