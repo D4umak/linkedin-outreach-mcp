@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.434 (2026-10-07)
+- New: Free includes one connected account of either kind (api #2372)
+
 ## v0.10.433 (2026-10-07)
 - New: Pro is priced per connected account, a LinkedIn seat or an email mailbox (api #2366)
 

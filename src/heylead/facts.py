@@ -70,7 +70,7 @@ PRO_PLAN_LINE = f"Pro: {PRO_PRICE}, up to {_c.PRO_MAX_FOLLOWUPS} follow-ups per 
 # What the unit is, under every price table (api #2366): Stripe counts one
 # seat per connected LinkedIn account or email mailbox in the workspace.
 CONNECTED_ACCOUNT_SENTENCE = (
-    "A connected account is a LinkedIn seat or an email mailbox. Free includes one LinkedIn seat."
+    "A connected account is a LinkedIn seat or an email mailbox. Free includes one of either."
 )
 
 INVITE_LIMITS_LINE = (

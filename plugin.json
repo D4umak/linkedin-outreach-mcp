@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "heylead",
-  "version": "0.10.433",
+  "version": "0.10.434",
   "description": "LinkedIn outreach from your AI assistant: find the right people, write to them in your own voice, follow up and handle replies. For sales prospecting, recruiting, job search, investor or partner outreach, finding a vendor, and research interviews. Campaigns are drafts until you launch them.",
   "author": {
     "name": "HeyLead",

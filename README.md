@@ -218,7 +218,7 @@ HeyLead gives your AI 22 tools:
 | **Free** | $0 | Up to 2 follow-ups per prospect |
 | **Pro** | $29 per connected account per month | Up to 5 follow-ups per prospect |
 
-A connected account is a LinkedIn seat or an email mailbox. Free includes one LinkedIn seat.
+A connected account is a LinkedIn seat or an email mailbox. Free includes one of either.
 
 Invitation limits follow the LinkedIn account (free, Premium or Sales Navigator), not the HeyLead plan.
 Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign, 3 ICP generations.
