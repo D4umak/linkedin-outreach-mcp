@@ -11,6 +11,7 @@ Core follow-up loop:
 
 from __future__ import annotations
 
+from .. import facts
 from ..services.campaign_naming import cut_at_word
 
 import json
@@ -68,7 +69,10 @@ def _cap_refusal(max_followups: int, followup_count: int, tier: str) -> str:
         )
     if followup_count < max_followups:
         return ""
-    upgrade = tier != TIER_PRO and max_followups >= FREE_MAX_FOLLOWUPS
+    # A hosted workspace's plan lives in the api, and its tier never reaches
+    # this install's config (it reads "free" on a paying workspace), so the
+    # upgrade line is self-hosted only, like every other cap (#2328).
+    upgrade = apply_free_monthly_caps() and tier != TIER_PRO and max_followups >= FREE_MAX_FOLLOWUPS
     return (
         f"Max follow-ups reached ({max_followups}) for this outreach.\n"
         + (f"Upgrade to Pro for up to {PRO_MAX_FOLLOWUPS} follow-ups." if upgrade
@@ -262,7 +266,7 @@ async def run_send_followup(
             await client.close()
             return (
                 f"Free tier limit reached: {FREE_MONTHLY_MESSAGES} messages/month.\n\n"
-                "Upgrade to Pro ($29/mo) for unlimited follow-ups."
+                f"{facts.PRO_UPGRADE_LINE}"
             )
 
     # A local invite_note is not an in-thread intro. Messaging often has

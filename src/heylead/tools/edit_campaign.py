@@ -251,7 +251,7 @@ async def run_edit_campaign(
             "  enable_endorsements: on or off\n"
             "  enable_engagements: on or off\n"
             "  enable_followups: on or off\n"
-            "  enable_auto_replies: on or off\n"
+            "  enable_auto_replies: on or off (off drafts no answer at all; to review answers, keep it on with review mode)\n"
             "  enable_invitations: on or off\n"
             "  exclude_connections: on or off (never message people you were "
             "already connected to before this campaign)\n"

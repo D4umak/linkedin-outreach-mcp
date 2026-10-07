@@ -10,6 +10,7 @@ Takes a target description like "Find me fintech CTOs" and:
 
 from __future__ import annotations
 
+from .. import facts
 from ..services.campaign_naming import cut_at_word
 
 import re
@@ -364,7 +365,7 @@ async def run_create_campaign(
                 f"⚠️ Free tier limit: {FREE_MAX_CAMPAIGNS} active campaign(s).\n\n"
                 "You already have an active campaign. Options:\n"
                 "├── Complete or pause your current campaign first\n"
-                "└── Upgrade to Pro ($29/mo) for unlimited campaigns\n\n"
+                f"└── {facts.PRO_UPGRADE_LINE}\n\n"
                 "Tip: Say 'show_status' to see your current campaign."
             )
 
@@ -1373,7 +1374,7 @@ async def run_create_campaign(
         output_lines.extend([
             "",
             f"💡 Found {len(unique_prospects)} total matches but free tier caps at {max_contacts}.",
-            "   Upgrade to Pro ($29/mo) for unlimited contacts.",
+            f"   {facts.PRO_UPGRADE_LINE}",
         ])
 
     if goal_match_notes:

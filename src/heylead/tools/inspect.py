@@ -95,7 +95,8 @@ async def _review_from_host(campaign_id: str, limit: int) -> str:
     return str(data.get("text") or "Campaign review · last 24h · 0 stalls")
 
 
-_KIND_LABELS = {"dm": "opening message", "followup": "follow-up"}
+# "reply" since heylead-api#2330: review mode holds answers to replies too.
+_KIND_LABELS = {"dm": "opening message", "followup": "follow-up", "reply": "reply to their message"}
 
 
 def _waiting_line(i: int, draft: dict[str, Any]) -> list[str]:
@@ -113,6 +114,10 @@ def _waiting_line(i: int, draft: dict[str, Any]) -> list[str]:
                       title=str(draft.get("title") or ""), company=str(draft.get("company") or ""))
     campaign = str(draft.get("campaign_id") or "")[:8]
     text = " ".join(str(draft.get("text") or "").split())
+    said = " ".join(str(draft.get("reply_to_text") or "").split())
+    if said:
+        # The answer is judged next to what they wrote.
+        return [f"{i}. {who} · {kind} · campaign {campaign}", f'   they wrote: "{said}"', f"   draft: {text}"]
     return [f"{i}. {who} · {kind} · campaign {campaign}", f"   {text}"]
 
 
@@ -140,7 +145,7 @@ async def _waiting(campaign_id: str, limit: int) -> str:
 
 
 async def _waiting_from_host(campaign_id: str, cap: int) -> str:
-    """Opening messages and follow-ups held for approval (hosted).
+    """Opening messages, follow-ups and answers to replies held for approval (hosted).
 
     The same list the dashboard's Approvals page reads
     (GET /api/v1/scheduler/outreach-drafts). The server's instructions

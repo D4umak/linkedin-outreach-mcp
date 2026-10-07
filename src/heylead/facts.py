@@ -71,6 +71,15 @@ INVITE_LIMITS_LINE = (
     "Navigator), not the HeyLead plan."
 )
 
+# What a self-hosted free install reads when a monthly quota is reached. Until
+# 7 Oct 2026 seven tools said "Upgrade to Pro ($29/mo) for unlimited ...", the
+# two forms this module forbids above (api #2328); Pro lifts the install's
+# monthly quota, and the LinkedIn account's invitation ceiling still applies.
+PRO_UPGRADE_LINE = (
+    f"Pro ({PRO_PRICE}) lifts this monthly quota and sends up to "
+    f"{_c.PRO_MAX_FOLLOWUPS} follow-ups per prospect. {INVITE_LIMITS_LINE}"
+)
+
 
 # The six things a campaign can be for, in the order the dashboard shows them.
 # One source: the goal table (goals.py, twin of heylead-api's). A listing that

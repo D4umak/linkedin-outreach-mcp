@@ -167,6 +167,21 @@ def _score_action(
     return engagement_fit + sequence_fit + timing_fit + fit_bonus
 
 
+async def _upgrade_offer_line() -> str:
+    """The api's upgrade offer line after the first reply, or "" (api #2328)."""
+    from ..config import is_backend_mode
+
+    if not is_backend_mode():
+        return ""
+    try:
+        from ..services.cloud_sync import fetch_live_stats
+
+        live = await fetch_live_stats()
+    except Exception:
+        return ""
+    return str((live or {}).get("upgrade_offer_line") or "").strip()
+
+
 async def run_suggest_next_action(campaign_id: str = "") -> str:
     """Suggest the best next action for your outreach.
 
@@ -939,6 +954,14 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
 
     if remaining > 0:
         output.append(f"... and {remaining} more action{'s' if remaining != 1 else ''} queued.")
+        output.append("")
+
+    # After the workspace's first reply: the two upgrades, in the api's words
+    # (api #2328). Read from GET /stats; a hosted workspace with no reply yet,
+    # a self-hosted install or an unreachable api add nothing.
+    offer_line = await _upgrade_offer_line()
+    if offer_line:
+        output.append(offer_line)
         output.append("")
 
     # ── Summary stats ──

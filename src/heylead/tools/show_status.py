@@ -1334,6 +1334,13 @@ async def _show_overview_from_backend(data: dict) -> str:
 
     output.extend(await _needs_attention_lines(data.get("needs_attention") or None))
 
+    # After the workspace's first reply: the two upgrades, in the api's words,
+    # with the page that carries the comparison (api #2328). "" until then.
+    offer_line = str(data.get("upgrade_offer_line") or "").strip()
+    if offer_line:
+        output.append(offer_line)
+        output.append("")
+
     # ── Hot leads ──
     # Counted as the Overview tile counts them (heylead-api#1831): people in
     # running campaigns, and all time. The list below is only a sample of

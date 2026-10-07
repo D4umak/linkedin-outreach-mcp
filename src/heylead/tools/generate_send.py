@@ -10,6 +10,7 @@ Core outreach loop:
 
 from __future__ import annotations
 
+from .. import facts
 from ..services.campaign_naming import cut_at_word
 
 import json
@@ -722,7 +723,7 @@ async def run_generate_and_send(
             await _release_claim()
             return (
                 f"⚠️ Free tier limit reached: {FREE_MONTHLY_INVITATIONS} invitations/month.\n\n"
-                "Upgrade to Pro ($29/mo) for unlimited outreach.\n"
+                f"{facts.PRO_UPGRADE_LINE}\n"
                 "Your campaign will resume next month if you stay on Free."
             )
 

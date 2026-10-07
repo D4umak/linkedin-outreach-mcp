@@ -11,6 +11,7 @@ Core reply loop:
 
 from __future__ import annotations
 
+from .. import facts
 from ..services.campaign_naming import cut_at_word
 
 import json
@@ -317,7 +318,7 @@ async def run_reply_to_prospect(
             await client.close()
             return (
                 f"Free tier limit reached: {FREE_MONTHLY_MESSAGES} messages/month.\n\n"
-                "Upgrade to Pro ($29/mo) for unlimited messages."
+                f"{facts.PRO_UPGRADE_LINE}"
             )
 
     # ── Step 3: Resolve chat_id ──

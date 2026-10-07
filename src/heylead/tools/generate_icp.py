@@ -7,6 +7,7 @@ Persists the result for reuse with create_campaign.
 
 from __future__ import annotations
 
+from .. import facts
 from ..services.campaign_naming import cut_at_word
 
 import json
@@ -221,7 +222,7 @@ async def run_generate_icp(
                 "Options:\n"
                 "  Use create_campaign instead (includes basic ICP generation)\n"
                 "  Wait until next month\n"
-                "  Upgrade to Pro ($29/mo) for unlimited ICPs"
+                f"  {facts.PRO_UPGRADE_LINE}"
             )
 
     # ── Step 2: Get user context ──

@@ -33,6 +33,13 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.431 (2026-10-07)
+- Fix: auto-replies off is described as what it does; a held reply shows what they wrote (api #2330)
+- New: hosted tools print the api's upgrade line after the first reply; quota refusals read one facts line (api #2328)
+- after the first reply, the two upgrades with the user's own numbers (api #2328)
+- Fix: run_weekly.sh sends weekly.py's output, tracebacks included, to the weekly log
+- New: the weekly visibility panel runs as a Cloud Run job (api #2290)
+
 ## v0.10.430 (2026-10-06)
 - Fix: an Offer card edit says when it happened, so the server keeps the newer copy (heylead-api#2256)
 - Fix: name the invitee through sent_invitations, never the invitation id (api #2257)
@@ -3015,7 +3022,12 @@ async def edit_campaign(
         enable_endorsements: Endorse skills before inviting: "on" or "off".
         enable_engagements: Comment/react on posts before inviting: "on" or "off".
         enable_followups: Send follow-up DMs after connection: "on" or "off".
-        enable_auto_replies: Auto-reply to prospect messages: "on" or "off".
+        enable_auto_replies: "on" or "off". On: HeyLead answers replies itself,
+            or holds each answer in Approvals when the workspace reviews every
+            message. Off: HeyLead answers no reply and drafts none; every reply
+            waits for you in Needs attention, and no booking link or calendar
+            invite goes out. To read answers before they go, keep it on with
+            review mode, not off.
         enable_invitations: Send connection invitations: "on" or "off".
             When off, campaign only DMs existing connections (no invitations sent).
         enable_discovery: Auto-find and enrol new prospects: "on" or "off".

@@ -19,6 +19,7 @@ import random
 import time
 from typing import Any
 
+from .. import facts
 from ..ai.comment_generator import generate_comment, COMMENT_MAX_CHARS
 from ..ai.voice_block import voice_prompt_block
 from ..ai.message_fixer import fix_message
@@ -209,7 +210,7 @@ async def run_engage_prospect(
             await client.close()
             return (
                 f"Free tier limit reached: {FREE_MAX_ENGAGEMENTS} engagements/month.\n\n"
-                "Upgrade to Pro ($29/mo) for more engagements."
+                f"{facts.PRO_UPGRADE_LINE}"
             )
 
     # ── Step 2a: Handle view action (lightest warm-up, no posts needed) ──
