@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.432 (2026-10-07)
+- Fix: a property investor is not a venture investor (api #2348)
+
 ## v0.10.431 (2026-10-07)
 - Fix: auto-replies off is described as what it does; a held reply shows what they wrote (api #2330)
 - New: hosted tools print the api's upgrade line after the first reply; quota refusals read one facts line (api #2328)

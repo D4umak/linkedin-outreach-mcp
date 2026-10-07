@@ -55,14 +55,23 @@ INVESTOR_VOCABULARY: dict[str, list[str]] = {
 # "Principal" are also a law firm's, an accountancy's and an engineer's
 # ("Principal Engineer" is a role_hit on "Principal"), so on their own they do
 # not turn a sell or hire segment into an investor segment.
+#
+# Nor does "Investor" (#2348, 7 Oct 2026): role_hit finds it inside "Real
+# Estate Investor", "Hotel Investor" and "Property Investor", buyers of an
+# asset and not of a startup. Campaign 6caa0f6a (org 24c148bb, goal sell)
+# sold an owner's-rep service to new hotel owners and investors; its segment
+# took Fund, Angel and Ventures and invited venture capitalists. The venture
+# investors who call themselves "... Investor" are named in full instead.
 INVESTOR_TITLES: tuple[str, ...] = (
     "General Partner", "Managing Partner", "Partner", "Angel Investor",
     "Investment Director", "Principal", "Venture Partner", "Limited Partner",
-    "Fund Manager", "Investor",
+    "Fund Manager", "Investor", "Venture Investor", "Seed Investor",
+    "Startup Investor", "Venture Capitalist",
 )
 DISTINCT_INVESTOR_TITLES: tuple[str, ...] = (
     "General Partner", "Angel Investor", "Investment Director", "Venture Partner",
-    "Limited Partner", "Fund Manager", "Investor",
+    "Limited Partner", "Fund Manager", "Venture Investor", "Seed Investor",
+    "Startup Investor", "Venture Capitalist",
 )
 
 # The words that make a partner brief an investor's, matched as whole words
