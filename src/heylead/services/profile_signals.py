@@ -104,6 +104,36 @@ _INTEREST_HINTS: dict[str, list[str]] = {
 _GAZETTEER_CACHE: dict[str, dict[str, Any]] | None = None
 
 
+# An interest is named, not inferred (#2371): a hint key counts only as the
+# subject of a request, followed by one of these words ("car lovers",
+# "esoteric people", "car club"), or when the key is itself the person
+# ("climbers"). "Sales directors at car dealerships" and "help brands climb
+# the rankings" name no interest; one hint word in a business brief would
+# otherwise turn it into Porsche evidence (qa review of #2371).
+_INTEREST_REQUEST_NOUNS = (
+    "lover", "lovers", "enthusiast", "enthusiasts", "fan", "fans", "people",
+    "community", "communities", "collector", "collectors", "hobbyist",
+    "hobbyists", "club", "clubs",
+)
+_INTEREST_PERSON_KEYS = frozenset({"climber", "climbers"})
+
+
+def _named_interests(text: str) -> list[str]:
+    """The _INTEREST_HINTS keys *text* names as an interest request, in table order."""
+    blob = _norm(text)
+    nouns = "|".join(re.escape(n) for n in _INTEREST_REQUEST_NOUNS)
+    named: list[str] = []
+    for key in _INTEREST_HINTS:
+        k = re.escape(key)
+        if key in _INTEREST_PERSON_KEYS:
+            pattern = rf"(?<!\w){k}(?!\w)"
+        else:
+            pattern = rf"(?<!\w){k}\s+(?:{nouns})(?!\w)"
+        if re.search(pattern, blob):
+            named.append(key)
+    return named
+
+
 def _load_all_gazetteers() -> dict[str, dict[str, Any]]:
     global _GAZETTEER_CACHE
     if _GAZETTEER_CACHE is not None:
@@ -220,25 +250,28 @@ def _spec_from_gazetteer(
 
 
 def _interest_terms_from_text(text: str) -> list[str]:
-    blob = _norm(text)
+    """The curated evidence terms of each interest *text* names (_INTEREST_HINTS),
+    or [] when it names none.
+
+    One gate (_named_interests) for every path: compile_profile_signals,
+    compile_from_segment and campaign_identity_spec. A sentence is never
+    split into evidence (#2371, 7 Oct 2026). Until then,
+    a text that named no interest fell back to its first 15 words that were
+    not stopwords, and every caller that compiles a campaign's own brief
+    (campaign_identity_spec) skipped the interest guard, so nearly every
+    sell brief became an "interest" campaign: campaign 6caa0f6a's hotel brief
+    yielded independent, owners, capital, asset, industry ..., and one of
+    those words anywhere in a profile kept the row, added 2.5 of 3.0 to its
+    fit, waived the title-only cap and ran one-word LinkedIn searches. 858
+    of 3,288 contacts in 30 days rested on one such word. An interest is
+    named (a hint) or given (``terms=``); it is never read out of prose.
+    """
     terms: list[str] = []
-    for key, hints in _INTEREST_HINTS.items():
-        if re.search(rf"(?<!\w){re.escape(key)}(?!\w)", blob):
-            for h in hints:
-                if h not in terms:
-                    terms.append(h)
-    if not terms:
-        # Distinctive leftover words (drop stopwords / generic ICP nouns).
-        stop = {
-            "people", "person", "lovers", "lover", "who", "with", "that", "the",
-            "and", "for", "in", "a", "an", "of", "us", "now", "hiring",
-        }
-        for tok in re.findall(r"[A-Za-z][A-Za-z0-9\-]+", text or ""):
-            # One term filter (heylead-api#1809): "at" from "sales leaders at
-            # B2B startups" matched nearly every headline.
-            if tok.lower() not in stop and is_evidence_term(tok) and tok not in terms:
-                terms.append(tok)
-    return terms[:15]
+    for key in _named_interests(text):
+        for h in _INTEREST_HINTS[key]:
+            if h not in terms:
+                terms.append(h)
+    return terms
 
 
 def compile_interest_signals(
@@ -794,11 +827,7 @@ def payload_from_list(query: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _looks_like_interest_request(text: str) -> bool:
-    blob = _norm(text)
-    for key in _INTEREST_HINTS:
-        if re.search(rf"(?<!\w){re.escape(key)}(?!\w)", blob):
-            return True
-    return False
+    return bool(_named_interests(text))
 
 
 def _field_text(value: Any) -> str:

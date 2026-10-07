@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.435 (2026-10-07)
+- Fix: one word of a campaign's own brief is not evidence (api #2371)
+
 ## v0.10.434 (2026-10-07)
 - New: Free includes one connected account of either kind (api #2372)
 
