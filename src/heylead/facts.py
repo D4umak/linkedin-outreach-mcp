@@ -60,11 +60,18 @@ FREE_QUOTA_LIST = (
 )
 FREE_QUOTA_SENTENCE = f"Self-hosted free installs have monthly quotas: {FREE_QUOTA_LIST}."
 
-# Pro is priced per connected LinkedIn account, monthly. Never "$29/mo" and
+# Pro is priced per connected account, a LinkedIn seat or an email mailbox, the
+# way Unipile bills (billing.billable_quantity_for_org; Denys, 7 Oct 2026, api
+# #2366), monthly. Never "$29/mo" and
 # never "unlimited": the follow-up count and the seat count are the caps.
-PRO_PRICE = f"${_c.PRO_PRICE_MONTHLY} per connected LinkedIn account per month"
+PRO_PRICE = f"${_c.PRO_PRICE_MONTHLY} per connected account per month"
 FREE_PLAN_LINE = f"Free: $0, up to {_c.FREE_MAX_FOLLOWUPS} follow-ups per prospect"
 PRO_PLAN_LINE = f"Pro: {PRO_PRICE}, up to {_c.PRO_MAX_FOLLOWUPS} follow-ups per prospect"
+# What the unit is, under every price table (api #2366): Stripe counts one
+# seat per connected LinkedIn account or email mailbox in the workspace.
+CONNECTED_ACCOUNT_SENTENCE = (
+    "A connected account is a LinkedIn seat or an email mailbox. Free includes one LinkedIn seat."
+)
 
 INVITE_LIMITS_LINE = (
     "Invitation limits follow the LinkedIn account (free, Premium or Sales "

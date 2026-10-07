@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.433 (2026-10-07)
+- New: Pro is priced per connected account, a LinkedIn seat or an email mailbox (api #2366)
+
 ## v0.10.432 (2026-10-07)
 - Fix: a property investor is not a venture investor (api #2348)
 

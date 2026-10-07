@@ -158,7 +158,9 @@ Brand and content, signals, bulk import, CRM sync and the shared network pool ar
 | Plan | Price | Limits |
 |------|-------|--------|
 | **Free** | $0 | Up to 2 follow-ups per prospect |
-| **Pro** | $29 per connected LinkedIn account per month | Up to 5 follow-ups per prospect |
+| **Pro** | $29 per connected account per month | Up to 5 follow-ups per prospect |
+
+A connected account is a LinkedIn seat or an email mailbox. Free includes one LinkedIn seat.
 
 Invitation limits follow the LinkedIn account (free, Premium or Sales Navigator), not the HeyLead plan.
 Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign, 3 ICP generations.
