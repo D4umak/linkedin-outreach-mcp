@@ -560,6 +560,15 @@ async def run_reply_to_prospect(
             "Wait for them to return before replying.\n"
             "Use send_followup() later when they're back."
         )
+    # The model could not read their message (#2390): an opt-out read as
+    # neutral would be answered. Not sent; the next read classifies it again.
+    from ..services.model_failure import EXCEPTION, SENTIMENT_UNKNOWN, record_skip
+    if sentiment == SENTIMENT_UNKNOWN:
+        await client.close()
+        return await record_skip(
+            actor="sentiment", failure=EXCEPTION, outreach_id=outreach_id,
+            detail="their message could not be classified",
+        )
 
     # Identity challenge ("is this for me?") — recheck ICP before decline close.
     targeting_strategy = ""
@@ -602,10 +611,12 @@ async def run_reply_to_prospect(
                 our_last_message=last_sdr,
             )
         except Exception as e:
-            logger.warning("Targeting recheck failed, treating as a fit: %s", e)
-            from ..ai.targeting_recheck import FitRecheck
-            verdict = FitRecheck(
-                is_match=True, confidence=0.3, reason="recheck failed",
+            # Until #2390 a failed recheck read as a fit and the reply went out.
+            from ..services.model_failure import failure_of
+            await client.close()
+            return await record_skip(
+                actor="targeting_recheck", failure=failure_of(e), outreach_id=outreach_id,
+                detail=str(e)[:120],
             )
         await run_db(
             log_action, "targeting_recheck",

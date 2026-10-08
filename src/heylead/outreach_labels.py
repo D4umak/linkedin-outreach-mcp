@@ -67,6 +67,8 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "send_fit_agent_decision": "Draft checked before sending",
     "send_fit_skipped": "Held: the draft did not fit the conversation",
     "reply_agent_decision": "Reply considered",
+    # A check before sending did not finish; nothing was sent (#2390).
+    "model_failed": "Not sent: the check before sending didn't finish",
     "strategist_replan_decision": "Campaign plan revisited",
     # The journal's event type as a label; this module reads no journal rows.
     "agent_journal": "Agent note",

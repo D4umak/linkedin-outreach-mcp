@@ -122,9 +122,16 @@ def apply_reply_agent_decision(
     mode: str,
     has_booking_target: bool,
 ) -> ReplyAgentOutcome:
-    """Map a kernel decision onto continue / hold / skip. Does not persist."""
+    """Map a kernel decision onto continue / hold / skip. Does not persist.
+
+    A loop that did not finish (``result.failure``) is a skip, never a
+    ``continue``: until #2390 its "none" fell through to the reply being sent.
+    """
     decision = result.decision
     reason = result.reason or decision
+    if result.failure:
+        from .model_failure import MODEL_UNAVAILABLE, skip_line
+        return ReplyAgentOutcome(kind="skip", reason=MODEL_UNAVAILABLE, message=skip_line(result.failure))
 
     if decision == "hold":
         return ReplyAgentOutcome(
@@ -252,6 +259,13 @@ async def maybe_run_reply_agent(
             reason=f"observe — {outcome.reason}",
             message=outcome.message,
         )
+    if result.failure:
+        from .model_failure import record_skip
+        await record_skip(
+            actor="reply", failure=result.failure, outreach_id=outreach_id,
+            campaign_id=str((campaign or {}).get("id") or ""),
+        )
+        return outcome
     if outcome.kind == "hold":
         extra: dict[str, Any] = {}
         if prospect_calendar_url:

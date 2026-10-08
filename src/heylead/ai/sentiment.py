@@ -18,6 +18,11 @@ from typing import Any
 from ..constants import LLM_TIER_FAST
 from .llm import LLMClient
 
+# What a reply reads as when the model could not classify it (#2390). Never
+# "neutral": a neutral reply may be answered unattended, an unread one is not
+# (services.model_failure.SENTIMENT_UNKNOWN, heylead-api llm.SENTIMENT_UNKNOWN).
+SENTIMENT_UNKNOWN = "unknown"
+
 logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────
@@ -328,7 +333,8 @@ async def classify_sentiment(
             timestamp}); the last two are shown to the LLM as context. The
             fast rule path ignores them — it only ever reads this message.
 
-    Returns one of: positive, negative, question, neutral, engaged, out_of_office, opt_out
+    Returns one of: positive, negative, question, neutral, engaged, out_of_office, opt_out,
+    or "unknown" when the model could not classify it (#2390).
     Extra kwargs (outreach_id, message_id, …) are attached to reply_classified.
     """
     def _emit(sentiment: str, classifier: str) -> str:
@@ -358,8 +364,9 @@ async def classify_sentiment(
         try:
             return _emit(await backend_client.classify_sentiment(reply_text), "llm")
         except Exception as e:
-            logger.warning(f"Backend sentiment classification failed: {e}, defaulting to neutral")
-            return _emit("neutral", "llm")
+            # Not neutral: an opt-out read as neutral is answered (#2390).
+            logger.warning(f"Backend sentiment classification failed: {e}; sentiment unknown")
+            return _emit(SENTIMENT_UNKNOWN, "llm")
         finally:
             await backend_client.close()
 
@@ -379,7 +386,7 @@ async def classify_sentiment(
                                       tier=LLM_TIER_FAST)
         sentiment = result.strip().lower().replace('"', "").replace("'", "")
         if not sentiment:
-            return _emit("neutral", "llm")
+            return _emit(SENTIMENT_UNKNOWN, "llm")
 
         # Ordered, not a set: a wordy answer can name several labels, and the
         # winner must be the same in every process. Opt-out first — reading an
@@ -396,9 +403,9 @@ async def classify_sentiment(
             if s in sentiment:
                 return _emit(s, "llm")
 
-        logger.warning(f"LLM returned unexpected sentiment: {sentiment}, defaulting to neutral")
-        return _emit("neutral", "llm")
+        logger.warning(f"LLM returned unexpected sentiment: {sentiment}; sentiment unknown")
+        return _emit(SENTIMENT_UNKNOWN, "llm")
 
     except Exception as e:
-        logger.warning(f"Sentiment classification failed: {e}, defaulting to neutral")
-        return _emit("neutral", "llm")
+        logger.warning(f"Sentiment classification failed: {e}; sentiment unknown")
+        return _emit(SENTIMENT_UNKNOWN, "llm")

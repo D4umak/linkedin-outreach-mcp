@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.436 (2026-10-08)
+- Fix: a failed check on a send path skips, never sends (api #2390)
+
 ## v0.10.435 (2026-10-07)
 - Fix: one word of a campaign's own brief is not evidence (api #2371)
 

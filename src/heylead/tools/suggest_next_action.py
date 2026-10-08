@@ -533,7 +533,7 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
             sig_headline = sig.get("sender_headline", "")
             sig_intent = sig.get("intent", "unknown")
             sig_conf = sig.get("confidence", 0) or 0
-            sig_action = sig.get("recommended_action", "ask_purpose")
+            sig_action = sig.get("recommended_action") or "accept_and_monitor"
 
             role_str = sig_headline or ""
 

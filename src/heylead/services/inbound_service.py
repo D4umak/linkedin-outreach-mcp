@@ -262,7 +262,7 @@ async def send_discovery_dms() -> str:
             intent=intent,
             matched_icp_id=signal.get("matched_icp_id"),
             confidence=confidence,
-            recommended_action=signal.get("recommended_action", "ask_purpose"),
+            recommended_action=signal.get("recommended_action") or "accept_and_monitor",
             reasoning=signal.get("reasoning", ""),
         )
 

@@ -23,7 +23,8 @@ from ..ai.inbound_qualifier import (
     qualify_inbound,
 )
 from ..ai.reply_pipeline import run_reply_pipeline
-from ..ai.sentiment import classify_fast, classify_sentiment
+from ..ai.sentiment import SENTIMENT_UNKNOWN, classify_fast, classify_sentiment
+from .model_failure import EXCEPTION, record_skip
 from ..timeutil import signal_sent_at, to_epoch
 from ..constants import (
     INBOUND_MAX_DM_ATTEMPTS,
@@ -1315,10 +1316,19 @@ async def _send_discovery_dm(
                 )
             except Exception as e:
                 logger.debug("Sentiment classification failed: %s", e)
+                sentiment = SENTIMENT_UNKNOWN
 
         # Skip opt-outs entirely
         if sentiment == "opt_out":
             await run_db(update_inbound_signal, signal["id"], status="dismissed")
+            return "skipped"
+        # Their message could not be read (#2390): an opt-out read as neutral
+        # would be answered. The signal stays as it is for the next run.
+        if sentiment == SENTIMENT_UNKNOWN:
+            await record_skip(
+                actor="sentiment", failure=EXCEPTION, campaign_id=str(campaign_id or ""),
+                detail=f"inbound signal {str(signal.get('id') or '')[:12]}",
+            )
             return "skipped"
 
         # Map sentiment to outreach status
@@ -1727,7 +1737,7 @@ async def _generate_contextual_reply(
             pass
 
     try:
-        dm_text, _, _ = await run_reply_pipeline(
+        dm_text, _, validation = await run_reply_pipeline(
             prospect=prospect,
             sender_profile=sender_profile,
             voice_signature=voice_signature,
@@ -1741,6 +1751,14 @@ async def _generate_contextual_reply(
             return await _fallback_discovery(
                 prospect, voice_signature, signal, conversation_history,
             )
+        if not getattr(validation, "is_valid", False):
+            # A reply that failed validation, or whose validation never ran,
+            # is not sent (#2390); until 8 Oct 2026 the result was discarded.
+            logger.warning(
+                "Contextual reply blocked: %s",
+                getattr(validation, "issues", None) or "validation did not run",
+            )
+            return ""
         return dm_text
 
     except Exception as e:
@@ -1761,7 +1779,7 @@ async def _fallback_discovery(
         intent=signal.get("intent", "unknown"),
         matched_icp_id=signal.get("matched_icp_id"),
         confidence=signal.get("confidence", 0) or 0,
-        recommended_action=signal.get("recommended_action", "ask_purpose"),
+        recommended_action=signal.get("recommended_action") or "accept_and_monitor",
         reasoning=signal.get("reasoning", ""),
     )
     try:

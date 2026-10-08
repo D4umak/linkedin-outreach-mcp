@@ -131,9 +131,11 @@ async def llm_validate(
                 result.fail("LLM-Validate", issue)
 
     except Exception as e:
-        # LLM validation is optional — don't block on errors
-        logger.warning("LLM validation failed (non-blocking): %s", e)
-        result.pass_stage("LLM-Validate")
-        result.warn("LLM-Validate", f"LLM validation unavailable: {e}")
+        # A check that did not finish is not a pass (#2390): until 8 Oct 2026
+        # this was pass_stage, and the message was sent unread. The caller's
+        # fix stage gets one more try; a message still unchecked is not sent.
+        from ..services.model_failure import failure_of, skip_line
+        logger.warning("LLM validation did not finish (blocking): %s", e)
+        result.fail("LLM-Validate", skip_line(failure_of(e)))
 
     return result

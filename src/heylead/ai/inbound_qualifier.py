@@ -527,6 +527,23 @@ def _build_icp_section(icps: list[dict[str, Any]]) -> str:
     return "\n".join(sections) if sections else "No ICP details available."
 
 
+UNREADABLE_REASON = "Could not parse qualification response"
+
+
+def _unreadable() -> InboundQualification:
+    """An answer we could not read: keep them and stay quiet, never ask_purpose (#2390).
+
+    ask_purpose writes a discovery DM; until 8 Oct 2026 it was this default.
+    """
+    return InboundQualification(
+        intent="unknown",
+        matched_icp_id=None,
+        confidence=0.3,
+        recommended_action="accept_and_monitor",
+        reasoning=UNREADABLE_REASON,
+    )
+
+
 def _parse_qualification_response(raw: str, icps: list[dict]) -> InboundQualification:
     """Parse the LLM JSON response into an InboundQualification."""
     # Strip markdown fences if present
@@ -544,21 +561,9 @@ def _parse_qualification_response(raw: str, icps: list[dict]) -> InboundQualific
             try:
                 data = json.loads(match.group())
             except json.JSONDecodeError:
-                return InboundQualification(
-                    intent="unknown",
-                    matched_icp_id=None,
-                    confidence=0.3,
-                    recommended_action="ask_purpose",
-                    reasoning="Could not parse qualification response",
-                )
+                return _unreadable()
         else:
-            return InboundQualification(
-                intent="unknown",
-                matched_icp_id=None,
-                confidence=0.3,
-                recommended_action="ask_purpose",
-                reasoning="Could not parse qualification response",
-            )
+            return _unreadable()
 
     valid_intents = {"buying_signal", "networking", "job_seeking", "spam", "vendor_pitch", "partnership", "unknown"}
     valid_actions = {"engage_immediately", "ask_purpose", "accept_and_monitor", "ignore"}
@@ -567,9 +572,10 @@ def _parse_qualification_response(raw: str, icps: list[dict]) -> InboundQualific
     if intent not in valid_intents:
         intent = "unknown"
 
-    action = data.get("recommended_action", "ask_purpose")
+    action = data.get("recommended_action")
     if action not in valid_actions:
-        action = "ask_purpose"
+        # No verdict we know is not one that writes to them (#2390).
+        return _unreadable()
 
     confidence = float(data.get("confidence", 0.3))
     confidence = max(0.0, min(1.0, confidence))
@@ -695,24 +701,28 @@ async def qualify_inbound(
         )
 
         raw = await client.generate(prompt, system=_QUALIFY_SYSTEM, temperature=0.2, max_tokens=500)
-        result = finalize_inbound_qualification(
-            _parse_qualification_response(raw, active_icps),
-            profile,
-            active_icps,
-        )
+        parsed = _parse_qualification_response(raw, active_icps)
+        if parsed.reasoning == UNREADABLE_REASON:
+            from ..services.model_failure import UNPARSEABLE, record_skip
+            await record_skip(actor="inbound", failure=UNPARSEABLE, detail=str(profile.get("name") or "")[:40])
+        result = finalize_inbound_qualification(parsed, profile, active_icps)
         logger.info("Inbound qualified (LLM): %s → %s (%.0f%%)", profile.get("name"), result.intent, result.confidence * 100)
         return result
 
     except Exception as e:
         logger.warning("LLM qualify_inbound failed: %s, using keyword overlap", e)
+        from ..services.model_failure import failure_of, record_skip
+        await record_skip(actor="inbound", failure=failure_of(e), detail=str(profile.get("name") or "")[:40])
 
-    # 4. Fallback: keyword overlap only
+    # 4. Fallback: keyword overlap only. Reached only when the model could not
+    # answer, so it never says ask_purpose, which writes a DM (#2390): a
+    # keyword overlap keeps the ICP match and stays quiet.
     if best_overlap >= 0.3:
         return InboundQualification(
             intent="unknown",
             matched_icp_id=best_icp_id,
             confidence=best_overlap,
-            recommended_action="ask_purpose" if best_overlap >= 0.4 else "accept_and_monitor",
+            recommended_action="accept_and_monitor",
             reasoning=f"Keyword overlap with ICP: {best_overlap:.0%}",
         )
 

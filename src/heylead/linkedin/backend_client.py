@@ -3944,7 +3944,8 @@ class BackendClient:
             raise UnipileError("Backend LLM service unavailable.")
         resp.raise_for_status()
         sentiment = resp.json().get("sentiment")
-        return sentiment if sentiment else "neutral"
+        # No answer is not "neutral" (#2390).
+        return sentiment if sentiment else "unknown"
 
     # ── Knowledge base (hosted RAG corpus) ──
 
@@ -5198,7 +5199,7 @@ class BackendClient:
             intent=data.get("intent", "unknown"),
             matched_icp_id=data.get("matched_icp_id"),
             confidence=float(data.get("confidence", 0.3)),
-            recommended_action=data.get("recommended_action", "ask_purpose"),
+            recommended_action=data.get("recommended_action") or "accept_and_monitor",
             reasoning=data.get("reasoning", ""),
         )
 

@@ -35,6 +35,10 @@ class AgentResult:
     steps: list[dict[str, Any]] = field(default_factory=list)
     exhausted: bool = False
     extras: dict[str, str] = field(default_factory=dict)
+    # When the loop did not finish (#2390): exception, timeout, unparseable or
+    # budget (services.model_failure.FAILURES); "" when the model decided. A
+    # gate that writes to a person reads this, never the bare "none".
+    failure: str = ""
 
 
 _VALID_DECISIONS = frozenset({"hold", "skip", "reply", "book", "none"})
@@ -74,7 +78,7 @@ async def run_agent_loop(
 
     for _ in range(budget.max_steps):
         if time.monotonic() - started >= budget.timeout_seconds:
-            return AgentResult(decision="none", reason="timeout", steps=steps, exhausted=True)
+            return AgentResult(decision="none", reason="timeout", steps=steps, exhausted=True, failure="timeout")
         prompt = (
             f"{transcript}\n\n"
             "Return a JSON object with action, decision, reason, done. "
@@ -83,10 +87,15 @@ async def run_agent_loop(
         )
         try:
             raw = await call_llm_fn(prompt, system=system, schema=schema)
-            parsed = _parse_step(raw, allowed)
         except Exception as e:
             logger.warning("agent loop LLM failed: %s", e)
-            return AgentResult(decision="none", reason=str(e)[:240], steps=steps)
+            from ..services.model_failure import failure_of
+            return AgentResult(decision="none", reason=str(e)[:240], steps=steps, failure=failure_of(e))
+        try:
+            parsed = _parse_step(raw, allowed)
+        except Exception as e:
+            logger.warning("agent loop step unparseable: %s", e)
+            return AgentResult(decision="none", reason=str(e)[:240], steps=steps, failure="unparseable")
 
         steps.append(parsed)
         action = parsed["action"]
@@ -113,7 +122,9 @@ async def run_agent_loop(
             text = f"error: {e}"
         transcript += f"\n\nTOOL {action}: {cut(text, budget.result_chars)}"
 
-    return AgentResult(decision="none", reason="step budget exhausted", steps=steps, exhausted=True)
+    return AgentResult(
+        decision="none", reason="step budget exhausted", steps=steps, exhausted=True, failure="budget",
+    )
 
 
 def _parse_step(raw: str, valid_decisions: frozenset[str]) -> dict[str, Any]:

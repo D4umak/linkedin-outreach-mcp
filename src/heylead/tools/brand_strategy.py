@@ -1055,7 +1055,7 @@ Return ONLY the comment text."""
 
                     llm = LLMClient()
                     comment_text = await llm.generate(comment_prompt, max_tokens=200)
-                if comment_text and len(comment_text) >= 10:
+                if comment_text and len(comment_text) >= 10 and not _comment_unfit(comment_text, voice):
                     ok, current, cap = await check_engagement_budget("comment")
                     if not ok:
                         errors.append(
@@ -2163,3 +2163,25 @@ async def _handle_cancel_headline_test() -> str:
             f'  Restored headline: "{restored}"'
         )
     return "Headline A/B test cancelled. No pre-test headline was stored to restore."
+
+
+def _comment_unfit(comment_text: str, voice: Any) -> list[str]:
+    """Why a generated brand comment may not be posted, or [] (#2390).
+
+    Until 8 Oct 2026 a brand comment was posted on its length alone: no
+    validate_comment, no transport check_message, so a comment whose model
+    call came back garbled was published in the user's name.
+    """
+    from ..ai.message_validator import validate_comment
+    from ..guardrails import check_message
+
+    issues = list(check_message(comment_text))
+    try:
+        validation = validate_comment(comment_text, voice if isinstance(voice, dict) else None)
+        if not validation.is_valid:
+            issues.extend(validation.issues or ["comment failed validation"])
+    except Exception as e:  # noqa: BLE001 - a check that cannot run is not a pass
+        issues.append(f"comment check did not run: {e}")
+    if issues:
+        logger.info("Brand comment not posted: %s", "; ".join(issues)[:200])
+    return issues
