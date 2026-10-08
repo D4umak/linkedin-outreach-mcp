@@ -10,6 +10,7 @@ real success vs skips vs permanent failures — not just "didn't crash".
 
 from __future__ import annotations
 
+from ..hosted_writes import ensure_laptop_may_write
 import logging
 import re
 import time
@@ -1721,6 +1722,7 @@ async def _execute_accept_inbound(job: dict[str, Any]) -> str:
 
         # Accept ALL invitations (grow the network)
         try:
+            ensure_laptop_may_write("handle_invitation")
             result = await client.handle_invitation(
                 account_id, inv_id, action="accept",
                 shared_secret=inv.get("shared_secret", ""))
@@ -2043,6 +2045,7 @@ async def _execute_withdraw_stale_invites(job: dict[str, Any]) -> str:
             await asyncio.sleep(random.uniform(WITHDRAW_DELAY_MIN, WITHDRAW_DELAY_MAX))
 
         try:
+            ensure_laptop_may_write("withdraw_invitation")
             result = await client.withdraw_invitation(account_id, inv_id)
             if result.get("success"):
                 withdrawn += 1

@@ -31,6 +31,7 @@ from ..linkedin import (
     get_linkedin_client,
 )
 from ..db.async_bridge import run_db
+from ..hosted_writes import laptop_writes_refused, message_delete_refused
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,10 @@ async def run_delete_message(
     Returns:
         Human-readable result string.
     """
+    # A hosted account's laptop deletes nothing on LinkedIn (heylead-api#2318).
+    if laptop_writes_refused():
+        return message_delete_refused()
+
     # ── Pre-checks ──
     setup_done = await run_db(get_setting, "setup_complete", False)
     if not setup_done:

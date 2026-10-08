@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..hosted_writes import ensure_laptop_may_write
 from ..services.campaign_naming import cut_at_word
 
 import asyncio
@@ -12,6 +13,8 @@ from typing import Any
 
 from ..db.async_bridge import run_db
 from ..dashboard_links import page_url
+from .. import hosted_writes
+from ..hosted_writes import laptop_writes_refused
 from ..ai.inbound_qualifier import _classify_fast
 from ..db import aio as db
 from ..linkedin import get_account_id, get_linkedin_client
@@ -365,6 +368,15 @@ async def run_inbox(
     text: str = "",
 ) -> str:
     """Browse and read LinkedIn inbox messages."""
+    # A hosted account's laptop sends nothing itself (heylead-api#2318): the
+    # cloud sends the reply, or the drafted comment reply, under the
+    # workspace's seat and send gate.
+    if laptop_writes_refused() and action in ("reply", "approve_draft"):
+        client = get_linkedin_client()
+        if action == "reply":
+            return await reply_in_cloud(client, chat_id, name, text)
+        return await _approve_comment_draft_in_cloud(client, chat_id, text)
+
     account_id = await run_db(get_account_id)
     if not account_id:
         return "No LinkedIn account connected. Run setup_profile first."
@@ -429,9 +441,66 @@ async def _list_comment_drafts(client: Any) -> str:
     return "\n".join(lines)
 
 
+async def _approve_comment_draft_in_cloud(client: Any, draft_id: str, text: str) -> str:
+    """approve_draft for a hosted account: POST /content/comments/{id}/send.
+
+    The dashboard's send route, not the proxy's /comment-drafts/{id}/approve,
+    which the api refuses to a laptop. Same drafts, same ids, same send.
+    """
+    if not draft_id:
+        return "Which draft? Pass chat_id with the draft id from comment_drafts."
+    status, body = await client.send_content_comment(draft_id, text)
+    if status < 400 and body.get("success"):
+        return "Reply sent."
+    detail = str(body.get("error") or body.get("detail") or "").strip()
+    if status == 409 and "no linkedin account" in detail.lower():
+        return hosted_writes.reply_no_seat()
+    if status == 404:
+        return "Nothing was sent. That draft was not found; list them with inbox(action='comment_drafts')."
+    return f"Could not send: {detail or 'unknown error'}"
+
+
+# Reason codes POST /inbox/reply answers with, mapped to what the person reads.
+def _reply_reason_sentence(reason: str, recipient: str, name: str) -> str:
+    from ..textutil import first_name
+
+    if reason == "sent":
+        who = (recipient or name or "").strip()
+        return hosted_writes.reply_sent(first_name(who) if who else "")
+    if reason == "empty_text":
+        return hosted_writes.REPLY_EMPTY
+    if reason == "no_seat":
+        return hosted_writes.reply_no_seat()
+    if reason == "chat_not_found":
+        return hosted_writes.REPLY_CHAT_GONE
+    if reason == "name_not_found":
+        return hosted_writes.reply_name_not_found(name)
+    if reason == "sending_off":
+        return hosted_writes.reply_sending_paused()
+    if reason == "linkedin_refused":
+        return hosted_writes.REPLY_LINKEDIN_REFUSED
+    return hosted_writes.reply_failed()
+
+
+async def reply_in_cloud(client: Any, chat_id: str, name: str, text: str) -> str:
+    """answer_inbox reply for a hosted account: POST /inbox/reply."""
+    if not (text or "").strip():
+        return hosted_writes.REPLY_EMPTY
+    if not chat_id and not name:
+        return "Please provide a `chat_id` or `name` for the conversation to reply in."
+    status, body = await client.inbox_reply(text, chat_id=chat_id, name=name)
+    if status == 200:
+        return _reply_reason_sentence(
+            str(body.get("reason") or ""), str(body.get("recipient") or ""), name,
+        )
+    detail = body.get("detail")
+    return hosted_writes.reply_failed(detail if isinstance(detail, str) else "")
+
+
 async def _approve_comment_draft(client: Any, draft_id: str, text: str) -> str:
     if not draft_id:
         return "Which draft? Pass chat_id with the draft id from comment_drafts."
+    ensure_laptop_may_write("approve_comment_draft")
     result = await client.approve_comment_draft(draft_id, text=text)
     if result.get("success"):
         return "Reply sent."
@@ -691,6 +760,7 @@ async def _reply_conversation(
         outcome="attempt",
         **({"chat_id": chat_id} if chat_id else {}),
     )
+    ensure_laptop_may_write("send_message")
     result = await client.send_message(account_id, chat_id, text)
     log_event(
         "inbox_reply_sent",

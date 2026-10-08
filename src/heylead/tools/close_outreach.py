@@ -21,6 +21,7 @@ from ..db.queries import (
 )
 from ..formatter import outcome_icon, outcome_label
 from ..db.async_bridge import run_db
+from ..hosted_writes import chat_archive_skipped, laptop_writes_refused
 from ..services import revenue
 from ..services.cloud_sync import sync_outreach_close
 
@@ -208,30 +209,34 @@ async def run_close_outreach(
         )
 
     # ── Archive chat on LinkedIn (non-blocking) ──
-    try:
-        from ..linkedin import get_account_id, get_linkedin_client
-        import json as _json
-        account_id = await run_db(get_account_id)
-        linkedin_id = ""
-        pj = record.get("profile_json")
-        if pj:
-            try:
-                _profile = _json.loads(pj) if isinstance(pj, str) else pj
-                linkedin_id = _profile.get("provider_id", "")
-            except Exception:
-                pass
-        if not linkedin_id:
-            linkedin_id = record.get("linkedin_id", "")
-        if account_id and linkedin_id:
-            client = get_linkedin_client()
-            try:
-                chat_id = await client.find_chat_for_user(account_id, linkedin_id)
-                if chat_id:
-                    await client.archive_chat(chat_id)
-            finally:
-                await client.close()
-    except Exception:
-        pass  # Non-critical — inbox hygiene
+    # Not on a hosted account: its laptop changes nothing on LinkedIn
+    # (heylead-api#2318), so the conversation stays in the inbox.
+    hosted = laptop_writes_refused()
+    if not laptop_writes_refused():
+        try:
+            from ..linkedin import get_account_id, get_linkedin_client
+            import json as _json
+            account_id = await run_db(get_account_id)
+            linkedin_id = ""
+            pj = record.get("profile_json")
+            if pj:
+                try:
+                    _profile = _json.loads(pj) if isinstance(pj, str) else pj
+                    linkedin_id = _profile.get("provider_id", "")
+                except Exception:
+                    pass
+            if not linkedin_id:
+                linkedin_id = record.get("linkedin_id", "")
+            if account_id and linkedin_id:
+                client = get_linkedin_client()
+                try:
+                    chat_id = await client.find_chat_for_user(account_id, linkedin_id)
+                    if chat_id:
+                        await client.archive_chat(chat_id)
+                finally:
+                    await client.close()
+        except Exception:
+            pass  # Non-critical — inbox hygiene
 
     # ── Auto-sync to HubSpot on "won" (non-blocking) ──
     hubspot_synced = False
@@ -319,6 +324,8 @@ async def run_close_outreach(
 
     output.append("")
     output.append("This prospect won't receive further automated outreach.")
+    if hosted:
+        output.append(chat_archive_skipped())
 
     return "\n".join(output)
 

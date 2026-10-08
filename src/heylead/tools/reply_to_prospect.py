@@ -12,6 +12,7 @@ Core reply loop:
 from __future__ import annotations
 
 from .. import facts
+from ..hosted_writes import ensure_laptop_may_write
 from ..services.campaign_naming import cut_at_word
 
 import json
@@ -879,6 +880,7 @@ async def run_reply_to_prospect(
             chat_id=chat_id,
             msg_format=actual_format,
         )
+        ensure_laptop_may_write("send_message")
         send_result = await client.send_message(
             account_id=account_id,
             chat_id=chat_id,

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from .campaign_naming import cut_at_word
 
+from ..hosted_writes import ensure_laptop_may_write
 import logging
 import time
 from typing import Any
@@ -285,6 +286,7 @@ async def send_discovery_dms() -> str:
                 try:
                     chat_id = await client.find_chat_for_user(account_id, sender_id)
                     if chat_id:
+                        ensure_laptop_may_write("send_message")
                         result = await client.send_message(
                             account_id=account_id,
                             chat_id=chat_id,

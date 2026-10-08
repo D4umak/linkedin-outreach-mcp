@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.437 (2026-10-08)
+- Fix: a reply sent by chat id says 'Message sent.' when the api names nobody (api #2318)
+- Fix: a hosted account's laptop changes nothing on LinkedIn (api #2318)
+
 ## v0.10.436 (2026-10-08)
 - Fix: a failed check on a send path skips, never sends (api #2390)
 

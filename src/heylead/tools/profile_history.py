@@ -16,6 +16,7 @@ import time
 from ..db.async_bridge import run_db
 from ..db import aio as db
 from .profile_editor import apply_profile_change
+from ..hosted_writes import laptop_writes_refused, restore_profile_refused
 from ..services.campaign_naming import cut_at_word
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,9 @@ async def run_profile(
         return await _show_history(field or None, limit)
 
     if action == "restore":
+        # A hosted account's profile is not edited from here (heylead-api#2318).
+        if laptop_writes_refused():
+            return restore_profile_refused()
         return await _restore_change(change_id)
 
     if action == "current":

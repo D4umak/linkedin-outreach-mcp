@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 from ..db import aio as db
+from ..hosted_writes import ensure_laptop_may_write
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,9 @@ async def apply_profile_change(
 
     Returns ``{"success": bool, "error": str, "change_id": str | None}``.
     """
+    # A hosted account's profile is edited by the cloud (heylead-api#2318);
+    # the tools that reach here answer for it before they call.
+    ensure_laptop_may_write("profile edit")
     profile = await db.get_setting("profile", {})
     old_value: str | None = None
 

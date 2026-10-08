@@ -12,6 +12,7 @@ accepted immediately and qualified later.
 
 from __future__ import annotations
 
+from ..hosted_writes import ensure_laptop_may_write
 import json
 import logging
 import time
@@ -877,6 +878,7 @@ async def _act_on_invitations(client: Any, account_id: str) -> str:
                 continue
 
             try:
+                ensure_laptop_may_write("handle_invitation")
                 result = await client.handle_invitation(
                     account_id, invitation_id, action="accept",
                 )
@@ -920,6 +922,7 @@ async def _act_on_invitations(client: Any, account_id: str) -> str:
         elif action == "decline":
             if invitation_id:
                 try:
+                    ensure_laptop_may_write("handle_invitation")
                     result = await client.handle_invitation(
                         account_id, invitation_id, action="decline",
                     )
@@ -1136,6 +1139,7 @@ async def _act_on_messages(client: Any, account_id: str) -> str:
         message_id = signal.get("message_id", "")
         if message_id and 0.4 <= confidence < 0.7:
             try:
+                ensure_laptop_may_write("add_message_reaction")
                 react_result = await client.add_message_reaction(
                     account_id, message_id,
                 )
@@ -1489,12 +1493,14 @@ async def _send_discovery_dm(
             return "capped"
 
         if chat_id:
+            ensure_laptop_may_write("send_message")
             result = await client.send_message(
                 account_id=account_id,
                 chat_id=chat_id,
                 text=dm_text,
             )
         else:
+            ensure_laptop_may_write("send_new_message")
             result = await client.send_new_message(
                 account_id=account_id,
                 provider_id=sender_id,

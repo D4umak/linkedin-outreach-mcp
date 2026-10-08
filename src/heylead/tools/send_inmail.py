@@ -11,6 +11,7 @@ go through HeyLead tools — there is no sidecar script for this.
 
 from __future__ import annotations
 
+from ..hosted_writes import ensure_laptop_may_write
 from ..services.campaign_naming import cut_at_word
 
 import json
@@ -558,6 +559,7 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
             provider_id=provider_id,
             prompt_name=prompt_name,
         )
+        ensure_laptop_may_write("send_inmail")
         result = await client.send_inmail(
             account_id=account_id,
             provider_id=provider_id,

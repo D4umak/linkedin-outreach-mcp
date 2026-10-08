@@ -12,6 +12,7 @@ Core follow-up loop:
 from __future__ import annotations
 
 from .. import facts
+from ..hosted_writes import ensure_laptop_may_write
 from ..services.campaign_naming import cut_at_word
 
 import json
@@ -952,12 +953,14 @@ async def run_send_followup(
             msg_format=actual_format,
         )
         if create_new_chat:
+            ensure_laptop_may_write("send_new_message")
             send_result = await client.send_new_message(
                 account_id=account_id,
                 provider_id=prospect_provider_id,
                 text=message,
             )
         else:
+            ensure_laptop_may_write("send_message")
             send_result = await client.send_message(
                 account_id=account_id,
                 chat_id=chat_id,

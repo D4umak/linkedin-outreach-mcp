@@ -25,6 +25,7 @@ from ..constants import (
     VERIFIED,
 )
 from ..db.async_bridge import run_db
+from ..hosted_writes import laptop_writes_refused
 from ..guardrails import text_landed
 
 logger = logging.getLogger(__name__)
@@ -301,7 +302,9 @@ async def post_send_verify_and_delete(
                     )
 
         # Step 6: Auto-delete or mark verified
-        if should_delete and external_id:
+        # Never on a hosted account: its laptop deletes nothing on LinkedIn
+        # (heylead-api#2318); the cloud verifies its own sends.
+        if should_delete and external_id and not laptop_writes_refused():
             delete_result = await client.delete_message(account_id, external_id)
             if delete_result.get("success"):
                 result["deleted"] = True

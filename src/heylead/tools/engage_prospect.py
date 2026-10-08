@@ -13,6 +13,7 @@ Core engagement loop:
 
 from __future__ import annotations
 
+from ..hosted_writes import engage_prospect_refused, ensure_laptop_may_write, laptop_writes_refused
 import json
 import logging
 import random
@@ -102,6 +103,11 @@ async def run_engage_prospect(
     5. Copilot: show for review. Autopilot: send immediately.
     6. Log engagement to DB
     """
+
+    # A hosted account's laptop changes nothing on LinkedIn (heylead-api#2318):
+    # campaign warm-up in the cloud likes, comments and follows instead.
+    if laptop_writes_refused():
+        return engage_prospect_refused()
 
     # ── Step 0: Pre-checks ──
     setup_done = await db.get_setting("setup_complete", False)
@@ -683,6 +689,7 @@ async def _handle_reaction(
         )
 
     try:
+        ensure_laptop_may_write("send_post_reaction")
         result = await client.send_post_reaction(
             account_id, post_id, "LIKE",
             outreach_id=outreach_id,
@@ -821,6 +828,7 @@ async def _send_comment(
         )
 
     try:
+        ensure_laptop_may_write("send_post_comment")
         result = await client.send_post_comment(
             account_id, post_id, comment_text,
             outreach_id=outreach_id,
@@ -892,6 +900,7 @@ async def _send_comment(
         logger.info(f"Comment failed for {prospect_name}, falling back to reaction: {error}")
         recovered = False
         try:
+            ensure_laptop_may_write("send_post_reaction")
             react_result = await client.send_post_reaction(account_id, post_id, "LIKE")
             if react_result.get("success"):
                 fallback_eid = await db.save_engagement(
@@ -988,6 +997,7 @@ async def _handle_view(
 
     # Autopilot — view immediately
     try:
+        ensure_laptop_may_write("view_profile")
         result = await client.view_profile(account_id, provider_id)
     except UnipileAuthError:
         await client.close()
@@ -1102,6 +1112,7 @@ async def _handle_follow(
 
     # Autopilot — follow immediately
     try:
+        ensure_laptop_may_write("follow_profile")
         result = await client.follow_profile(account_id, provider_id)
     except UnipileAuthError:
         await client.close()
@@ -1204,6 +1215,7 @@ async def _handle_endorse(
 
     # Autopilot — endorse immediately
     try:
+        ensure_laptop_may_write("endorse_skill")
         result = await client.endorse_skill(account_id, provider_id)
     except UnipileAuthError:
         await client.close()
@@ -1436,6 +1448,7 @@ async def _handle_reply_comment(
         body = reply_content if "{{0}}" in reply_content else "{{0}} " + reply_content
         mentions = [{"name": first, "profile_id": latest_reply.get("author_id", "")}]
         try:
+            ensure_laptop_may_write("reply_to_comment")
             result = await client.reply_to_comment(
                 account_id, post_id, thread_comment_id, body, mentions=mentions,
             )

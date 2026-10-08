@@ -12,6 +12,8 @@ Fully automated execution:
 
 from __future__ import annotations
 
+from .. import hosted_writes
+from ..hosted_writes import ensure_laptop_may_write, laptop_writes_refused
 import logging
 import time as _time
 from typing import Any
@@ -90,6 +92,16 @@ async def run_brand_strategy(
     account_id = await run_db(get_account_id)
     if not account_id:
         return "No LinkedIn account connected. Run setup_profile first."
+
+    # A hosted account's laptop changes nothing on LinkedIn (heylead-api#2318):
+    # the cloud runs the brand plan, and the headline and About go through it.
+    if laptop_writes_refused():
+        if action in ("upload_photo", "upload_cover", "set_link", "photo_enhance", "makeover"):
+            return hosted_writes.profile_visuals_refused()
+        if action in ("test_headline", "cancel_headline_test"):
+            return hosted_writes.headline_test_refused()
+        if action == "execute":
+            return await _handle_execute_hosted()
 
     if action == "analyze":
         return await _handle_analyze(account_id, focus)
@@ -513,6 +525,77 @@ async def _complete_brand_action(action_id: str, result: str) -> None:
 # ──────────────────────────────────────────────
 
 
+async def _handle_execute_hosted() -> str:
+    """execute for a hosted account: nothing runs here.
+
+    Posts and engagement are the cloud's brand plan (engagement only once the
+    workspace switches it on, its comments waiting in Approvals). A headline
+    or About step is applied by the cloud's optimize routes. Anything else
+    on the profile is the person's to change on LinkedIn.
+    """
+    plan = await run_db(load_brand_plan)
+    if not plan:
+        return (
+            "No brand strategy plan found.\n\n"
+            'Run brand_strategy(action="plan") first to generate a plan.'
+        )
+    action = get_next_pending_action(plan)
+    if not action:
+        return (
+            "All brand strategy actions completed!\n\n"
+            'Run brand_strategy(action="progress") to see your results.'
+        )
+    action_type = action.get("type", "")
+    action_id = action.get("id", "")
+    if action_type == "engagement":
+        return hosted_writes.brand_engagement_refused()
+    if action_type == "post":
+        return hosted_writes.brand_post_in_cloud()
+    if action_type == "photo_enhance":
+        return hosted_writes.profile_visuals_refused()
+    subtype = action.get("subtype", "headline") if action_type == "profile_optimize" else ""
+    if subtype not in ("headline", "summary"):
+        return hosted_writes.profile_field_refused()
+
+    if not await run_db(_claim_brand_action, action_id):
+        return ALREADY_CLAIMED
+    reply = await _apply_profile_text_in_cloud(subtype, "")
+    if reply in (hosted_writes.HEADLINE_APPLIED, hosted_writes.ABOUT_APPLIED):
+        await _complete_brand_action(action_id, f"Applied {subtype} in the cloud")
+    return reply
+
+
+async def _apply_profile_text_in_cloud(field: str, text: str) -> str:
+    """Headline or About through POST /brand/optimize-headline|about, applied.
+
+    An empty *text* lets the cloud write it from the profile, as the plan's
+    profile step does; otherwise the words are set verbatim.
+    """
+    client = get_linkedin_client()
+    try:
+        if field == "headline":
+            status, body = await client.apply_headline(text)
+            done = hosted_writes.HEADLINE_APPLIED
+        else:
+            status, body = await client.apply_about(text)
+            done = hosted_writes.ABOUT_APPLIED
+    except UnipileError as e:
+        logger.warning("brand: the cloud could not apply the %s: %s", field, e)
+        return hosted_writes.profile_text_failed()
+    if status >= 400 or not body.get("applied"):
+        return hosted_writes.profile_text_failed()
+    applied_text = text or str(body.get("headline" if field == "headline" else "about") or "")
+    if field == "headline" and not applied_text:
+        applied_text = str(body.get("current_headline") or "")
+    if applied_text:
+        profile = await run_db(get_setting, "profile", {})
+        if isinstance(profile, dict):
+            from ..db.queries import save_setting
+
+            await run_db(save_setting, "profile", {**profile, field: applied_text})
+    return done
+
+
 async def _handle_execute(account_id: str) -> str:
     """Execute the next pending action from the plan."""
 
@@ -695,6 +778,7 @@ Return ONLY the post text, nothing else."""
         # Only pass image when there is one: a text post keeps the two-argument
         # call every implementation of this method already accepts.
         if photo:
+            ensure_laptop_may_write("create_post")
             result = await client.create_post(account_id, post_text, image=photo.image)
             if not result.get("success") and _image_was_rejected(result):
                 # Before photos this post went out; the photo must not be why
@@ -703,8 +787,10 @@ Return ONLY the post text, nothing else."""
                 logger.warning("Brand post photo rejected, posting text only: %s",
                                result.get("error", ""))
                 photo = None
+                ensure_laptop_may_write("create_post")
                 result = await client.create_post(account_id, post_text)
         else:
+            ensure_laptop_may_write("create_post")
             result = await client.create_post(account_id, post_text)
         await client.close()
 
@@ -963,6 +1049,7 @@ async def _execute_engagement_action(
                             f"Follow cap reached ({current}/{cap}) — stopping"
                         )
                         break
+                    ensure_laptop_may_write("follow_profile")
                     follow_result = await client.follow_profile(account_id, post["provider_id"])
                     if follow_result.get("success"):
                         await run_db(save_engagement, outreach_id=None,
@@ -991,6 +1078,7 @@ async def _execute_engagement_action(
                             f"React cap reached ({current}/{cap}) — stopping"
                         )
                         break
+                    ensure_laptop_may_write("send_post_reaction")
                     react_result = await client.send_post_reaction(account_id, post_id, "LIKE")
                     if react_result.get("success"):
                         await run_db(save_engagement, outreach_id=None,
@@ -1062,6 +1150,7 @@ Return ONLY the comment text."""
                             f"Comment cap reached ({current}/{cap}) — stopping"
                         )
                         break
+                    ensure_laptop_may_write("send_post_comment")
                     comment_result = await client.send_post_comment(account_id, post_id, comment_text)
                     if comment_result.get("success"):
                         await run_db(save_engagement, outreach_id=None,
@@ -1088,6 +1177,7 @@ Return ONLY the comment text."""
                             f"React cap reached ({current}/{cap})"
                         )
                         continue
+                    ensure_laptop_may_write("send_post_reaction")
                     fallback_result = await client.send_post_reaction(account_id, post_id, "LIKE")
                     if fallback_result.get("success"):
                         await run_db(save_engagement, outreach_id=None,
@@ -1112,6 +1202,7 @@ Return ONLY the comment text."""
                             f"react cap reached ({current}/{cap})"
                         )
                         continue
+                    ensure_laptop_may_write("send_post_reaction")
                     fallback_result = await client.send_post_reaction(account_id, post_id, "LIKE")
                     if fallback_result.get("success"):
                         await run_db(save_engagement, outreach_id=None,
@@ -1738,6 +1829,17 @@ async def _handle_set_profile_text(account_id: str, field: str, text: str) -> st
 
     if value == stored:
         return f"{label} is already:\n\n  {_preview(value)}\n\nNothing to change."
+
+    # A hosted account's headline and About are set by the cloud (heylead-api#2318).
+    if laptop_writes_refused():
+        reply = await _apply_profile_text_in_cloud(field, value)
+        if reply in (hosted_writes.HEADLINE_APPLIED, hosted_writes.ABOUT_APPLIED):
+            await run_db(
+                log_action,
+                spec["log_action"],
+                details={field: value, "previous": current, "via": "cloud"},
+            )
+        return reply
 
     from .profile_editor import apply_profile_change
 

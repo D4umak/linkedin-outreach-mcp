@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import logging
 
+from .. import hosted_writes
 from ..db.queries import get_setting, log_action, save_published_post
+from ..hosted_writes import ensure_laptop_may_write, laptop_writes_refused
 from ..linkedin import get_account_id, get_linkedin_client, UnipileError
 from ..db.async_bridge import run_db
 from ..services.campaign_naming import cut_at_word
@@ -56,6 +58,20 @@ async def run_create_post(
             '  create_post(topic="comment on AI in sales")\n'
             '  create_post(topic="share a lesson learned this week")'
         )
+
+    # A hosted account's laptop posts nothing itself (heylead-api#2318): the
+    # cloud drafts the post in Content, under the workspace's publish mode.
+    if laptop_writes_refused():
+        if "linkedin" not in platform_list:
+            return X_NOT_AVAILABLE
+        try:
+            from ..services.post_media import load_post_image
+
+            post_image = load_post_image(image)
+        except ValueError as e:
+            return f"{e}"
+        answer = await _create_post_in_cloud(topic, tone, post_image)
+        return f"{answer}\n\n{X_NOT_AVAILABLE}" if wants_x else answer
 
     # Check at least one platform has credentials.
     # Off the loop: get_account_id is a sync DB read and db.get_db refuses one
@@ -120,6 +136,78 @@ async def run_create_post(
         output_parts.append(X_NOT_AVAILABLE)
 
     return "\n\n---\n\n".join(output_parts)
+
+
+# The client's tones, in the cloud composer's words (heylead-api
+# content_posts.CONTENT_TONES); a cloud tone passes through as it is.
+_CLOUD_TONES = ("thought-leader", "insight", "story", "how-to", "contrarian", "question")
+_TONE_TO_CLOUD = {
+    "professional": "insight",
+    "casual": "story",
+    "thought-leader": "thought-leader",
+    "thought_leader": "thought-leader",
+    "storytelling": "story",
+}
+
+
+def cloud_tone(tone: str) -> str:
+    key = (tone or "").strip().lower()
+    if key in _CLOUD_TONES:
+        return key
+    return _TONE_TO_CLOUD.get(key, "thought-leader")
+
+
+async def _create_post_in_cloud(topic: str, tone: str, image) -> str:
+    """create_post for a hosted account: the cloud drafts, attaches, publishes.
+
+    The draft is written by POST /content/posts. A photo goes into the
+    Content library and onto the draft. The post is published now only
+    when the workspace's publish mode is auto; under require_approval it
+    stays a draft for the person to approve (the publish route itself does
+    not consult the mode, because pressing Publish IS the approval).
+    """
+    client = get_linkedin_client()
+    status, post = await client.create_content_post(topic, cloud_tone(tone))
+    if status >= 400 or not post.get("id"):
+        detail = str(post.get("detail") or "").strip()
+        return f"Nothing was posted. {detail}" if detail else hosted_writes.post_publish_failed()
+    post_id = str(post["id"])
+
+    photo_failed = False
+    if image:
+        photo_failed = True
+        try:
+            filename, data, mime = image
+            added = await client.upload_content_photo(filename, data, mime)
+            items = added.get("items") or []
+            photo_id = str(items[0].get("id") or "") if items else ""
+            if photo_id:
+                st, _ = await client.attach_library_photo(post_id, photo_id)
+                photo_failed = st >= 400
+        except Exception as e:  # the post still goes, without its photo
+            logger.warning("create_post: the photo could not be added: %s", e)
+
+    st, settings = await client.get_content_settings()
+    publish_mode = str(settings.get("publish_mode") or "") if st < 400 else ""
+    if publish_mode != "auto":
+        held = hosted_writes.post_held()
+        return f"{held} {hosted_writes.post_photo_not_added()}" if photo_failed else held
+
+    if not str(post.get("text") or "").strip():
+        return hosted_writes.post_still_drafting()
+
+    st, published = await client.publish_content_post(post_id)
+    if st == 409 and "no linkedin account" in str(published.get("detail") or "").lower():
+        return hosted_writes.post_no_seat()
+    if st >= 400:
+        return hosted_writes.post_publish_failed()
+    await run_db(log_action, "post_created", details={
+        "topic": topic, "tone": tone, "post_id": published.get("post_id", ""),
+        "platform": "linkedin", "via": "cloud",
+    })
+    if photo_failed:
+        return hosted_writes.post_published_without_photo()
+    return hosted_writes.post_published()
 
 
 def _author_sources(profile, name, title, company, industry, topic) -> tuple:
@@ -196,6 +284,7 @@ Return ONLY the post text, nothing else."""
         return f"LinkedIn: Failed to generate post: {e}"
 
     try:
+        ensure_laptop_may_write("create_post")
         client = get_linkedin_client()
         # Only pass image when there is one: a text post keeps the two-argument
         # call every implementation of this method already accepts.

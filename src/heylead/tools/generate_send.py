@@ -11,6 +11,7 @@ Core outreach loop:
 from __future__ import annotations
 
 from .. import facts
+from ..hosted_writes import ensure_laptop_may_write
 from ..services.campaign_naming import cut_at_word
 
 import json
@@ -1478,6 +1479,7 @@ async def run_generate_and_send(
                 text=message,
                 provider_id=provider_id,
             )
+            ensure_laptop_may_write("send_new_message")
             result = await client.send_new_message(
                 account_id=account_id,
                 provider_id=provider_id,
@@ -1739,6 +1741,7 @@ async def run_generate_and_send(
         text=message,
         provider_id=provider_id,
     )
+    ensure_laptop_may_write("send_invitation")
     result = await client.send_invitation(
         account_id=account_id,
         provider_id=provider_id,
@@ -1831,6 +1834,7 @@ async def run_generate_and_send(
                         provider_id=provider_id,
                         retry="invitation_retry_no_message",
                     )
+                    ensure_laptop_may_write("send_invitation")
                     result2 = await client.send_invitation(
                         account_id=account_id,
                         provider_id=provider_id,

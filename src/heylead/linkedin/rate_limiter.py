@@ -993,6 +993,12 @@ async def withdraw_oldest_to_free_spot(
     client: Any, account_id: str
 ) -> dict[str, Any]:
     """Withdraw the oldest pending invitation to free a spot."""
+    # Never on a hosted account: the cloud owns its invitations and its
+    # withdrawals (heylead-api#2318).
+    from ..hosted_writes import laptop_writes_refused
+
+    if laptop_writes_refused():
+        return {"success": False, "error": "Invitations are withdrawn by the cloud for this account."}
     # Check withdrawal daily cap first
     can, current, cap, _ = await check_daily_cap("withdraw")
     if not can:

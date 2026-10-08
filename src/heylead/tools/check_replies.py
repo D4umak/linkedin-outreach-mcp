@@ -20,6 +20,7 @@ from ..ai.sentiment import (
     detect_meeting_agreement,
 )
 from ..db.async_bridge import run_db
+from ..hosted_writes import MARK_READ_SKIPPED, laptop_writes_refused
 from ..formatter import person_line, prospect_link
 from ..author_identity import contact_provider_id
 from ..db.queries import (
@@ -1597,27 +1598,30 @@ async def run_check_replies() -> str:
     auto_replied_names: list[str] = []
 
     # ── Mark processed chats as read (non-blocking) ──
-    try:
-        chat_ids_to_mark = set()
-        for reply in matched_replies:
-            curn = reply.get("conversation_urn", "")
-            if curn:
-                chat_ids_to_mark.add(curn)
-        if chat_ids_to_mark:
-            mark_account_id = await run_db(get_account_id)
-            if mark_account_id:
-                try:
-                    mark_client = get_linkedin_client()
-                except Exception:
-                    mark_client = None
-                if mark_client:
+    # Not on a hosted account: its laptop changes nothing on LinkedIn
+    # (heylead-api#2318), so the conversations stay unread there.
+    if not laptop_writes_refused():
+        try:
+            chat_ids_to_mark = set()
+            for reply in matched_replies:
+                curn = reply.get("conversation_urn", "")
+                if curn:
+                    chat_ids_to_mark.add(curn)
+            if chat_ids_to_mark:
+                mark_account_id = await run_db(get_account_id)
+                if mark_account_id:
                     try:
-                        for cid in chat_ids_to_mark:
-                            await mark_client.mark_chat_read(cid)
-                    finally:
-                        await mark_client.close()
-    except Exception:
-        pass  # Non-critical — inbox hygiene
+                        mark_client = get_linkedin_client()
+                    except Exception:
+                        mark_client = None
+                    if mark_client:
+                        try:
+                            for cid in chat_ids_to_mark:
+                                await mark_client.mark_chat_read(cid)
+                        finally:
+                            await mark_client.close()
+        except Exception:
+            pass  # Non-critical — inbox hygiene
 
     # ── Format output ──
     waiting = await _who_is_waiting()
@@ -1825,6 +1829,10 @@ async def run_check_replies() -> str:
         if pipeline_parts:
             output.append("")
             output.append(f"📊 Inbound Pipeline: {', '.join(pipeline_parts)}")
+
+    if laptop_writes_refused():
+        output.append("")
+        output.append(MARK_READ_SKIPPED)
 
     return _waiting_first("\n".join(output), waiting)
 
