@@ -864,6 +864,64 @@ def _evidence_words(term: str) -> set[str]:
     return {w for w in re.findall(r"[0-9a-z]+", term.lower()) if w not in STOPWORDS}
 
 
+# The words of a job title that say the role or the function, not the
+# industry (#2415). What is left of an ICP title once these are gone is its
+# industry qualifier: "hotel" of "Hotel Owner", "real estate" of "Real Estate
+# Investor", "fintech" of "Fintech CTO". "Head of Engineering", "VP Sales"
+# and "Director of Asset Management" leave nothing: a function is not an
+# industry, and a title made only of role and function stays a title alone
+# (#2149; the 423 Heads of Engineering held in 74bf9205 on 8 Oct 2026).
+_ROLE_WORDS = frozenset({
+    "owner", "owners", "co", "founder", "founders", "cofounder", "partner", "partners",
+    "managing", "principal", "principals", "president", "vice", "vp", "svp", "evp",
+    "chief", "officer", "head", "director", "directors", "manager", "managers", "lead",
+    "leader", "leaders", "senior", "sr", "junior", "jr", "staff", "executive", "executives",
+    "ceo", "cto", "cfo", "coo", "cio", "ciso", "cmo", "cro", "cpo", "investor", "investors",
+    "board", "member", "advisor", "adviser", "consultant", "specialist", "associate",
+    "assistant", "analyst", "general", "global", "regional", "group", "team", "operator",
+    "entrepreneur", "engineer", "architect", "developer", "administrator", "coordinator",
+    "operating", "limited", "non", "fund", "funds", "seed", "startup", "corporate",
+    "capitalist", "venture", "angel", "general", "independent", "interim", "fractional",
+})
+_FUNCTION_WORDS = frozenset({
+    "engineering", "technology", "technical", "information", "security", "product",
+    "products", "sales", "marketing", "operations", "finance", "financial", "data", "ai",
+    "software", "people", "hr", "human", "resources", "legal", "growth", "business",
+    "development", "revenue", "customer", "success", "design", "it", "quality",
+    "research", "strategy", "digital", "transformation", "platform", "infrastructure",
+    "asset", "management", "investment", "investments", "acquisition", "acquisitions",
+    "procurement", "purchasing", "supply", "chain", "communications", "partnerships",
+    "innovation", "analytics", "commercial", "compliance", "risk", "audit", "accounting",
+    "talent", "recruiting", "programs", "program", "projects", "project", "services",
+})
+
+
+def title_industry_terms(titles: list[str], vocabulary: list[str]) -> list[str]:
+    """The industry qualifier of each ICP title that the segment's own
+    *vocabulary* (its keywords and industries) also names, in title order,
+    without duplicates.
+
+    A qualifier is what a title says once its role words, function words and
+    stopwords are gone, kept as one phrase ("real estate"). It counts only
+    when every word of it is a word of the segment's keywords or industries:
+    "hotel" of "Hotel Owner" beside the keyword "boutique hotel", not
+    "operating" of "Chief Operating Officer" beside "regulated fintech". So a
+    title never makes a requirement the segment did not make, and a segment
+    that names neither keywords nor industries still asks for nothing.
+    """
+    known = {w for v in vocabulary for w in re.findall(r"[0-9a-z]+", str(v or "").lower())}
+    out: list[str] = []
+    for title in titles:
+        words = [w for w in re.findall(r"[0-9a-z]+", str(title or "").lower())
+                 if w not in STOPWORDS and w not in _ROLE_WORDS and w not in _FUNCTION_WORDS
+                 and not w.isdigit()]
+        phrase = " ".join(words)
+        if (len(phrase.replace(" ", "")) >= 3 and words and all(w in known for w in words)
+                and phrase not in out):
+            out.append(phrase)
+    return out
+
+
 def fit_evidence_terms(
     industries: list[str], keywords: list[str], titles: list[str],
 ) -> list[str]:
@@ -876,11 +934,14 @@ def fit_evidence_terms(
     Keywords are the ICP's own phrases and match as phrases. A keyword that
     is one of the titles ("Managing Partner" is both, in the campaign that
     found this), and an industry word that is in a title ("investment" of
-    "Investment Director"), is the title match again and is dropped.
+    "Investment Director"), is the title match again and is dropped. A
+    title's own industry qualifier ("hotel" of "Hotel Owner",
+    title_industry_terms) is evidence (#2415).
     """
     title_words = {w for t in titles for w in _evidence_words(t)}
     title_list = [t for t in titles if t and t.strip()]
     terms: list[str] = []
+    kept_keywords: list[str] = []
     for raw in keywords:
         kw = str(raw or "").lower().strip()
         if not kw:
@@ -890,6 +951,7 @@ def fit_evidence_terms(
         if title_list and role_hit(kw, title_list):
             continue
         terms.append(kw)
+        kept_keywords.append(kw)
     for raw in industries:
         label = str(raw or "").lower().strip()
         if not label:
@@ -899,6 +961,11 @@ def fit_evidence_terms(
             w for w in sorted(_evidence_words(label))
             if len(w) >= _EVIDENCE_WORD_MIN_CHARS and w not in title_words
         )
+    # A title's industry qualifier is not the title match again: "hotel" of
+    # "Hotel Owner" says which industry, "owner" says the role (#2415).
+    # Only the keywords kept above: a keyword that repeats a title ("Limited
+    # Partner") must not vouch for that title's own words (qa review, #2415).
+    terms.extend(title_industry_terms(title_list, [*kept_keywords, *industries]))
     return list(dict.fromkeys(terms))
 
 
