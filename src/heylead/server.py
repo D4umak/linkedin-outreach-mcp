@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.443 (2026-10-09)
+- Fix: the daily counter and per-account ledger add in one SQL statement (#2612)
+- New: the plan names the email the owner gets when a held message waits (#2497)
+
 ## v0.10.442 (2026-10-09)
 - a criterion names where it is measured before merge; small-change track; QA every state (heylead-api#2603)
 - New: no greeting opener and no sign-off in any message language (#2560)

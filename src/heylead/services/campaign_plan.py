@@ -406,7 +406,11 @@ def campaign_plan(
     if autopilot:
         opener += "sent inside your window, no review."
     else:
-        opener += "held for your approval until you switch to autopilot. You get a notification."
+        # The api's drafts_waiting alert sends that email (api #2497).
+        opener += (
+            "held for your approval until you switch to autopilot, on the Approvals page. "
+            "When one has waited 2 hours in your sending window, the workspace owner gets an email."
+        )
     steps.append(PlanStep("open", "Open", opener, open_hint))
 
     fu_line, fu_hint = _followup_line(cfg, tier)

@@ -1769,24 +1769,32 @@ def record_signal_search(search_type: str = "keyword", count: int = 1) -> int:
     """Record that ``count`` searches were issued; returns the new daily total.
 
     Keys are day-stamped, so yesterday's counter is simply never read again.
+
+    One statement, so the database adds: several HeyLead processes share this
+    file, and a read in Python followed by a write lost half the bookings of
+    two concurrent writers (tests/test_search_counters_survive_two_writers.py,
+    9 Oct 2026). A value that is not a number counts as 0, as before.
     """
     key = _search_counter_key(search_type)
+    add = max(0, int(count))
     db = get_db()
-    row = db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-    current = 0
-    if row is not None:
-        try:
-            current = int(json.loads(row["value"]))
-        except (json.JSONDecodeError, TypeError, ValueError):
-            current = 0
-    total = current + max(0, int(count))
     db.execute(
-        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-        (key, json.dumps(total), int(time.time())),
+        """INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT(key) DO UPDATE SET
+             value = CAST(
+               CASE WHEN CAST(settings.value AS INTEGER) || '' = settings.value
+                    THEN CAST(settings.value AS INTEGER) ELSE 0 END
+               + ? AS TEXT),
+             updated_at = excluded.updated_at""",
+        (key, str(add), int(time.time()), add),
     )
     db.commit()
+    row = db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     db.close()
-    return total
+    try:
+        return int(json.loads(row["value"])) if row is not None else add
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return add
 
 
 def _account_search_ledger_key() -> str:
@@ -1833,28 +1841,37 @@ def get_daily_account_search_counts() -> dict[str, int]:
 
 
 def record_account_search(account_id: str, count: int = 1) -> int:
-    """Record ``count`` keyword searches against one account; returns its total."""
+    """Record ``count`` keyword searches against one account; returns its total.
+
+    One statement, for the reason record_signal_search gives: two processes
+    reading the ledger in Python and writing it back each wrote the other's
+    account out of it ({'acct-2': 1} where 150 were booked). json_set adds to
+    this account's entry and leaves every other account's as it is. A ledger
+    that is not a JSON object starts over, as before.
+    """
     key = _account_search_ledger_key()
+    add = max(0, int(count))
+    name = str(account_id).replace('"', "")
+    path = f'$."{name}"'
     db = get_db()
-    row = db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-    ledger: dict[str, Any] = {}
-    if row is not None:
-        try:
-            loaded = json.loads(row["value"])
-            if isinstance(loaded, dict):
-                ledger = loaded
-        except (json.JSONDecodeError, TypeError, ValueError):
-            ledger = {}
-    try:
-        current = max(0, int(ledger.get(account_id, 0)))
-    except (TypeError, ValueError):
-        current = 0
-    total = current + max(0, int(count))
-    ledger[account_id] = total
     db.execute(
-        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-        (key, json.dumps(ledger), int(time.time())),
+        """INSERT INTO settings (key, value, updated_at)
+           VALUES (?, json_object(?, ?), ?)
+           ON CONFLICT(key) DO UPDATE SET
+             value = json_set(
+               CASE WHEN json_valid(settings.value)
+                         AND json_type(settings.value) = 'object'
+                    THEN settings.value ELSE '{}' END,
+               ?,
+               COALESCE(
+                 CASE WHEN json_valid(settings.value)
+                           AND json_type(settings.value) = 'object'
+                           AND json_type(settings.value, ?) = 'integer'
+                      THEN MAX(0, json_extract(settings.value, ?)) END,
+                 0) + ?),
+             updated_at = excluded.updated_at""",
+        (key, name, add, int(time.time()), path, path, path, add),
     )
     db.commit()
     db.close()
-    return total
+    return get_daily_account_search_counts().get(name, add)
