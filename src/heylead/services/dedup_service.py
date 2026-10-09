@@ -116,22 +116,30 @@ def is_company_profile(prospect: dict) -> bool:
 # the hosted side holds a person only while the other campaign is active
 # (heylead-api scheduler_store.active_enrollment_elsewhere).
 #
-# Held: any row in a campaign that is not archived (a draft or paused one can
+# Held: any row in a campaign that is not stopped for good (archived, or
+# 'completed' as archive_campaign writes it here; a draft or paused one can
 # send again without anybody re-adding the person, and a campaign this
-# computer does not know is assumed live), and any archived row we touched:
+# computer does not know is assumed live), and any stopped row we touched:
 # an invitation, a message from us, a recorded first contact, or an outreach
 # past the queue-only statuses (an opt-out among them). The statuses are the
 # api's _QUEUE_ONLY_STATUSES (scheduler_store.holding_contact_sql), so both
 # repos answer the same. Every dedup read of the contacts table goes through
 # this fragment (tests/test_dedup_reads_hold_rule.py).
 _QUEUE_ONLY_STATUSES = ("pending", "review_pending", "sending", "skipped", "error")
+# A campaign stopped for good. archive_campaign writes 'completed' on this
+# computer (archive_campaign.py) and the hosted copy says 'archived'; reading
+# 'archived' alone missed every campaign archived from here, which is how the
+# 9 Oct re-run still found the 8 Oct draft's 377 people held. The same pair
+# campaign_control._CLOUD_STOPPED_FOR_GOOD treats as stopped.
+_STOPPED_FOR_GOOD = ("archived", "completed")
+_STOPPED_SQL = ", ".join(f"'{st}'" for st in _STOPPED_FOR_GOOD)
 
 def holding_contact_sql(alias: str) -> str:
     """SQL true when the contacts row *alias* still holds its person."""
     queue_only = ", ".join(f"'{st}'" for st in _QUEUE_ONLY_STATUSES)
     return f"""(
         COALESCE((SELECT hc.status FROM campaigns hc
-                  WHERE hc.id = {alias}.campaign_id), '') != 'archived'
+                  WHERE hc.id = {alias}.campaign_id), '') NOT IN ({_STOPPED_SQL})
         OR EXISTS (
             SELECT 1 FROM outreaches ho WHERE ho.contact_id = {alias}.id AND (
                 COALESCE(ho.invited_at, 0) != 0
@@ -150,14 +158,16 @@ def holding_global_sql(alias: str) -> str:
     """SQL true when the global_contacts row *alias* still holds its person.
 
     first_contacted_at holds for good. first_campaign_id holds unless that
-    campaign is archived; the person's rows in any other campaign are read
+    campaign is stopped for good (_STOPPED_FOR_GOOD); the person's rows in
+    any other campaign are read
     from the contacts table through holding_contact_sql.
     """
     return f"""(
         {alias}.first_contacted_at IS NOT NULL
         OR ({alias}.first_campaign_id IS NOT NULL AND {alias}.first_campaign_id != ''
             AND COALESCE((SELECT gc.status FROM campaigns gc
-                          WHERE gc.id = {alias}.first_campaign_id), '') != 'archived')
+                          WHERE gc.id = {alias}.first_campaign_id), '')
+                NOT IN ({_STOPPED_SQL}))
     )"""
 
 

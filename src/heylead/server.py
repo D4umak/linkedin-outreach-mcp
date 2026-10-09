@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.440 (2026-10-09)
+- Fix: 'completed' is stopped for good too — archive_campaign writes it (#2524)
+
 ## v0.10.439 (2026-10-09)
 - Fix: an archived campaign gives back the people it never contacted; the no-fit reply names this campaign (#2524)
 - the sweep takes a user's idea first and skips twice-abandoned and finished cases (#2464)
