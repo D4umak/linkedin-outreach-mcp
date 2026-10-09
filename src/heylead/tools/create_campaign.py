@@ -120,6 +120,7 @@ def build_campaign_config(
     search_account_id: str,
     competitor_companies: str = "",
     goal: str = "",
+    message_language: str = "",
 ) -> dict:
     """The config_json a new campaign starts with.
 
@@ -131,6 +132,11 @@ def build_campaign_config(
     `goal` (heylead.goals.VALID_GOALS) writes campaign_goal and derives
     campaign_type and campaign_intent from it (#1153). Without one, the goal
     is read back from campaign_type, so every new row carries all three keys.
+
+    `message_language` is stored only when given: its absence means "never
+    chosen" (it writes English, and launch asks once when the brief is in
+    another language); an explicit "en" is a choice (heylead-api#2560). The
+    caller validates it.
     """
     from .. import goals as _goals
 
@@ -192,7 +198,28 @@ def build_campaign_config(
         "active_days": [0, 1, 2, 3, 4],
         # Search account routing
         "search_account_id": search_account_id,
+        **(
+            {"message_language": message_language.strip().lower()}
+            if message_language and message_language.strip() else {}
+        ),
     }
+
+
+def language_reply_lines(config: dict, context: dict | None) -> list[str]:
+    """create_campaign's language lines, after the Goal (designer, #2560).
+
+    The words are the api's (services/language.create_language_lines), so a
+    hosted and a local create say the same thing.
+    """
+    from ..services.language import create_language_lines
+
+    text = create_language_lines(
+        config,
+        str((context or {}).get("project_brief") or ""),
+        str((config or {}).get("target_description") or ""),
+    )
+    lines = text.split("\n")
+    return [f"🌐 {lines[0]}", *(f"   {line}" for line in lines[1:])]
 
 
 def first_campaign_brief_prompt(goal: str) -> str:
@@ -237,6 +264,7 @@ async def run_create_campaign(
     force: bool = False,
     _internal_source: str = "",
     goal: str = "",
+    message_language: str = "",
 ) -> str:
     """Create a new outreach campaign.
 
@@ -268,6 +296,12 @@ async def run_create_campaign(
             campaign_intent, picks whose profile the ICP describes, and picks
             the fit question the goal <-> ICP audit asks. hire, partner and
             research run on your project_brief until their message sets exist.
+        message_language: The language every message to a prospect is
+            written in: "en", "prospect" (their latest message, else their
+            LinkedIn profile's language, else English) or a code: uk, de,
+            fr, es, pl, pt, it. Never set this without asking the user. Empty
+            leaves it unset: messages go out in English, and launch asks once
+            when the brief is in another language.
 
     Flow:
     1. Check setup is complete + free tier limits
@@ -298,6 +332,13 @@ async def run_create_campaign(
             f"Valid values: {', '.join(VALID_CAMPAIGN_TYPES)}."
         )
     campaign_type = wanted_type
+
+    # Validate message_language before any I/O (heylead-api#2560).
+    from ..services.language import validate_setting as _validate_language
+    if message_language and message_language.strip():
+        bad_language = _validate_language(message_language)
+        if bad_language:
+            return f"❌ {bad_language}"
 
     # Validate goal (#1153), also before any I/O. The goal decides
     # campaign_type; a contradicting pair is refused rather than guessed.
@@ -1103,6 +1144,7 @@ async def run_create_campaign(
         goal=wanted_goal,
         search_account_id=search_acct_id if search_acct_id != account_id else "",
         competitor_companies=format_competitor_companies(competitor_names),
+        message_language=message_language,
     )
 
     # Build context_json — persist brief + short offerings so prompts have both
@@ -1350,6 +1392,7 @@ async def run_create_campaign(
 
     # Goal and campaign type info
     output_lines.extend(["", f"🎯 Goal: {_goals.GOALS[config['campaign_goal']].label}"])
+    output_lines.extend(language_reply_lines(config, context))
     if config["campaign_type"] == CAMPAIGN_TYPE_JOB_SEARCH:
         output_lines.extend(["", "🎯 Campaign type: job_search (first touch may name the recipient's company and the role; one proof point, no CV listing)"])
 

@@ -20,6 +20,12 @@ from typing import Any
 from . import schemas
 from .length_fixer import shorten_to_limit
 from .llm import LLMClient
+from ..services.language import (
+    campaign_language,
+    language_instruction,
+    message_language_for,
+    with_language_rule,
+)
 from .prompt_loader import (
     build_context_block,
     get_prompt_temperature,
@@ -157,6 +163,7 @@ async def generate_comment(
     post_data: dict[str, Any],
     max_chars: int = COMMENT_MAX_CHARS,
     prospect_analysis: dict[str, Any] | None = None,
+    campaign_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Generate a personalized LinkedIn comment on a prospect's post.
 
@@ -192,6 +199,16 @@ async def generate_comment(
         finally:
             await client.close()
 
+    # The post wins (heylead-api#2560): a comment is written in the post's
+    # language when it is known, else in the campaign's.
+    lang_rule = "Match the post's language. " + language_instruction(
+        message_language_for(
+            campaign_language(campaign_config),
+            prospect_last_message=str(post_data.get("text", "") or "")[:1000],
+            profile=prospect,
+        )
+    )
+
     # ── Try v63 comment prompt ──
     # Comments stay non-selling: do not use outreach_system (qualify / book a meeting).
     use_v63 = has_prompt("comment_main")
@@ -213,7 +230,8 @@ async def generate_comment(
         ctx["post_date"] = post_data.get("date", "")
         ctx["post_metrics"] = post_data.get("metrics", "")
 
-        system = COMMENT_SYSTEM
+        ctx["language_rule"] = lang_rule
+        system = with_language_rule(COMMENT_SYSTEM, lang_rule)
         prompt = render_prompt("comment_main", ctx)
         temp = get_prompt_temperature("comment_main")
 
@@ -252,7 +270,8 @@ async def generate_comment(
 
         llm_client = LLMClient()
         result = await llm_client.generate_json(
-            prompt, schemas.COMMENT, system=COMMENT_SYSTEM, temperature=0.7,
+            prompt, schemas.COMMENT,
+            system=with_language_rule(COMMENT_SYSTEM, lang_rule), temperature=0.7,
         )
         comment = result["comment"]
         style = result.get("style", "")

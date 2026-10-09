@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 import re
 
+from ..services.language import keep_draft_language_instruction, with_language_rule
+
 logger = logging.getLogger(__name__)
 
 _SENTENCE_END = re.compile(r"[.!?]")
@@ -93,7 +95,11 @@ async def shorten_to_limit(
             )
             shortened = await client.generate(
                 prompt,
-                system="You shorten messages. Output ONLY the shortened text.",
+                # A rewrite never translates the draft (heylead-api#2560).
+                system=with_language_rule(
+                    "You shorten messages. Output ONLY the shortened text.",
+                    keep_draft_language_instruction(),
+                ),
                 temperature=0.0,
                 max_tokens=max_chars + 50,
             )

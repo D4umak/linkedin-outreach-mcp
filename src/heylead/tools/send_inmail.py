@@ -25,6 +25,7 @@ from ..ai.llm_validator import llm_validate
 from ..ai.message_fixer import fix_message
 from ..ai.message_improver import improve_message
 from ..ai.message_validator import reader_text_for, validate_message
+from ..services.language import language_rule_for, with_language_rule
 from ..ai.prompt_loader import (
     build_context_block,
     get_prompt_temperature,
@@ -445,7 +446,10 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
             brief=message_brief,
             expertise_map=await load_expertise_map(),
         )
-        system = render_prompt(system_name, ctx)
+        # The language this InMail is written in (heylead-api#2560).
+        lang_rule = language_rule_for(campaign_context, campaign_ctx, prospect_data)
+        ctx["language_rule"] = lang_rule
+        system = with_language_rule(render_prompt(system_name, ctx), lang_rule)
         prompt = render_prompt(prompt_name, ctx)
         from ..services.action_timeline import (
             action_timeline_text,

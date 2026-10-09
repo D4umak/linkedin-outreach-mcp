@@ -186,6 +186,19 @@ RULES: tuple[Rule, ...] = (
         ),
     ),
     Rule(
+        id="no-greeting-opener",
+        family="openers",
+        text=(
+            "Never open with a greeting, in any language: not \"Hi\", \"Hello\", "
+            "\"Hey\", \"Добрий день\", \"Привіт\", \"Вітаю\", \"Hallo\", \"Guten "
+            "Tag\", \"Bonjour\", \"Hola\", \"Cześć\", \"Dzień dobry\", \"Olá\", "
+            "\"Ciao\", \"Buongiorno\". Start with the substance."
+        ),
+        channels=CONVERSATIONAL,
+        note="9 Oct 2026, Denys: we never open a conversation with hello, whatever the language (#2560).",
+        short="Never open with a greeting (Hi, Привіт, Hallo, Bonjour, Hola, Cześć, Olá, Ciao). Start with the substance.",
+    ),
+    Rule(
         id="no-name-opener",
         family="openers",
         text=(

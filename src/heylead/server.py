@@ -33,6 +33,13 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.442 (2026-10-09)
+- a criterion names where it is measured before merge; small-change track; QA every state (heylead-api#2603)
+- New: no greeting opener and no sign-off in any message language (#2560)
+- Fix: the sign-in link says it needs the LinkedIn password (#2587)
+- render before ship, a dashboard change is measured before its PR
+- New: a campaign writes in the language its owner chose — client (#2560)
+
 ## v0.10.441 (2026-10-09)
 - Fix: a held send's row names what became of its draft (api #2364)
 
@@ -2447,6 +2454,7 @@ async def create_campaign(
     people: str = "",
     force: bool = False,
     goal: str = "",
+    message_language: str = "",
 ) -> str:
     """Create a LinkedIn outreach campaign from a natural language description.
 
@@ -2531,6 +2539,12 @@ async def create_campaign(
             campaign_intent, picks whose profile the ICP describes, and picks
             the fit question the goal <-> ICP audit asks. hire, partner and
             research run on your project_brief until their message sets exist.
+        message_language: The language every message to a prospect is
+            written in: "en", "prospect" (their latest message, else their
+            LinkedIn profile's language, else English) or a code: uk, de, fr,
+            es, pl, pt, it. Never set this without asking the user. Empty
+            leaves it unset: messages go out in English, and launch asks once
+            when the brief is in another language.
     """
     from .tools.create_campaign import run_create_campaign
     from .tools.organization import refuse_if_viewer
@@ -2555,6 +2569,7 @@ async def create_campaign(
                 people=people,
                 force=force,
                 goal=goal,
+                message_language=message_language,
             ),
         )
     except Exception as e:
@@ -3001,6 +3016,7 @@ async def edit_campaign(
     inmail_first_touch: str = "",
     send_in_business_hours: str = "",
     active_days: str = "",
+    message_language: str = "",
 ) -> str:
     """Change one running or drafted campaign's settings.
 
@@ -3109,6 +3125,12 @@ async def edit_campaign(
             unless the workspace set its own window).
         active_days: Active send days as comma-separated numbers (0=Mon, 6=Sun).
             E.g., "0,1,2,3,4" for weekdays. Leave empty to keep current.
+        message_language: The language every message to a prospect is
+            written in: "en", "prospect" (their latest message, else their
+            LinkedIn profile's language, else English) or a code: uk, de, fr,
+            es, pl, pt, it. Never set this without asking the user. Any
+            explicit value, "en" included, answers launch's language question.
+            Empty keeps the current value.
     """
     from .tools.edit_campaign import run_edit_campaign
     from .tools.organization import refuse_if_viewer
@@ -3168,6 +3190,7 @@ async def edit_campaign(
                 campaign_intent=campaign_intent,
                 campaign_type=campaign_type,
                 goal=goal,
+                message_language=message_language,
             ),
             campaign_id=campaign_id,
         )

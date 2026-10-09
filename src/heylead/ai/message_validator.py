@@ -21,6 +21,7 @@ import re
 from typing import Any
 
 from ..textutil import contains_term
+from .copywriter.greetings import has_sign_off, opens_with_greeting
 
 logger = logging.getLogger(__name__)
 
@@ -512,6 +513,7 @@ def validate_message(
     *,
     first_touch: bool = True,
     reader_text: str = "",
+    greeting_rule: bool = True,
 ) -> ValidationResult:
     """Run the 5-stage validation pipeline on a message.
 
@@ -531,6 +533,9 @@ def validate_message(
         reader_text: The reader's own words (headline, title, company,
             summary, or their reply), so a product noun they used themselves
             is not held against the draft.
+        greeting_rule: Whether the opener and sign-off rules bind (rules
+            no-greeting-opener and no-sign-off). Every conversational message
+            is judged by them; False is for a caller writing a letter.
 
     Returns:
         ValidationResult with pass/fail and details
@@ -545,6 +550,25 @@ def validate_message(
             "Opens like a follow-up ('Following…') — the first in-thread "
             "message has to be an intro",
         )
+
+    # Denys, 9 Oct 2026 (#2560): we never open a conversation with hello, in
+    # any language, and never sign off. The words live in copywriter/greetings.py.
+    if greeting_rule and not is_post:
+        if opens_with_greeting(message):
+            result.fail(
+                "GreetingOpener",
+                "Opens with a greeting (rule no-greeting-opener). Start with "
+                "the substance, in any language: no Hi, Привіт, Добрий день, "
+                "Hallo, Bonjour, Hola.",
+            )
+        else:
+            result.pass_stage("GreetingOpener")
+        if has_sign_off(message):
+            result.fail(
+                "Signoff",
+                "Ends with a sign-off (rule no-sign-off) — LinkedIn messages "
+                "don't sign off, in any language",
+            )
 
     if first_touch and not is_post:
         for defect in first_touch_offer_defects(message, reader_text=reader_text):
@@ -1005,14 +1029,17 @@ def validate_reply(
         r"(?:\s*,\s*[A-Za-z][A-Za-z'\-]{0,20})?\s*[.!?]?\s*$",
     ]
     _stripped = message.strip()
-    for _pat in _signoff_patterns:
-        if re.search(_pat, _stripped, re.IGNORECASE):
-            result.fail(
-                "Signoff",
-                "Reply ends with an email-style signature — LinkedIn DMs don't sign off"
-            )
-            break
-    else:
-        result.pass_stage("Signoff")
+    # validate_message already judged the sign-off in every language; one
+    # issue is enough when it failed there.
+    if result.stage_results.get("Signoff") is not False:
+        for _pat in _signoff_patterns:
+            if re.search(_pat, _stripped, re.IGNORECASE):
+                result.fail(
+                    "Signoff",
+                    "Reply ends with an email-style signature — LinkedIn DMs don't sign off"
+                )
+                break
+        else:
+            result.pass_stage("Signoff")
 
     return result

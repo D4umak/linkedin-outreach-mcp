@@ -12,6 +12,7 @@ import logging
 import re
 from typing import Any
 
+from .copywriter.greetings import strip_greeting_opener, strip_sign_off
 from .message_fixer import fix_message
 from .message_improver import improve_message
 from .message_validator import validate_reply
@@ -78,6 +79,9 @@ def strip_signature(message: str, sender_profile: dict[str, Any] | None = None) 
             message,
             flags=re.IGNORECASE,
         ).strip()
+
+    # 2b) A sign-off in any message language (#2560): "З повагою", "Pozdrawiam"…
+    message = strip_sign_off(message).strip()
 
     # 3) Any leftover trailing dash/em-dash (e.g., "... what do you think? -")
     message = re.sub(r"[\s\-\u2013\u2014]+$", "", message).strip()
@@ -240,4 +244,6 @@ async def run_reply_pipeline(
     # Strip trailing email-style signatures ("- Alex", "Best, Alex", etc.)
     # These are a classic bot tell in LinkedIn DMs where nobody signs messages.
     message = strip_signature(message, sender_profile)
+    # Never open with a greeting, in any language (#2560, no-greeting-opener).
+    message = strip_greeting_opener(message)
     return message, reasoning, validation

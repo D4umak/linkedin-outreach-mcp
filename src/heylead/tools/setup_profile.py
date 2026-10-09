@@ -291,6 +291,46 @@ async def run_setup_profile(
     return f"{notice}\n\n{body}" if notice else body
 
 
+# What the sign-in page asks for, said before it opens (heylead-api #2587).
+# On 8 Oct 2026 a new user opened it six times and never finished: Unipile's
+# page asks for the LinkedIn email and password, and a person who signs in to
+# LinkedIn with Google has no password until they set one. Both modes reply
+# with these words; the backend copy used to say "Your credentials are
+# handled securely by the HeyLead backend", which was not true.
+_PASSWORD_STEP = (
+    "Sign in with your LinkedIn email and password. Use Google or Apple to sign in "
+    'to LinkedIn? Set a password first with "Forgot password" on linkedin.com.'
+)
+
+
+def _link_reply(auth_url: str) -> str:
+    """The reply that hands over the hosted sign-in link."""
+    return (
+        "🔗 Almost there! Open this link in your browser to connect LinkedIn:\n\n"
+        f"  {auth_url}\n\n"
+        "Steps:\n"
+        "1. Click the link above (or copy-paste into your browser)\n"
+        f"2. {_PASSWORD_STEP}\n"
+        "3. If LinkedIn sends a code (app, email or text), enter it on that page.\n"
+        "4. Come back here and run setup_profile() again\n\n"
+        "⏱️ The link expires in 24 hours.\n"
+        "🔒 HeyLead never sees your password: the page is Unipile's, the service "
+        "HeyLead uses to connect to LinkedIn."
+    )
+
+
+def _pending_reply(poll_msg: str) -> str:
+    """The reply while a sign-in link is out and no account has appeared."""
+    return (
+        f"⏳ {poll_msg}\n\n"
+        "Please make sure you:\n"
+        "1. Opened the auth link in your browser\n"
+        f"2. {_PASSWORD_STEP}\n"
+        "3. Saw a success confirmation\n\n"
+        "Then run setup_profile() again to retry."
+    )
+
+
 async def _setup_backend_mode() -> str:
     """Setup flow via HeyLead Backend API proxy."""
     client = get_linkedin_client()
@@ -333,14 +373,7 @@ async def _setup_backend_mode() -> str:
                 await run_db(save_setting, "known_account_ids_before_auth", [])
                 return await _fetch_and_analyze(client, account_id)
             else:
-                return (
-                    f"⏳ {poll_msg}\n\n"
-                    "Please make sure you:\n"
-                    "1. Opened the auth link in your browser\n"
-                    "2. Completed the LinkedIn login\n"
-                    "3. Saw a success confirmation\n\n"
-                    "Then run setup_profile() again to retry."
-                )
+                return _pending_reply(poll_msg)
 
         # Snapshot existing accounts, then create auth link via backend
         known_ids = await client.get_existing_account_ids()
@@ -358,17 +391,7 @@ async def _setup_backend_mode() -> str:
         await run_db(save_setting, "auth_link_pending", True)
         await run_db(save_setting, "known_account_ids_before_auth", list(known_ids))
 
-        return (
-            "🔗 Almost there! Open this link in your browser to connect LinkedIn:\n\n"
-            f"  {auth_url}\n\n"
-            "Steps:\n"
-            "1. Click the link above (or copy-paste into your browser)\n"
-            "2. Log in to LinkedIn when prompted\n"
-            "3. Authorize the connection\n"
-            "4. Come back here and run setup_profile() again\n\n"
-            "⏱️ The link expires in 24 hours.\n"
-            "🔒 Your credentials are handled securely by the HeyLead backend."
-        )
+        return _link_reply(auth_url)
 
     except UnipileError as e:
         return f"❌ Backend error: {e}"
@@ -428,14 +451,7 @@ async def _setup_direct_mode() -> str:
                 await run_db(save_setting, "known_account_ids_before_auth", [])
                 return await _fetch_and_analyze(client, account_id)
             else:
-                return (
-                    f"⏳ {poll_msg}\n\n"
-                    "Please make sure you:\n"
-                    "1. Opened the auth link in your browser\n"
-                    "2. Completed the LinkedIn login\n"
-                    "3. Saw a success confirmation\n\n"
-                    "Then run setup_profile() again to retry."
-                )
+                return _pending_reply(poll_msg)
 
         # Snapshot existing accounts, then create auth link
         known_ids = await client.get_existing_account_ids()
@@ -454,17 +470,7 @@ async def _setup_direct_mode() -> str:
         await run_db(save_setting, "auth_link_pending", True)
         await run_db(save_setting, "known_account_ids_before_auth", list(known_ids))
 
-        return (
-            "🔗 Almost there! Open this link in your browser to connect LinkedIn:\n\n"
-            f"  {auth_url}\n\n"
-            "Steps:\n"
-            "1. Click the link above (or copy-paste into your browser)\n"
-            "2. Log in to LinkedIn when prompted\n"
-            "3. Authorize the connection\n"
-            "4. Come back here and run setup_profile() again\n\n"
-            "⏱️ The link expires in 24 hours.\n"
-            "🔒 Your credentials are handled by Unipile — nothing stored locally."
-        )
+        return _link_reply(auth_url)
 
     except UnipileError as e:
         return f"❌ Unipile error: {e}"

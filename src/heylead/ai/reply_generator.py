@@ -26,6 +26,7 @@ from typing import Any
 from . import schemas
 from .length_fixer import shorten_to_limit
 from .llm import LLMClient
+from ..services.language import language_rule_for, with_language_rule
 from .prompt_loader import (
     load_expertise_map,
     build_context_block,
@@ -715,10 +716,16 @@ async def generate_reply(
         brief=message_brief,
         reply_text=reply_text,
     )
+    # The language this reply is written in (heylead-api#2560): their latest
+    # message's when it is known, else the campaign's.
+    lang_rule = language_rule_for(
+        campaign_context, campaign_context, prospect, conversation_history, reply_text,
+    )
+    ctx["language_rule"] = lang_rule
     if use_v63:
         logger.debug("Using v63 response prompt for %s reply", sentiment)
         system_name = select_prompt("outreach_system", _intent)
-        system = render_prompt(system_name, ctx)
+        system = with_language_rule(render_prompt(system_name, ctx), lang_rule)
         response_name = select_prompt("outreach_response", _intent)
         prompt = render_prompt(response_name, ctx)
         temp = get_prompt_temperature(response_name)
@@ -826,7 +833,10 @@ async def generate_reply(
             prompt = f"{prefix}\n\n{prompt}"
 
         system_name = select_prompt("outreach_system", _intent)
-        system = render_prompt(system_name, ctx) if has_prompt(system_name) else REPLY_SYSTEM
+        system = with_language_rule(
+            render_prompt(system_name, ctx) if has_prompt(system_name) else REPLY_SYSTEM,
+            lang_rule,
+        )
 
         llm_client = LLMClient()
         result = await llm_client.generate_json(

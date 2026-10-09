@@ -584,6 +584,19 @@ async def run_launch_campaign(campaign_id: str = "") -> str:
     if missing:
         return missing
 
+    # Asked once (heylead-api#2560): a brief in another language with the
+    # message language never chosen would send English openers unreviewed.
+    from ..services import language as _language
+    from ..services.project_brief import parse_campaign_context
+    try:
+        _cfg = json.loads(campaign.get("config_json") or "{}")
+    except (TypeError, ValueError):
+        _cfg = {}
+    _cfg = _cfg if isinstance(_cfg, dict) else {}
+    ask = _language.language_needs_asking(_cfg, parse_campaign_context(campaign))
+    if ask:
+        return _language.not_launched_text(ask)
+
     status = campaign.get("status", "")
     observing = get_scheduler_mode() == "observe"
     hosted = config.is_backend_mode()
@@ -655,6 +668,12 @@ async def run_launch_campaign(campaign_id: str = "") -> str:
     synced, _host_detail = await _sync_active_to_host(
         campaign_id, caller="user", reason="manual_launch",
     )
+    unconfirmed = _language.is_language_unconfirmed(_host_detail)
+    if not synced and unconfirmed:
+        # The api asked the same question (409 language_unconfirmed): nothing
+        # launched there, so nothing is launched here either.
+        await run_db(update_campaign, campaign_id, status=status)
+        return _language.not_launched_text(unconfirmed)
     if synced:
         await run_db(_set_pending_cloud_resume, campaign_id, False)
     logger.info(
@@ -691,6 +710,7 @@ async def run_launch_campaign(campaign_id: str = "") -> str:
     plan_text, checkpoint = await plan_and_checkpoint_for(campaign_id, campaign)
     lines = [
         f"🚀 Campaign '{campaign['name']}' is now live.",
+        _language.launched_language_line(_cfg),
         "",
         plan_text,
         "",

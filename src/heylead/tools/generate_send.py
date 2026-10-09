@@ -111,6 +111,9 @@ def _build_campaign_context(campaign_config: dict, icp_data: dict) -> dict:
         "campaign_intent": campaign_config.get("campaign_intent", ""),
         "campaign_type": campaign_config.get("campaign_type", ""),
         "from_email": campaign_config.get("from_email", ""),
+        # The campaign's chosen language (heylead-api#2560); "" when never set.
+        # Every local writer resolves it through services/language.py.
+        "message_language": campaign_config.get("message_language", "") or "",
     }
 
 

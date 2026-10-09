@@ -546,6 +546,7 @@ async def run_engage_prospect(
             post_data=target_post,
             max_chars=COMMENT_MAX_CHARS,
             prospect_analysis=prospect_analysis,
+            campaign_config=campaign_config,
         )
         comment_text = result.get("comment", "")
         style = result.get("style", "")
@@ -595,6 +596,7 @@ async def run_engage_prospect(
                 post_data=target_post,
                 max_chars=COMMENT_MAX_CHARS,
                 prospect_analysis=prospect_analysis,
+                campaign_config=campaign_config,
             )
             comment_text = result.get("comment", "")
             style = result.get("style", "")

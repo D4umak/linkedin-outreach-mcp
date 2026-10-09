@@ -93,6 +93,8 @@ async def run_edit_campaign(
     campaign_type: str = "",
     # What the campaign is for (#1153); rewrites campaign_type and campaign_intent
     goal: str = "",
+    # The language every message is written in (heylead-api#2560)
+    message_language: str = "",
     # In-process agents (act is the default when unset)
     enable_reply_agent: str = "",
     enable_strategist_replan_agent: str = "",
@@ -176,7 +178,20 @@ async def run_edit_campaign(
             Empty keeps the current value.
         enable_coordinator_agent: Coordinator digest/hold: "on", "off", or
             "observe". Empty keeps the current value.
+        message_language: The language every message to a prospect is
+            written in: "en", "prospect" (their latest message, else their
+            LinkedIn profile's language, else English) or a code: uk, de, fr,
+            es, pl, pt, it. Never set this without asking the user. Any
+            explicit value, "en" included, answers launch's language question.
     """
+
+    # The language is checked before any read, so a typo never half-applies.
+    from ..services import language as _language
+    wanted_language = (message_language or "").strip().lower()
+    if wanted_language:
+        bad_language = _language.validate_setting(wanted_language)
+        if bad_language:
+            return f"❌ {bad_language}"
 
     # Voice memos are off for every user (heylead-api #1527): refused before
     # any read, so a voice setting never half-applies.
@@ -229,6 +244,7 @@ async def run_edit_campaign(
         or has_followup_settings or has_invite_settings or has_inmail_settings
         or has_timing_settings or campaign_intent or wanted_type or goal.strip()
         or has_agent_settings or competitor_companies or has_target
+        or wanted_language
     )
 
     if not has_any:
@@ -258,6 +274,7 @@ async def run_edit_campaign(
             "  exclude_competitors: on or off (never message people at "
             "competing companies)\n"
             "  competitor_companies: comma-separated company names to skip\n"
+            "  message_language: en, prospect, uk, de, fr, es, pl, pt or it\n"
             "  enable_discovery: on or off\n"
             "\n"
             "  In-process agents (default act):\n"
@@ -672,6 +689,17 @@ async def run_edit_campaign(
             {k: v for k, v in config.items() if k != "campaign_goal"}
         )
 
+    # ── Message language (heylead-api#2560): stored even when it equals the
+    # default, because an explicit "en" is the owner's answer and unset is not.
+    if wanted_language:
+        old_language = _language.setting_from_config(config)
+        if wanted_language != old_language:
+            config["message_language"] = wanted_language
+            before = _language.language_name(old_language) if old_language else "not set (English)"
+            change_descriptions.append(
+                f"Message language: {before} -> {_language.language_name(wanted_language)}"
+            )
+
     # Commit config_json changes if any
     config_updated = json.dumps(config)
     if config_updated != (config_json or "{}"):
@@ -913,6 +941,10 @@ async def run_edit_campaign(
         sync_settings["booking_link"] = booking_link
     if competitor_companies.strip():
         sync_settings["competitor_companies"] = competitor_companies.strip()
+    if wanted_language:
+        # QA F3: without this line the 15-minute config push would carry the
+        # old value back over a dashboard-set language, and back again.
+        sync_settings["message_language"] = wanted_language
 
     if sync_settings:
         synced = await sync_campaign_settings(campaign_id, sync_settings)

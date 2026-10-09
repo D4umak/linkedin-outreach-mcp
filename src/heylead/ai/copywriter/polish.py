@@ -24,6 +24,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .greetings import GREETING_OPENER, SIGN_OFF, strip_greeting_opener, strip_sign_off
 from .render import rules_for
 from .rules import RULES
 
@@ -45,16 +46,14 @@ _TEMPLATE_OPENER = re.compile(
     r"(?:\s*[,!]?\s*(?:\{\{\d+\}\}|[A-Z][a-z]+))?"
     r"\s*[.!,]\s+"
 )
-_SIGN_OFF = re.compile(
-    r"\n\s*(?:best|cheers|regards|kind regards|warm regards|sincerely|thanks)"
-    r"[,!.]?\s*(?:[A-Z][a-z]+)?\s*$|\n\s*[-–—]\s*[A-Z][a-z]+\s*$",
-    re.IGNORECASE,
-)
+# Every message language, Unicode-aware (heylead-api#2560): ai/copywriter/greetings.py.
+_SIGN_OFF = SIGN_OFF
 _DASH = re.compile(r"[—–―]")
 _PLACEHOLDER = re.compile(r"\[[A-Za-z][^\]\n]{0,30}\]")
 
 _CHECKS: dict[str, re.Pattern[str]] = {
     "no-template-openers": _TEMPLATE_OPENER,
+    "no-greeting-opener": GREETING_OPENER,
     "no-sign-off": _SIGN_OFF,
     "no-dashes": _DASH,
     "no-placeholders": _PLACEHOLDER,
@@ -148,8 +147,13 @@ def repair(draft: str, channel: str) -> tuple[str, tuple[str, ...]]:
         if stripped and stripped != text:
             text = stripped[0].upper() + stripped[1:]
             done.append("no-template-openers")
+    if "no-greeting-opener" in current:
+        stripped = strip_greeting_opener(text)
+        if stripped != text:
+            text = stripped
+            done.append("no-greeting-opener")
     if "no-sign-off" in current:
-        text = _SIGN_OFF.sub("", text).rstrip()
+        text = strip_sign_off(text)
         done.append("no-sign-off")
     if "no-dashes" in current:
         text = normalize_dashes(text)

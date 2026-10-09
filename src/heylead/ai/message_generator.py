@@ -28,6 +28,7 @@ from ..services import job_search_copy
 from .length_fixer import shorten_to_limit
 from .llm import LLMClient
 from .news_service import get_prospect_news
+from ..services.language import language_rule_for, with_language_rule
 from .prompt_loader import (
     build_context_block,
     get_prompt_temperature,
@@ -262,6 +263,11 @@ async def generate_message(
         finally:
             await client.close()
 
+    # The language this note is written in (heylead-api#2560).
+    lang_rule = language_rule_for(
+        campaign_context, campaign_ctx, prospect, conversation_history,
+    )
+
     # ── Try v63 prompts ──
     outreach_prompt = select_outreach_prompt(campaign_context)
     if has_prompt(outreach_prompt) and has_prompt("outreach_system"):
@@ -293,7 +299,8 @@ async def generate_message(
         from .intent import resolve_intent, select_prompt
         _intent = resolve_intent(campaign_context or {})
         system_name = select_prompt("outreach_system", _intent)
-        system = render_prompt(system_name, ctx)
+        ctx["language_rule"] = lang_rule
+        system = with_language_rule(render_prompt(system_name, ctx), lang_rule)
         prompt = render_prompt(outreach_prompt, ctx)
 
         # Inject prior conversation history if available
@@ -376,7 +383,8 @@ async def generate_message(
 
         client = LLMClient()
         result = await client.generate_json(
-            prompt, schemas.MESSAGE, system=MESSAGE_SYSTEM_LEGACY, temperature=0.7,
+            prompt, schemas.MESSAGE,
+            system=with_language_rule(MESSAGE_SYSTEM_LEGACY, lang_rule), temperature=0.7,
         )
         message = result["message"]
         reasoning = result.get("reasoning", "")
@@ -424,8 +432,18 @@ def check_job_search_draft(
 
 
 def _strip_name_opener(message: str, prospect: dict[str, Any]) -> str:
-    """Remove prospect name from the start of the message if present."""
+    """Remove a greeting and the prospect's name from the start of the message.
+
+    In every message language (#2560): "Hi Arina, …" and "Добрий день,
+    Олено! …" lose the same opener, and a bare "Олено, …" (the vocative of
+    Олена) loses the name as "Arina, …" does.
+    """
     import re
+
+    from .copywriter.greetings import strip_greeting_opener, strip_sign_off
+
+    if message:
+        message = strip_sign_off(strip_greeting_opener(message))
 
     prospect_name = prospect.get("name", "")
     if not prospect_name or not message:
@@ -437,9 +455,17 @@ def _strip_name_opener(message: str, prospect: dict[str, Any]) -> str:
     if not prospect_first or len(prospect_first) < 2:
         return message
 
-    # Match: "Name," or "Name " at start (case insensitive)
+    # Match: "Name," or "Name " at start (case insensitive). A name in another
+    # case (Ukrainian and Polish vocatives: Олена → Олено, Anna → Anno) keeps
+    # its stem and changes at most its last two letters, and is followed by
+    # punctuation so a word that only starts like the name stays.
+    stem = re.escape(prospect_first[:-1]) if len(prospect_first) > 3 else None
     pattern = rf'^{re.escape(prospect_first)}[,!.\s]+\s*'
     cleaned = re.sub(pattern, '', message, flags=re.IGNORECASE).strip()
+    if stem and cleaned == message.strip():
+        cleaned = re.sub(
+            rf'^{stem}\w{{0,2}}[,!]\s*', '', message, flags=re.IGNORECASE,
+        ).strip()
 
     # Capitalize first letter after stripping
     if cleaned and cleaned[0].islower():

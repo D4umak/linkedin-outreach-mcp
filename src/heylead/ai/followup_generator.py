@@ -34,6 +34,8 @@ from .llm import loads_json_object as parse_json
 from .memory_extractor import extract_memory_from_reasoning
 from .memory_formatter import format_memory_for_prompt
 from .news_service import get_prospect_news
+from ..services.language import language_rule_for, with_language_rule
+from .copywriter.greetings import strip_greeting_opener, strip_sign_off
 from .prompt_loader import (
     build_context_block,
     get_prompt_temperature,
@@ -375,7 +377,14 @@ async def _generate_v63(
     # ── STAGE 1: Reasoning ──
     from .intent import resolve_intent, select_prompt
     intent = resolve_intent(campaign_context or {})
-    system_prompt = render_prompt(select_prompt("outreach_system", intent), ctx)
+    # The language this follow-up is written in (heylead-api#2560).
+    lang_rule = language_rule_for(
+        campaign_context, campaign_ctx, prospect, conversation_history,
+    )
+    ctx["language_rule"] = lang_rule
+    system_prompt = with_language_rule(
+        render_prompt(select_prompt("outreach_system", intent), ctx), lang_rule,
+    )
     reasoning_name = select_prompt("followup_reasoning", intent)
     reasoning_prompt = render_prompt(reasoning_name, ctx)
     reasoning_temp = get_prompt_temperature(reasoning_name)
@@ -453,6 +462,8 @@ async def _generate_v63(
 
     # Enforce character limit (LLM-based shortening with retry)
     message = await shorten_to_limit(message, max_chars)
+    # Never open with a greeting or sign off, in any language (#2560).
+    message = strip_sign_off(strip_greeting_opener(message))
 
     # ── Extract conversation memory for this follow-up ──
     memory_entry = None
@@ -567,7 +578,12 @@ async def _generate_legacy(
 
     llm_client = LLMClient()
     result = await llm_client.generate_json(
-        prompt, schemas.MESSAGE, system=FOLLOWUP_SYSTEM_LEGACY, temperature=0.7,
+        prompt, schemas.MESSAGE,
+        system=with_language_rule(
+            FOLLOWUP_SYSTEM_LEGACY,
+            language_rule_for(campaign_context, None, prospect, conversation_history),
+        ),
+        temperature=0.7,
     )
     message = result["message"]
     reasoning = result.get("reasoning", "")
@@ -577,5 +593,6 @@ async def _generate_legacy(
 
     # Enforce character limit (LLM-based shortening with retry)
     message = await shorten_to_limit(message, followup_char_limit(followup_number))
+    message = strip_sign_off(strip_greeting_opener(message))
 
     return {"message": message, "reasoning": reasoning}

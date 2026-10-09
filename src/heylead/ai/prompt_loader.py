@@ -642,41 +642,25 @@ def _enrich_trigger_info(
     return hook
 
 
-def _detect_conversation_language(history: list[dict[str, Any]] | None) -> str:
-    """Detect language from recent prospect messages and return a language instruction.
+def _detect_conversation_language(
+    history: list[dict[str, Any]] | None,
+    campaign_config: dict[str, Any] | None = None,
+    campaign_context: dict[str, Any] | None = None,
+    prospect: dict[str, Any] | None = None,
+    reply_text: str | None = None,
+) -> str:
+    """The prompt's language line (heylead-api#2560). Never empty.
 
-    Checks the last 3 prospect messages for non-ASCII characters indicating
-    non-English language. Returns an explicit instruction to reply in that language.
+    Delegates to services/language.py: the prospect's latest message wins when
+    its language is known (Polish, German and the other Latin-script languages
+    included, which the old non-Latin-ratio rule read as English), then the
+    campaign's message_language, then English.
     """
-    if not history:
-        return ""
+    from ..services.language import language_rule_for
 
-    # Get last 3 prospect messages (most recent first)
-    prospect_msgs = [m.get("text", "") for m in reversed(history) if m.get("role") == "prospect"][:3]
-    if not prospect_msgs:
-        return ""
-
-    # Check the most recent prospect message for non-Latin characters
-    last_msg = prospect_msgs[0]
-    if not last_msg:
-        return ""
-
-    # Count non-ASCII alphabetic characters (Cyrillic, CJK, Arabic, etc.)
-    non_latin = sum(1 for c in last_msg if ord(c) > 127 and c.isalpha())
-    total_alpha = sum(1 for c in last_msg if c.isalpha())
-
-    if total_alpha == 0:
-        return ""
-
-    # If >30% non-Latin characters, the message is likely in another language
-    if non_latin / total_alpha > 0.3:
-        return (
-            f"CRITICAL LANGUAGE RULE: The prospect's last message is NOT in English. "
-            f"You MUST reply in the SAME language the prospect used. "
-            f"Match their language exactly. Do NOT switch to English."
-        )
-
-    return ""
+    return language_rule_for(
+        campaign_config, campaign_context, prospect, history, reply_text,
+    )
 
 
 def _compute_conversation_stage(
@@ -914,7 +898,9 @@ def build_context_block(
         "engagement_history": engagement_history or "",
         "action_timeline": "",
         # Language detection — reply in the same language the prospect uses
-        "language_rule": _detect_conversation_language(history),
+        "language_rule": _detect_conversation_language(
+            history, campaign_config, ctx, prospect, reply_text,
+        ),
         # Conversation stage — how many prospect replies we've received
         "conversation_stage": _compute_conversation_stage(history, ctx, campaign_config),
         # The house rules for whatever this prompt is writing. "dm" is
