@@ -88,6 +88,16 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "reply_status_repaired": "Status corrected",
     "first_reply_restamped": "Reply time corrected",
     "duplicate_message_removed": "Removed a duplicate message",
+    # A send held for approval, then what became of its draft (heylead-api
+    # #2364, its services/held_row_state.py).
+    "send_held_for_approval": "Waiting: your approval",
+    "approval_waiting": "Waiting: your approval",
+    "approval_queued": "Approved: queued to send",
+    "approval_sent": "Sent after your approval",
+    "approval_discarded": "Discarded: not sent",
+    "approval_released": "Released to autopilot",
+    "approval_replaced": "Replaced by a newer draft",
+    "approval_withdrawn": "Withdrawn: yours to answer",
 }
 
 # The executor's vocabulary for next_action_type, plus the codes
