@@ -45,3 +45,24 @@ def message_is_ours(msg: Mapping[str, Any], own_provider_id: str = "") -> bool:
     sender = msg.get("sender") if isinstance(msg.get("sender"), Mapping) else {}
     sender_id = str(msg.get("sender_id") or sender.get("provider_id") or "")
     return bool(own_provider_id) and bool(sender_id) and sender_id == own_provider_id
+
+
+def is_conversation_event(raw: Any) -> bool:
+    """Whether a chat item is a LinkedIn event rather than anybody's words.
+
+    A reaction to a message arrives as its own chat item: ``is_event`` 1,
+    ``event_type`` 2, text "Anatolii reacted 👍". Read as a message it was
+    stored as the prospect's reply and answered (heylead-api#2359).
+    """
+    return isinstance(raw, Mapping) and raw.get("is_event") in (1, True, "1", "true", "True")
+
+
+def last_turn(chat_messages: Any) -> dict[str, Any]:
+    """The newest item of a chat's embedded messages that someone wrote, or {}."""
+    if isinstance(chat_messages, Mapping):
+        return {} if is_conversation_event(chat_messages) else dict(chat_messages)
+    if isinstance(chat_messages, list):
+        for m in reversed(chat_messages):
+            if isinstance(m, Mapping) and not is_conversation_event(m):
+                return dict(m)
+    return {}

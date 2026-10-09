@@ -106,6 +106,61 @@ def is_company_profile(prospect: dict) -> bool:
     return False
 
 
+# ── Which campaign rows hold a person (heylead-api#2524) ──
+#
+# A contact row in an archived campaign holds nobody it never contacted. On
+# 8 Oct 2026 a connections-only draft queued 377 people and was archived
+# before launch; every later campaign then dropped exactly those 377 as
+# "cross-campaign duplicates" and answered that nobody cleared the fit line.
+# delete_campaign already released queued-only people; archive never did, and
+# the hosted side holds a person only while the other campaign is active
+# (heylead-api scheduler_store.active_enrollment_elsewhere).
+#
+# Held: any row in a campaign that is not archived (a draft or paused one can
+# send again without anybody re-adding the person, and a campaign this
+# computer does not know is assumed live), and any archived row we touched:
+# an invitation, a message from us, a recorded first contact, or an outreach
+# past the queue-only statuses (an opt-out among them). The statuses are the
+# api's _QUEUE_ONLY_STATUSES (scheduler_store.holding_contact_sql), so both
+# repos answer the same. Every dedup read of the contacts table goes through
+# this fragment (tests/test_dedup_reads_hold_rule.py).
+_QUEUE_ONLY_STATUSES = ("pending", "review_pending", "sending", "skipped", "error")
+
+def holding_contact_sql(alias: str) -> str:
+    """SQL true when the contacts row *alias* still holds its person."""
+    queue_only = ", ".join(f"'{st}'" for st in _QUEUE_ONLY_STATUSES)
+    return f"""(
+        COALESCE((SELECT hc.status FROM campaigns hc
+                  WHERE hc.id = {alias}.campaign_id), '') != 'archived'
+        OR EXISTS (
+            SELECT 1 FROM outreaches ho WHERE ho.contact_id = {alias}.id AND (
+                COALESCE(ho.invited_at, 0) != 0
+                OR COALESCE(ho.first_reply_at, 0) != 0
+                OR ho.status NOT IN ({queue_only})
+                OR EXISTS (SELECT 1 FROM messages hm
+                           WHERE hm.outreach_id = ho.id AND hm.role = 'sdr')))
+        OR EXISTS (
+            SELECT 1 FROM global_contacts hg
+            WHERE hg.id = {alias}.global_contact_id
+              AND hg.first_contacted_at IS NOT NULL)
+    )"""
+
+
+def holding_global_sql(alias: str) -> str:
+    """SQL true when the global_contacts row *alias* still holds its person.
+
+    first_contacted_at holds for good. first_campaign_id holds unless that
+    campaign is archived; the person's rows in any other campaign are read
+    from the contacts table through holding_contact_sql.
+    """
+    return f"""(
+        {alias}.first_contacted_at IS NOT NULL
+        OR ({alias}.first_campaign_id IS NOT NULL AND {alias}.first_campaign_id != ''
+            AND COALESCE((SELECT gc.status FROM campaigns gc
+                          WHERE gc.id = {alias}.first_campaign_id), '') != 'archived')
+    )"""
+
+
 def get_all_known_linkedin_ids() -> set[str]:
     """Collect identifiers of people who are actually in a campaign.
 
@@ -118,8 +173,12 @@ def get_all_known_linkedin_ids() -> set[str]:
     row predates first_campaign_id being written. Falls back to the
     contacts table alone if global_contacts doesn't exist (pre-migration).
 
+    A row in an archived campaign counts only when we contacted the person
+    (holding_contact_sql, heylead-api#2524).
+
     Returns a set of lowercase identifiers (public_ids + linkedin_ids + urls)
-    for everyone queued or contacted in any campaign.
+    for everyone queued in a campaign that can still send, or contacted in
+    any campaign.
     """
     db = get_db()
 
@@ -128,33 +187,32 @@ def get_all_known_linkedin_ids() -> set[str]:
         rows = db.execute(
             """SELECT linkedin_id FROM global_contacts
                WHERE linkedin_id IS NOT NULL AND linkedin_id != ''
-                 AND ((first_campaign_id IS NOT NULL AND first_campaign_id != '')
-                      OR first_contacted_at IS NOT NULL)
+                 AND {g}
                UNION
                SELECT linkedin_url FROM global_contacts
                WHERE linkedin_url IS NOT NULL AND linkedin_url != ''
-                 AND ((first_campaign_id IS NOT NULL AND first_campaign_id != '')
-                      OR first_contacted_at IS NOT NULL)
+                 AND {g}
                UNION
                SELECT json_extract(profile_json, '$.provider_id') FROM global_contacts
                WHERE profile_json IS NOT NULL AND profile_json != ''
                  AND json_valid(profile_json)
                  AND json_extract(profile_json, '$.provider_id') IS NOT NULL
                  AND json_extract(profile_json, '$.provider_id') != ''
-                 AND ((first_campaign_id IS NOT NULL AND first_campaign_id != '')
-                      OR first_contacted_at IS NOT NULL)
+                 AND {g}
                UNION
-               SELECT DISTINCT linkedin_id FROM contacts
-               WHERE linkedin_id IS NOT NULL AND linkedin_id != ''
+               SELECT DISTINCT linkedin_id FROM contacts ct
+               WHERE linkedin_id IS NOT NULL AND linkedin_id != '' AND {c}
                UNION
-               SELECT DISTINCT linkedin_url FROM contacts
-               WHERE linkedin_url IS NOT NULL AND linkedin_url != ''
+               SELECT DISTINCT linkedin_url FROM contacts ct
+               WHERE linkedin_url IS NOT NULL AND linkedin_url != '' AND {c}
                UNION
-               SELECT DISTINCT json_extract(profile_json, '$.provider_id') FROM contacts
+               SELECT DISTINCT json_extract(profile_json, '$.provider_id') FROM contacts ct
                WHERE profile_json IS NOT NULL AND profile_json != ''
                  AND json_valid(profile_json)
                  AND json_extract(profile_json, '$.provider_id') IS NOT NULL
-                 AND json_extract(profile_json, '$.provider_id') != ''"""
+                 AND json_extract(profile_json, '$.provider_id') != '' AND {c}""".format(
+                g=holding_global_sql("global_contacts"), c=holding_contact_sql("ct"),
+            )
         ).fetchall()
     except Exception:
         # Fallback: old behavior (pre-migration, global_contacts doesn't exist)
@@ -287,12 +345,17 @@ def _is_same_person(
 
 
 def get_enrolled_people() -> list[tuple[frozenset[str], str]]:
-    """Identities already sitting in a local campaign contact row."""
+    """Identities already sitting in a local campaign contact row that holds them.
+
+    Same rule as get_all_known_linkedin_ids: an archived campaign holds only
+    the people it contacted (holding_contact_sql).
+    """
     db = get_db()
     try:
         rows = db.execute(
-            "SELECT name, linkedin_id, linkedin_url, profile_json FROM contacts "
-            "WHERE campaign_id IS NOT NULL AND campaign_id != ''",
+            "SELECT name, linkedin_id, linkedin_url, profile_json FROM contacts ct "
+            "WHERE campaign_id IS NOT NULL AND campaign_id != '' AND "
+            + holding_contact_sql("ct"),
         ).fetchall()
     except Exception:
         db.close()

@@ -776,6 +776,16 @@ def validate_followup(
 
     msg_lower = message.lower().strip()
 
+    # ── Extra Stage: a claim that something was done that nobody did ──
+    # "Just sent an invite over to ..." from a sender who cannot send one
+    # (D4umak/heylead-api#2453).
+    from .action_claims import claim_error
+    claimed = claim_error(message)
+    if claimed:
+        result.fail("ClaimedAction", claimed)
+    else:
+        result.pass_stage("ClaimedAction")
+
     # ── Extra Stage: Lazy follow-up phrases ──
     found_lazy = [phrase for phrase in LAZY_FOLLOWUP_PHRASES if phrase in msg_lower]
     if found_lazy:
@@ -932,6 +942,16 @@ def validate_reply(
     result = validate_message(message, voice_signature, effective_max, first_touch=False)
 
     msg_lower = message.lower().strip()
+
+    # ── Extra Stage: a claim that something was done that nobody did ──
+    # "Just sent an invite over to ..." from a sender who cannot send one
+    # (D4umak/heylead-api#2453).
+    from .action_claims import claim_error
+    claimed = claim_error(message)
+    if claimed:
+        result.fail("ClaimedAction", claimed)
+    else:
+        result.pass_stage("ClaimedAction")
 
     # ── Extra Stage: Lazy follow-up phrases ──
     found_lazy = [phrase for phrase in LAZY_FOLLOWUP_PHRASES if phrase in msg_lower]

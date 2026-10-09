@@ -1023,7 +1023,7 @@ async def run_create_campaign(
     # The per-dimension breakdown is kept as `why` on each prospect: it is
     # stored on the contact, pushed to the cloud, and rendered next to the
     # name (24 Sep 2026: a user could not tell why anyone was on the list).
-    attach_fit_and_why(unique_prospects, icp_json_for_scoring)
+    fit_caps = attach_fit_and_why(unique_prospects, icp_json_for_scoring)
 
     # Sort by score, highest first
     unique_prospects.sort(key=lambda p: p.get("fit_score", 0), reverse=True)
@@ -1042,8 +1042,14 @@ async def run_create_campaign(
         # for by name — that would empty the queue and leave no way to reach
         # one person at all, which is the gap this path exists to close.
         low_score_filtered = 0
+        below_line_caps: list[str] = []
     else:
+        scored = unique_prospects
         unique_prospects = _drop_below_send_threshold(unique_prospects, {})
+        kept = {id(p) for p in unique_prospects}
+        below_line_caps = [
+            fit_caps.get(id(p), "") for p in scored if id(p) not in kept
+        ]
     if not named_people:
         low_score_filtered = pre_filter_count - len(unique_prospects)
     if competitor_names:
@@ -1060,13 +1066,11 @@ async def run_create_campaign(
     if low_score_filtered > 0:
         logger.info("Filtered %d prospects below the campaign send threshold", low_score_filtered)
     if not unique_prospects:
-        return (
-            "LinkedIn returned people, but none cleared the product fit line "
-            f"({MIN_FIT_SCORE_THRESHOLD:.1f}).\n\n"
-            f"Dropped {low_score_filtered} for missing product evidence "
-            "(e.g. IDSP / Right to Work / open banking on the profile).\n"
-            f"{dedup_summary}\n\n"
-            "A campaign was not created. Broaden the ICP or import named vendors."
+        return format_no_fit_reply(
+            low_score_filtered,
+            below_line_caps,
+            icp_json_for_scoring,
+            dedup_summary,
         )
 
     # Free tier: cap contacts (self-hosted free only — the host owns billing)
@@ -1405,7 +1409,7 @@ TOP_PROSPECTS_SHOWN = 10
 
 def attach_fit_and_why(
     prospects: list[dict], icp_json: str | dict | None,
-) -> None:
+) -> dict[int, str]:
     """Score every prospect and keep the breakdown as `why`, in place.
 
     `compute_icp_match` returns the score and a per-dimension breakdown;
@@ -1418,12 +1422,65 @@ def attach_fit_and_why(
     from ..services.icp_match_scorer import compute_icp_match
 
     segment_name = _first_segment_name(icp_json)
+    caps: dict[int, str] = {}
     for prospect in prospects:
         result = compute_icp_match(prospect, icp_json)
         prospect["fit_score"] = result["icp_match_score"]
         prospect["why"] = enrolment_why(
             prospect, result.get("breakdown") or {}, segment_name,
         )
+        if result.get("seniority_miss"):
+            caps[id(prospect)] = "seniority_miss"
+        elif result.get("title_only"):
+            caps[id(prospect)] = "title_only"
+    return caps
+
+
+def format_no_fit_reply(
+    dropped: int,
+    caps: list[str],
+    icp_json: str | dict | None,
+    dedup_summary: str,
+) -> str:
+    """Why nobody cleared the fit line, in this campaign's own terms.
+
+    Until 9 Oct 2026 this reply named a fixed example, "IDSP / Right to Work
+    / open banking", left from a vendor-scouting campaign, for every campaign.
+    An AI Camp campaign read it as another campaign's product leaking into its
+    fit check (heylead-api#2524). It names this ICP's evidence terms and what
+    capped the scores instead, never a literal product.
+    """
+    from ..constants import MIN_FIT_SCORE_THRESHOLD
+    from ..services.icp_match_scorer import fit_evidence_terms_for
+
+    title_only = caps.count("title_only")
+    seniority = caps.count("seniority_miss")
+    lines = [
+        "LinkedIn returned people, but none cleared the fit line "
+        f"({MIN_FIT_SCORE_THRESHOLD:.1f}).",
+        "",
+        f"{count_noun(dropped, 'person', 'people')} scored under it.",
+    ]
+    if title_only:
+        terms = fit_evidence_terms_for(icp_json)[:6]
+        looked_for = f" ({', '.join(terms)})" if terms else ""
+        lines.append(
+            f"- {title_only} matched a title but nothing else the ICP looks "
+            f"for{looked_for}."
+        )
+    if seniority:
+        lines.append(f"- {seniority} hold a level the ICP does not ask for.")
+    rest = dropped - title_only - seniority
+    if rest > 0 and (title_only or seniority):
+        lines.append(f"- {rest} scored low on title, industry or location.")
+    if dedup_summary.strip():
+        lines.append(dedup_summary.strip())
+    lines += [
+        "",
+        "A campaign was not created. Add industries or keywords these people "
+        "would show to the ICP, or name people with people=.",
+    ]
+    return "\n".join(lines)
 
 
 def _first_segment_name(icp_json: str | dict | None) -> str:

@@ -31,7 +31,7 @@ from ..author_identity import (
 from ..constants import UNIPILE_POLL_INTERVAL_SECONDS, UNIPILE_POLL_TIMEOUT_SECONDS
 from ..guardrails import check_message, prepare_outbound_text, text_landed
 from ..services.nameless import is_nameless_profile
-from .message_sender import sender_flag
+from .message_sender import is_conversation_event, last_turn, sender_flag
 from .api_metrics import api_metrics
 from .relations import RelationsPage
 from .search_traffic import SearchTraffic
@@ -2260,7 +2260,7 @@ class UnipileClient:
 
             messages: list[dict[str, Any]] = []
             for msg in items[:limit]:
-                if not isinstance(msg, dict):
+                if not isinstance(msg, dict) or is_conversation_event(msg):
                     continue
                 text = msg.get("text") or msg.get("body") or msg.get("content") or ""
                 # Extract URLs from attachments (LinkedIn link previews may not be in text)
@@ -3412,7 +3412,7 @@ class UnipileClient:
 
             messages: list[dict[str, Any]] = []
             for msg in items[:limit]:
-                if not isinstance(msg, dict):
+                if not isinstance(msg, dict) or is_conversation_event(msg):
                     continue
                 text = msg.get("text") or msg.get("body") or msg.get("content") or ""
                 sender_id = msg.get("sender_id") or msg.get("sender", {}).get("provider_id", "")
@@ -3487,7 +3487,7 @@ class UnipileClient:
 
             messages: list[dict[str, Any]] = []
             for msg in items[:limit]:
-                if not isinstance(msg, dict):
+                if not isinstance(msg, dict) or is_conversation_event(msg):
                     continue
                 text = msg.get("text") or msg.get("body") or msg.get("content") or ""
                 msg_sender_id = msg.get("sender_id") or msg.get("sender", {}).get("provider_id", "")
@@ -4399,12 +4399,8 @@ class UnipileClient:
 
                 # Get the last message (if embedded)
                 chat_messages = chat.get("messages") or chat.get("last_messages") or []
-                if isinstance(chat_messages, list) and chat_messages:
-                    last_msg = chat_messages[-1] if isinstance(chat_messages[-1], dict) else {}
-                elif isinstance(chat_messages, dict):
-                    last_msg = chat_messages
-                else:
-                    last_msg = {}
+                # Not a reaction: an event item is nobody's words (#2359).
+                last_msg = last_turn(chat_messages)
 
                 text = last_msg.get("text") or last_msg.get("body") or last_msg.get("content") or ""
                 # Extract URLs from attachments (LinkedIn link previews may not be in text)

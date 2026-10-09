@@ -148,8 +148,9 @@ Relevance: {relevance_hook}
 ## STRATEGY
 The prospect expressed interest. Your goal:
 1. Acknowledge their interest genuinely — show you're excited but not desperate
-2. Propose a concrete next step (call, meeting, quick demo)
+2. Propose a concrete next step (call, meeting, quick demo); without a booking link, ask which days and times suit them
 3. If a booking link is available, weave it in naturally
+- This message is the only thing that will happen: never write that you sent, booked, scheduled or emailed anything, never ask for an email address to send an invite to, and never name a day or time yourself (D4umak/heylead-api#2453)
 4. Keep it warm, personal, and action-oriented
 
 ## CONSTRAINTS
@@ -167,7 +168,7 @@ Return ONLY valid JSON (no markdown):
     "reasoning": {{
         "reply_hook": "what they said that you're responding to",
         "strategy": "how you're advancing toward a meeting",
-        "cta_choice": "booking_link|suggest_time|ask_availability"
+        "cta_choice": "booking_link|ask_availability"
     }},
     "message": "the actual reply text"
 }}"""
@@ -519,12 +520,12 @@ Name: {sender_name}
 
 ## STRATEGY
 The prospect shared their calendar or booking link. This means they WANT to meet.
-Your ONLY goal: acknowledge the link and confirm you'll book a time.
+Your ONLY goal: thank them for the link and say you will pick a time on it.
 - Keep it to 1-2 sentences max
 - Do NOT ask about their availability — they already shared their calendar
 - Do NOT suggest alternative times — just use their link
 - Do NOT ask scheduling questions like "Does Tuesday work?"
-- Simply thank them and say you'll book
+- Simply thank them and say you will pick a time on it. Never say a time is booked: a person books it, not this message
 
 ## CONSTRAINTS
 - Match the sender's voice exactly
@@ -744,7 +745,7 @@ async def generate_reply(
         if booking_link and sentiment == "positive":
             booking_link_section = f"Available: {booking_link} — weave this naturally into the reply."
         elif sentiment == "positive":
-            booking_link_section = "No booking link configured — suggest a time or ask their availability."
+            booking_link_section = "No booking link configured. Ask which days and times suit them; never name a time yourself."
 
         format_kwargs: dict[str, Any] = {
             "sender_name": sender_profile.get("name", ""),

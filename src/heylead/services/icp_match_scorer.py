@@ -969,6 +969,23 @@ def fit_evidence_terms(
     return list(dict.fromkeys(terms))
 
 
+def fit_evidence_terms_for(campaign_icp_json: str | dict | None) -> list[str]:
+    """The evidence terms compute_icp_match looks for, for this campaign's ICP.
+
+    The no-fit reply of create_campaign names these, so it says what this
+    ICP asks for instead of a fixed example (heylead-api#2524).
+    """
+    icp = _parse_first_icp(campaign_icp_json)
+    if not icp:
+        return []
+    keywords = icp.get("keywords")
+    return fit_evidence_terms(
+        _get_include_exclude(icp, "industries")[0],
+        [str(k) for k in keywords if k] if isinstance(keywords, list) else [],
+        _get_include_exclude(icp, "job_titles")[0],
+    )
+
+
 def has_fit_evidence(text: str, terms: list[str]) -> bool:
     """True when any evidence term occurs in *text* as whole words."""
     haystack = (text or "").lower()
