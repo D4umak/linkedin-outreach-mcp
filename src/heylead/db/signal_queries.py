@@ -1730,9 +1730,20 @@ def rollback_optimization(entry_id: str, rolled_back_by: str = "user") -> dict[s
     return dict(row)
 
 
+def _utc_day_start() -> int:
+    """Today's UTC midnight, from ONE clock read.
+
+    Two reads (``now() - now() % 86400``) give midnight minus one second when a
+    second ticks between them, and a booking under that key is never read
+    back: the ledger kept 29 of 30 in CI (heylead-api#2666).
+    """
+    now = int(time.time())
+    return now - now % 86400
+
+
 def _search_counter_key(search_type: str) -> str:
     """Settings key holding today's search count for a search type."""
-    today_start = int(time.time()) - (int(time.time()) % 86400)  # Midnight UTC
+    today_start = _utc_day_start()
     return f"signal_search_count:{search_type}:{today_start}"
 
 
@@ -1799,7 +1810,7 @@ def record_signal_search(search_type: str = "keyword", count: int = 1) -> int:
 
 def _account_search_ledger_key() -> str:
     """Settings key holding today's per-account keyword-search ledger."""
-    today_start = int(time.time()) - (int(time.time()) % 86400)  # Midnight UTC
+    today_start = _utc_day_start()
     return f"signal_search_count:by_account:{today_start}"
 
 

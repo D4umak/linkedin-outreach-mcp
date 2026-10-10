@@ -33,6 +33,20 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.444 (2026-10-10)
+- Fix: an answer found on LinkedIn reads 'Answered outside HeyLead' (api #2364 QA F4)
+- eval replay switched on; #2682 folded into A1 (D4umak/heylead-api#2673)
+- the 10 Oct review of every declaration, and what it changed (D4umak/heylead-api#2673)
+- the agentic framework spec records A0 as built (D4umak/heylead-api#2673)
+- A0 implementation plan, every agent registered with its audit score
+- every agent on the six blocks, and a product team on every task
+- Fix: a day key reads the clock once (#2666)
+- Fix: a claim binds hot files for 6 hours, not 48 (#2667)
+- New: a push to a merged PR's branch is stopped before it is lost (heylead-api#2662)
+- a case reads Shipped on a first-line prod-proof after the merge (heylead-api#2653)
+- the SEO manager programme as built (D4umak/heylead-api#2613)
+- SEO manager on an agent framework, design of 9 Oct 2026
+
 ## v0.10.443 (2026-10-09)
 - Fix: the daily counter and per-account ledger add in one SQL statement (#2612)
 - New: the plan names the email the owner gets when a held message waits (#2497)

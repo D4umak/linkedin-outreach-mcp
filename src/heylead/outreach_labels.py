@@ -98,6 +98,8 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "approval_released": "Released to autopilot",
     "approval_replaced": "Replaced by a newer draft",
     "approval_withdrawn": "Withdrawn: yours to answer",
+    # An answer found on LinkedIn by the reply sweep (heylead-api #2358, #2364 QA F4).
+    "visible_dm_recorded": "Answered outside HeyLead",
 }
 
 # The executor's vocabulary for next_action_type, plus the codes
