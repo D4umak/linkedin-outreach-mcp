@@ -1211,10 +1211,15 @@ async def _show_overview_from_backend(data: dict) -> str:
         # The workspace never connected LinkedIn (heylead-api #394) — nothing
         # expired, so the reconnect message above would be wrong.
         output.append("⚠️ **LinkedIn Not Connected**\n")
-        output.append(
-            f"LinkedIn isn't connected yet. Connect it at {page_url('accounts')}, "
-            "then run show_status again.\n"
-        )
+        # The api's one next step for this workspace (api #2736), else ours.
+        csm_line = str((data.get("csm_next_step") or {}).get("chat_line") or "").strip()
+        if csm_line:
+            output.append(f"{csm_line}\n")
+        else:
+            output.append(
+                f"LinkedIn isn't connected yet. Connect it at {page_url('accounts')}, "
+                "then run show_status again.\n"
+            )
     elif acct_status == "degraded":
         output.append(f"⚠️ **Account Warning**: {acct_message}\n")
 

@@ -33,6 +33,11 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.447 (2026-10-12)
+- S8 campaign health plan (H1, H2) + the CSM spec and O0/O1 plan it builds on (api #2836)
+- Fix: the click gate refuses every dashboard write, not a hand list of verbs (#2827)
+- New: show_status and suggest_next_action say the CSM's next step (api #2736)
+
 ## v0.10.446 (2026-10-12)
 - Fix: text a person typed reaches HubSpot notes and partner emails escaped (#2825)
 - A3-D2 targeting plan with the verdict revisions (api #2815)

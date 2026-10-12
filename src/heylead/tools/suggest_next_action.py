@@ -182,6 +182,22 @@ async def _upgrade_offer_line() -> str:
     return str((live or {}).get("upgrade_offer_line") or "").strip()
 
 
+async def _csm_next_step() -> str:
+    """The api's one next step for this workspace (``csm_next_step.chat_line``), or "" (api #2736)."""
+    from ..config import is_backend_mode
+
+    if not is_backend_mode():
+        return ""
+    try:
+        from ..services.cloud_sync import fetch_live_stats
+
+        live = await fetch_live_stats()
+    except Exception:
+        return ""
+    step = (live or {}).get("csm_next_step") or {}
+    return str(step.get("chat_line") or "").strip() if isinstance(step, dict) else ""
+
+
 async def run_suggest_next_action(campaign_id: str = "") -> str:
     """Suggest the best next action for your outreach.
 
@@ -197,6 +213,12 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
             "Setup required before suggesting actions.\n\n"
             "Please run setup_profile first."
         )
+
+    # ── The customer success manager's next step (api #2736) ──
+    # Today only "connect LinkedIn": nothing below can run without a seat.
+    next_step = await _csm_next_step()
+    if next_step:
+        return f"⚠️ **Next step**\n\n{next_step}"
 
     # ── Account connectivity check ──
     try:
