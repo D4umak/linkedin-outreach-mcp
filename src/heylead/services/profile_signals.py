@@ -175,13 +175,58 @@ def _blob(*parts: Any) -> str:
     return _norm(" ".join(bits))
 
 
-def _match_gazetteer(text: str) -> dict[str, Any] | None:
+def _says(blob: str, phrase: str) -> bool:
+    """*phrase* appears in *blob* as whole words (both already normalised)."""
+    return bool(phrase) and re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", blob) is not None
+
+
+def is_place_in_a_list(
+    gaz: dict[str, Any], text: str, location_names: list[str] | None,
+) -> bool:
+    """True when *text* names this country as one of the places searched.
+
+    The gazetteer reads a country as who the people are (a country tie: a
+    school, a language, an employer there). A brief that lists where it looks,
+    "Regions: Pakistan, India, Malaysia, UK, Nigeria, Kenya", says nothing
+    about who anyone is, and picking the longest country name out of that list
+    planned campaign 6b9f51d6 as a Nigerian-identity campaign (#2729).
+
+    So: matched only by its own name (or a name the campaign's locations use),
+    never by a word for its people ("Nigerian", "Ukrainians"); one of the
+    campaign's target locations; and named next to another target location.
+    A single country, or a country the campaign does not search in, is read as
+    before.
+    """
+    blob = _norm(text)
+    locations = [_norm(str(n)) for n in (location_names or []) if n and _norm(str(n))]
+    if not blob or not locations:
+        return False
+    label = _norm(gaz.get("label", ""))
+    names = {_norm(a) for a in [gaz.get("label", "")] + list(gaz.get("aliases") or []) if a}
+    place_words = {label} | {n for n in names if n in locations}
+    said = [n for n in names if _says(blob, n)]
+    if not said or any(n not in place_words for n in said):
+        return False
+
+    def _is_this_country(location: str) -> bool:
+        return any(_says(location, n) for n in names)
+
+    if not any(_is_this_country(loc) for loc in locations):
+        return False
+    return any(_says(blob, loc) for loc in locations if not _is_this_country(loc))
+
+
+def _match_gazetteer(
+    text: str, location_names: list[str] | None = None,
+) -> dict[str, Any] | None:
     blob = _norm(text)
     if not blob:
         return None
     # Longer aliases first so "ukrainian" wins over a short substring later.
     scored: list[tuple[int, dict[str, Any]]] = []
     for gaz in _load_all_gazetteers().values():
+        if is_place_in_a_list(gaz, blob, location_names):
+            continue
         aliases = [gaz.get("label", "")] + list(gaz.get("aliases") or [])
         for alias in aliases:
             a = _norm(alias)
@@ -329,7 +374,7 @@ def compile_profile_signals(
 
     Always rebuilds lists (compiler_version). Persisted recall_queries are ignored.
     """
-    gaz = _match_gazetteer(text)
+    gaz = _match_gazetteer(text, location_names)
     if not gaz and segment:
         existing = segment.get("profile_signals")
         if isinstance(existing, dict) and existing.get("kind") == "country_tie":
@@ -423,20 +468,135 @@ def _role_needles(titles: list[str] | None, hiring: bool) -> list[str]:
 
 # Between the words of a role needle, people write a space, a comma, a dash, or
 # a connective — "VP Engineering", "VP of Engineering", "VP, Engineering",
-# "VP - Engineering" are one job. Only these may bridge the gap: an arbitrary
-# word must not, or "engineering manager" would match "engineering intern and
-# marketing manager". Same as the backend's.
+# "VP - Engineering" are one job. This is the phrase pass, which also crosses
+# a bar ("VP | Engineering"). The word pass below (#2737) lets other words
+# stand between a needle's words, but never a word that is itself a job, so
+# "engineering manager" still does not match "engineering intern and
+# marketing manager".
 _ROLE_GAP = r"[\s,\-\u2013\u2014/|]+(?:(?:of|the|for|and)[\s,\-\u2013\u2014/|]+)?"
 
 
-def _role_match(hay: str, needle: str) -> bool:
+def _role_phrase_match(hay: str, n: str) -> bool:
+    """The needle's words side by side, bridged only by _ROLE_GAP."""
+    body = _ROLE_GAP.join(re.escape(part) for part in n.split())
+    return bool(re.search(rf"(?<!\w){body}(?!\w)", hay))
+
+
+# A title's words in order, other words between and around them (#2737):
+# "ACCA SBR Expert Tutor" holds "ACCA Tutor", "Senior ACCA & AAT Lecturer"
+# holds "ACCA Lecturer". Until 10 Oct 2026 a needle had to stand as one
+# phrase, and on 6b9f51d6 16 of the 40 people the owner picked by hand failed
+# his own campaign's title check.
+#
+# Words are runs of letters and digits ("R&D" is r, d; "Co-Founder" is co,
+# founder; "&" is no word). The connectives below are optional between a
+# needle's words; a needle that ends in one ("head of", a hiring needle) keeps
+# it, right after the word before it, or "head of" would be any Head Chef.
+_ROLE_CONNECTIVES = frozenset({"of", "the", "for", "and", "a", "an", "in", "to", "at"})
+# One headline holds several roles: "ACCA member | Maths Tutor", "Founder @
+# X", "Trainee at Tutor Academy", and sentences ("Head of PR in defence.
+# Global PR for AI"). A needle's words are looked for inside one of them,
+# never across.
+_ROLE_CLAUSE_SPLIT = re.compile(
+    r"\s*(?:[|\u2022\u00b7;()\[\]\n]|@|\s(?:at|@)\s|\s/\s|[.!?:](?:\s|$))\s*",
+)
+# A word that names a job ends a role, so it never stands between a needle's
+# words: "Engineering intern and Marketing Manager" is two roles, not an
+# Engineering Manager; "Head Chef, Growth Kitchen" is not a Head of Growth.
+# A word the needle itself names is no bridge either way (it is matched).
+# Words that are as often a title's modifier are left out ("Lead", "Head",
+# "Chief", "Executive", "Graduate", "Partner": "ACCA Lead Tutor" is a tutor).
+_ROLE_NOUNS = frozenset({
+    "intern", "interns", "trainee", "student", "apprentice",
+    "manager", "director", "leader", "officer",
+    "president", "vp", "svp", "evp", "ceo", "cto", "cfo", "coo", "cio",
+    "ciso", "cpo", "cmo", "founder", "cofounder", "owner",
+    "engineer", "developer", "architect", "analyst", "consultant", "advisor",
+    "adviser", "specialist", "associate", "assistant", "coordinator",
+    "administrator", "representative", "rep", "agent",
+    "accountant", "auditor", "lawyer", "attorney", "designer", "scientist",
+    "researcher", "teacher", "tutor", "lecturer", "professor", "instructor",
+    "trainer", "coach", "mentor", "chef", "nurse", "doctor", "recruiter",
+    "member", "volunteer", "freelancer", "contractor", "investor", "chair",
+    "chairman", "chairwoman", "secretary", "treasurer", "clerk", "operator",
+    "technician", "supervisor", "editor", "writer", "author",
+})
+_WORD = re.compile(r"[^\W_]+")
+
+
+def _role_words_in_order(hay: str, n: str) -> bool:
+    raw = _WORD.findall(n)
+    if not raw:
+        return False
+    # (word, must sit right after the previous needle word)
+    need: list[tuple[str, bool]] = []
+    content_seen = False
+    for i, w in enumerate(raw):
+        if w in _ROLE_CONNECTIVES:
+            trailing = all(x in _ROLE_CONNECTIVES for x in raw[i:])
+            if trailing and content_seen:
+                need.append((w, True))
+            continue
+        need.append((w, False))
+        content_seen = True
+    if not content_seen:
+        return False
+    needed = {w for w, _ in need}
+    for clause in _ROLE_CLAUSE_SPLIT.split(hay):
+        words = _WORD.findall(clause)
+        if _words_in_order(words, need, needed):
+            return True
+    return False
+
+
+def _words_in_order(
+    words: list[str], need: list[tuple[str, bool]], needed: set[str],
+) -> bool:
+    # Every start of the first word is tried: "Head Chef, Head of Growth"
+    # fails from the first "head" and holds from the second.
+    first = need[0][0]
+    for start, w in enumerate(words):
+        if w != first:
+            continue
+        pos, ok = start, True
+        for word, adjacent in need[1:]:
+            nxt = pos + 1
+            if adjacent:
+                if nxt < len(words) and words[nxt] == word:
+                    pos = nxt
+                    continue
+                ok = False
+                break
+            while nxt < len(words) and words[nxt] != word:
+                if words[nxt] in _ROLE_NOUNS and words[nxt] not in needed:
+                    break
+                nxt += 1
+            if nxt < len(words) and words[nxt] == word:
+                pos = nxt
+                continue
+            ok = False
+            break
+        if ok:
+            return True
+    return False
+
+
+def _role_match(hay: str, needle: str, *, in_order: bool = True) -> bool:
     n = _norm(needle)
     if not n or not hay:
         return False
     if n == "chief":
         return bool(re.search(r"(?<!in-)(?<!\w)chief(?!\w)", hay))
-    body = _ROLE_GAP.join(re.escape(part) for part in n.split())
-    return bool(re.search(rf"(?<!\w){body}(?!\w)", hay))
+    # The phrase first: everything that matched before 10 Oct 2026 still
+    # does ("VP | Engineering" crosses a bar the clause split would not).
+    # Needle words joined by a tolerant gap rather than matched verbatim. A
+    # needle written the short way ("vp engineering") used to match only
+    # itself, so an ICP naming "VP Engineering" dropped every "VP of
+    # Engineering" on LinkedIn — on the segment "Ukrainian CTOs & VPs in US"
+    # that gate reported role dropped=25 out of a pool of 44.
+    if _role_phrase_match(hay, n):
+        return True
+    return in_order and _role_words_in_order(hay, n)
 
 
 def role_hit(
@@ -463,8 +623,13 @@ def role_hit(
     hays = [h for h in (_norm(str(f or "")) for f in fields) if h]
     if not hays:
         return ""
+    # The ICP's own titles (and their aliases) match word by word. The
+    # hiring stems stay phrases: "hiring manager" word by word is any
+    # "HIRING: UA Manager" (measured on a live campaign's pool, #2737).
+    own = set(_role_needles(list(titles or []), False))
     for needle in _role_needles(list(titles or []), hiring):
-        if any(_role_match(hay, needle) for hay in hays):
+        loose = needle in own
+        if any(_role_match(hay, needle, in_order=loose) for hay in hays):
             return needle
     return ""
 
@@ -609,6 +774,21 @@ def _identity_overlay_payload(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def campaign_location_names(icp_data: dict[str, Any] | None) -> list[str]:
+    """Every place the campaign searches: its segments' and its personas' locations."""
+    if not isinstance(icp_data, dict):
+        return []
+    names: list[str] = []
+    for seg in icp_data.get("segments") or []:
+        if isinstance(seg, dict):
+            names.extend(str(n) for n in (seg.get("locations") or []) if n)
+    for persona in icp_data.get("icps") or []:
+        locations = (persona or {}).get("locations") if isinstance(persona, dict) else None
+        if isinstance(locations, dict):
+            names.extend(str(n) for n in (locations.get("include") or []) if n)
+    return list(dict.fromkeys(names))
+
+
 def campaign_identity_spec(icp_data: dict[str, Any] | None) -> dict[str, Any] | None:
     """First country_tie / interest on the campaign (summary, then each segment)."""
     if not isinstance(icp_data, dict):
@@ -620,7 +800,9 @@ def campaign_identity_spec(icp_data: dict[str, Any] | None) -> dict[str, Any] | 
         icp_data.get("description"),
     )
     if summary:
-        spec = compile_profile_signals(summary)
+        spec = compile_profile_signals(
+            summary, location_names=campaign_location_names(icp_data),
+        )
         if spec and spec.get("kind") in ("country_tie", "interest"):
             return _identity_overlay_payload(spec)
     for seg in icp_data.get("segments") or []:

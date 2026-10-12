@@ -33,6 +33,17 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.445 (2026-10-12)
+- A3-D1 revisions after the case verdicts (api #2797)
+- A3-D1 implementation plan, the message writers read their past results (api #2793)
+- A3, every agent reads its own domain's past results (api #2793)
+- New: an ICP title matches when the person's title holds its words in order (#2737)
+- Fix: a region list is not an identity (#2729)
+- Fix: a LinkedIn link wrapper is never stored as a person's title (api #2723)
+- A1-a plan corrected from execution review: refusals back off, observe keeps the outage contract (D4umak/heylead-api#2688)
+- A1-a implementation plan, a model step that fails refuses (D4umak/heylead-api#2688)
+- A1 guardrails evidence pack, 14 sites read at api 4233ec1ce (D4umak/heylead-api#2683)
+
 ## v0.10.444 (2026-10-10)
 - Fix: an answer found on LinkedIn reads 'Answered outside HeyLead' (api #2364 QA F4)
 - eval replay switched on; #2682 folded into A1 (D4umak/heylead-api#2673)

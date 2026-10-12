@@ -11,7 +11,7 @@ from typing import Any
 
 from .experience import apply_current_role, experience_from_payload
 from .headline_split import split_headline
-
+from .redirects import unwrap_linkedin_redirects
 
 def _as_dict(data: Any) -> dict[str, Any]:
     if isinstance(data, list) and data:
@@ -65,10 +65,11 @@ def normalize_linkedin_profile(data: Any) -> dict[str, Any]:
 
     first_name = _first_text(data.get("first_name"), data.get("firstName"))
     last_name = _first_text(data.get("last_name"), data.get("lastName"))
-    headline = _first_text(data.get("headline"), data.get("occupation"))
+    # A link in a headline arrives as LinkedIn's redirect wrapper (#2723).
+    headline = unwrap_linkedin_redirects(_first_text(data.get("headline"), data.get("occupation")))
     parsed_title, parsed_company = split_headline(headline)
-    title = _first_text(data.get("title"), parsed_title)
-    company = _first_text(data.get("company"), parsed_company)
+    title = unwrap_linkedin_redirects(_first_text(data.get("title"), parsed_title))
+    company = unwrap_linkedin_redirects(_first_text(data.get("company"), parsed_company))
 
     experience = experience_from_payload(data)
     pub_id = _first_text(

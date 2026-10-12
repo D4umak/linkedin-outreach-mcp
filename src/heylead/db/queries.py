@@ -574,8 +574,11 @@ def save_contact(
     returns the existing local id.
     """
     now = int(time.time())
+    from ..linkedin.redirects import unwrap_linkedin_redirects
     from ..services.prospect_email import attach_email_to_profile_json, extract_profile_email
 
+    title = unwrap_linkedin_redirects(title or "")
+    company = unwrap_linkedin_redirects(company or "")
     profile_json = _normalised_profile_json(profile_json)
     email = extract_profile_email(email, profile_json)
     if email:
@@ -776,6 +779,10 @@ def update_contact(contact_id: str, **kwargs: Any) -> None:
         raise ValueError(f"Invalid contact columns: {bad_keys}")
     if "profile_json" in kwargs:
         kwargs["profile_json"] = _normalised_profile_json(kwargs["profile_json"])
+    from ..linkedin.redirects import unwrap_linkedin_redirects
+    for col in ("title", "company"):
+        if isinstance(kwargs.get(col), str):
+            kwargs[col] = unwrap_linkedin_redirects(kwargs[col])
     set_clause = ", ".join(f"{k} = ?" for k in kwargs)
     values = list(kwargs.values()) + [contact_id]
     db.execute(f"UPDATE contacts SET {set_clause} WHERE id = ?", values)
