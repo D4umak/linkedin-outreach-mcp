@@ -33,6 +33,12 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.446 (2026-10-12)
+- Fix: text a person typed reaches HubSpot notes and partner emails escaped (#2825)
+- A3-D2 targeting plan with the verdict revisions (api #2815)
+- Fix: a run starts through qa_report.py init, one live run per outcome (api #2819)
+- Fix: the sweep skips an issue the api labelled case:resolved
+
 ## v0.10.445 (2026-10-12)
 - A3-D1 revisions after the case verdicts (api #2797)
 - A3-D1 implementation plan, the message writers read their past results (api #2793)

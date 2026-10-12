@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from ..services.campaign_naming import cut_at_word
 
+import html
 import json
 import logging
 import time
@@ -337,20 +338,24 @@ def build_partner_reminder_email(partner: dict) -> str:
 
     subject_line = f"Follow-up #{count} with {name}" + (f" ({company})" if company else "")
 
+    # Every value the user typed is escaped (api #2825); the hosted mirror,
+    # heylead-api partner_followups.reminder_html, already was.
     body_parts = [
-        f"<h2>🔔 Partner Follow-Up Reminder</h2>",
-        f"<p><strong>{name}</strong>",
+        "<h2>🔔 Partner Follow-Up Reminder</h2>",
+        f"<p><strong>{html.escape(str(name))}</strong>",
     ]
     if company:
-        body_parts.append(f" at <strong>{company}</strong>")
+        body_parts.append(f" at <strong>{html.escape(str(company))}</strong>")
     body_parts.append("</p>")
 
     if ctx:
-        body_parts.append(f"<p><strong>Context:</strong> {ctx}</p>")
+        body_parts.append(f"<p><strong>Context:</strong> {html.escape(str(ctx))}</p>")
     if partner_email:
-        body_parts.append(f"<p><strong>Email:</strong> <a href='mailto:{partner_email}'>{partner_email}</a></p>")
+        body_parts.append(f"<p><strong>Email:</strong> <a href='mailto:{html.escape(str(partner_email), quote=True)}'>"
+                          f"{html.escape(str(partner_email))}</a></p>")
 
-    body_parts.append(f"<p>This is follow-up <strong>#{count}</strong> of {PARTNER_MAX_AUTO_FOLLOWUPS}.</p>")
+    body_parts.append(f"<p>This is follow-up <strong>#{int(count)}</strong> of "
+                      f"{int(PARTNER_MAX_AUTO_FOLLOWUPS)}.</p>")
     body_parts.append("<hr>")
     body_parts.append("<p style='color: #888; font-size: 12px;'>Sent by HeyLead Partner Tracker</p>")
 

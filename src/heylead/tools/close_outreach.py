@@ -276,13 +276,12 @@ async def run_close_outreach(
                     try:
                         messages = await run_db(get_messages_for_outreach, outreach_id)
                         if messages:
-                            conversation = []
-                            for msg in messages[:10]:
-                                role = "You" if msg.get("role") == "sdr" else prospect_name
-                                conversation.append(f"{role}: {msg.get('text', '')}")
-                            note_body = (
-                                f"<b>HeyLead Conversation ({campaign_name})</b><br><br>"
-                                + "<br>".join(conversation)
+                            from ..services.crm_note import conversation_note_html
+
+                            # Escaped: the prospect's words are a stranger's text (api #2825).
+                            note_body = conversation_note_html(
+                                campaign_name=campaign_name, prospect_name=prospect_name,
+                                messages=messages,
                             )
                             await hs.create_note(hs_contact_id, note_body)
                     except Exception:
