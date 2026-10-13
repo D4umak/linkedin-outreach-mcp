@@ -66,6 +66,7 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "close_before_contact_reopened": "Close undone: closed before any contact",
     "closed_thread_replied": "They replied after the conversation closed",
     "competitor_excluded": "Skipped: works at a competitor",
+    "connection_accepted": "Accepted your invitation",
     "decline_closed": "Closed: they declined",
     "discovered": "Added to a campaign",
     "dm_prior_conversation_skipped": "Message skipped: you've talked before",
@@ -98,7 +99,8 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "invite_weekly_cap_blocked": "Waiting: weekly invite cap",
     "invite_withdrawn": "Invitation withdrawn",
     "invite_withdrawn_to_free_spot": "Invitation withdrawn to make room",
-    "invited": "Invited",
+    # One wording in the column and the person's timeline (heylead-api#2918).
+    "invited": "Invitation sent",
     "job_completed": "Step completed",
     "job_failed": "Step failed",
     "job_seeker_excluded": "Skipped: open to work",

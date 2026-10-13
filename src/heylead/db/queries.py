@@ -7254,7 +7254,7 @@ def get_prospect_timeline(outreach_id: str, days: int = 30) -> list[dict]:
                 "event_type": "milestone",
                 "action": "invited",
                 "timestamp": o["invited_at"],
-                "details": "Connection invitation sent",
+                "details": "Invitation sent",
                 "source": "outreaches",
             })
         if o.get("accepted_at") and o["accepted_at"] >= since:
@@ -7262,7 +7262,7 @@ def get_prospect_timeline(outreach_id: str, days: int = 30) -> list[dict]:
                 "event_type": "milestone",
                 "action": "accepted",
                 "timestamp": o["accepted_at"],
-                "details": "Connection accepted",
+                "details": "Accepted your invitation",
                 "source": "outreaches",
             })
         if o.get("first_reply_at") and o["first_reply_at"] >= since:

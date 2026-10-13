@@ -260,6 +260,17 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
                     lines.append(f"  campaign(action='resume', campaign_id='{cid}...')"
                                  f"  — {name}")
                 return "\n".join(lines)
+            # A draft waits only for its launch (CSM S3, api #2928): saying
+            # "create one first" sent a draft-only user to make a second one.
+            drafts = await run_db(list_campaigns, status="draft")
+            if drafts:
+                d = drafts[0]
+                name = cut_at_word(d.get("name", "Unnamed"), 40)
+                return (
+                    f'Your draft "{name}" is ready to launch. It is saved and nothing has been sent.\n\n'
+                    "Review who it targets and its first message, then launch it when it looks right:\n"
+                    f"  campaign(action='launch', campaign_id='{d['id'][:8]}...')"
+                )
             return (
                 "No active campaigns.\n\n"
                 "Create one first: create_campaign(\"your target description\")"

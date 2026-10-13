@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.450 (2026-10-13)
+- Fix: a draft-only workspace is told its draft is ready to launch, not to create one (#2928)
+- New: one wording for an invitation and an acceptance (#2918)
+
 ## v0.10.449 (2026-10-13)
 - Fix: Last Action says each code the api's way, and a LinkedIn pause reads in words in the logs (#2922)
 - Fix: the QA report's print returns when the PDF is written and leaves no Chrome behind (#2889)
