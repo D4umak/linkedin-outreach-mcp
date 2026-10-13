@@ -65,6 +65,7 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "campaign_review": "Campaign review",
     "close_before_contact_reopened": "Close undone: closed before any contact",
     "closed_thread_replied": "They replied after the conversation closed",
+    "comment_daily_cap_blocked": "Reacted instead: today's comment limit reached",
     "competitor_excluded": "Skipped: works at a competitor",
     "connection_accepted": "Accepted your invitation",
     "decline_closed": "Closed: they declined",
@@ -99,7 +100,6 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "invite_weekly_cap_blocked": "Waiting: weekly invite cap",
     "invite_withdrawn": "Invitation withdrawn",
     "invite_withdrawn_to_free_spot": "Invitation withdrawn to make room",
-    # One wording in the column and the person's timeline (heylead-api#2918).
     "invited": "Invitation sent",
     "job_completed": "Step completed",
     "job_failed": "Step failed",
@@ -127,7 +127,7 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "reply_restamped": "Reply time corrected",
     "reply_role_repaired": "Conversation record corrected",
     "reply_status_repaired": "Status corrected",
-    "send_blocked": "Blocked",
+    "send_blocked": "Not sent: stopped by a check before sending",
     "send_deferred_no_sender_profile": "Waiting: your profile is still being read",
     "send_dm_rate_limited": "Paused by LinkedIn",
     "send_fit_agent_decision": "Draft checked before sending",
@@ -166,6 +166,62 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "visible_dm_recorded": "Answered outside HeyLead",
     "voice_dm_fell_back_to_text": "Sent as text",
 }
+
+#: Why a send was refused, by send_gate's reason (and the coordinator's hold),
+#: for a send_blocked Last Action; any other reason reads its label above.
+SEND_BLOCKED_REASONS: dict[str, str] = {
+    "scheduler_disabled": "Not sent: your scheduler is off",
+    "campaign_not_active": "Not sent: the campaign isn't running",
+    "coordinator_hold": "Not sent: the campaign is on hold",
+    "campaign_not_autopilot": "Not sent: the campaign isn't on autopilot",
+    "observe_mode": "Not sent: observe mode is on",
+    "campaign_not_found": "Not sent: the campaign was removed",
+}
+
+#: A skipped row's stored reason in words (outcome_json["skipped"]["reason"]);
+#: the dashboard's lastAction.ts SKIP_REASON_LABELS, word for word.
+SKIP_REASON_LABELS: dict[str, str] = {
+    "below_min_fit": "fit is below the campaign floor",
+    "first_degree": "already a 1st-degree connection",
+    "job_seeker": "flagged Open to Work",
+    "competitor": "works at a competitor",
+    "send_fit_unfit": "the send-time fit check said no",
+    "reached_in_sibling_campaign": "already reached from another campaign",
+    "conversation_elsewhere": "already in a conversation elsewhere",
+    "duplicate_of_another_conversation": "a duplicate of another conversation",
+    "dm_not_claimable": "the message could not be claimed",
+}
+#: Reasons that say nothing: the status word itself (a legacy writer stored
+#: last_attempt_error "skipped", and the #1969 backfill copied it: 18 rows on
+#: 74bf9205 read "Skipped: skipped") and the store's own placeholder.
+NO_SKIP_REASON = frozenset({"", "skipped", "unrecorded"})
+SKIPPED_NO_REASON = "Skipped (no reason recorded)"
+_FIT_FLOOR = re.compile(r"^below_min_fit \(([\d.]+) < ([\d.]+)\)$")
+_NOT_RECORDED = re.compile(r"^not recorded before (\d{4})-(\d{2})-(\d{2})$")
+#: Month names the dashboard writes (en-GB): "15 Sept", never an ISO date.
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "June", "July", "Aug", "Sept", "Oct", "Nov", "Dec")
+
+
+def skipped_label(reason: str | None) -> str:
+    """A skipped row's Last Action: always "Skipped", with its reason when there is one.
+
+    ``below_min_fit (0.335 < 0.5)`` reads "Skipped: fit 34% is below the
+    campaign's 50% floor"; the backfill's "not recorded before 2026-09-15"
+    reads "Skipped before 15 Sept (no reason recorded)"; no reason reads
+    "Skipped (no reason recorded)", never "—" (#2922 UI QA round 1, F4).
+    """
+    why = str(reason or "").strip()
+    if why in NO_SKIP_REASON:
+        return SKIPPED_NO_REASON
+    floor = _FIT_FLOOR.match(why)
+    if floor:
+        pct = [f"{int(float(v) * 100 + 0.5)}%" for v in floor.groups()]
+        return f"Skipped: fit {pct[0]} is below the campaign's {pct[1]} floor"
+    late = _NOT_RECORDED.match(why)
+    if late:
+        return f"Skipped before {int(late.group(3))} {_MONTHS[int(late.group(2)) - 1]} (no reason recorded)"
+    words = SKIP_REASON_LABELS.get(why) or readable_code(why, why)
+    return f"Skipped: {words[0].lower() + words[1:]}"
 
 # The executor's vocabulary for next_action_type, plus the codes
 # next_step.next_step answers where no follow-up will run (#1723).
@@ -240,6 +296,8 @@ def last_action_label(action: str | None, reason: str | None = None) -> str:
         return deferral_label(reason)
     if action == "job_failed" and reason == LINKEDIN_PAUSE_REASON:
         return PAUSED_BY_LINKEDIN
+    if action == "send_blocked" and reason in SEND_BLOCKED_REASONS:
+        return SEND_BLOCKED_REASONS[str(reason)]
     known = LAST_ACTION_LABELS.get(action)
     if known:
         return known

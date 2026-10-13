@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.451 (2026-10-13)
+- Fix: skipped rows, blocked sends and the comment cap in the api's words (#2922 QA r1 F4)
+
 ## v0.10.450 (2026-10-13)
 - Fix: a draft-only workspace is told its draft is ready to launch, not to create one (#2928)
 - New: one wording for an invitation and an acceptance (#2918)
