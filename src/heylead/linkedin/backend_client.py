@@ -3639,6 +3639,25 @@ class BackendClient:
         except Exception as e:
             return {"error": f"Brand engagement read failed: {e}"}
 
+    async def get_published_count(self, since: int) -> int | None:
+        """Own posts this workspace published since *since* (epoch), or None.
+
+        Counts cloud, dashboard and by-hand posts, which the laptop's
+        actions_log never sees (heylead-api#2794). None on any failure,
+        including an older API without the route: the caller shows "—".
+        """
+        url = f"{self.base_url}/api/v1/brand/published-count"
+        try:
+            resp = await self._client.get(url, headers=self._headers(), params={"since": int(since)})
+            if resp.status_code != 200:
+                logger.debug("published-count answered %s", resp.status_code)
+                return None
+            published = resp.json().get("published")
+            return None if published is None else int(published)
+        except (httpx.HTTPError, ValueError, TypeError) as e:
+            logger.debug("published-count read failed: %s", e)
+            return None
+
     # ── Cloud-done writes (heylead-api#2318) ──
     #
     # A hosted account's laptop changes nothing on LinkedIn itself: these ask

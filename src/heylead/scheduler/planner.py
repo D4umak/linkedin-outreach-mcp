@@ -26,6 +26,7 @@ from typing import Any
 from ..config import apply_free_monthly_caps, get_scheduler_mode, get_tier, is_backend_mode
 from ..db.async_bridge import run_db
 from ..flags import flag_enabled
+from ..hosted_writes import laptop_writes_refused
 from ..constants import (
     ENDORSE_DELAY_MAX,
     ENDORSE_DELAY_MIN,
@@ -2194,6 +2195,24 @@ def _today_weekday() -> str:
     return datetime.date.today().strftime("%A")
 
 
+async def _weekly_brand_posts_published() -> int:
+    """Own posts published since Monday 00:00 local.
+
+    On a hosted account the posts publish in the cloud and never reach this
+    machine's actions_log, so the API's count is read (heylead-api#2794);
+    when it cannot be read, the local count stands, as before.
+    """
+    from ..db.queries import brand_week_start_ts, get_weekly_brand_post_published_count
+
+    if laptop_writes_refused():
+        from ..tools.brand_strategy import _cloud_published_count
+
+        cloud = await _cloud_published_count(brand_week_start_ts())
+        if cloud is not None:
+            return cloud
+    return await run_db(get_weekly_brand_post_published_count)
+
+
 async def plan_brand_post() -> None:
     """Schedule a brand post job if the plan has a pending post action.
 
@@ -2210,10 +2229,7 @@ async def plan_brand_post() -> None:
         DAILY_CAP_BRAND_POSTS,
         JOB_BRAND_POST,
     )
-    from ..db.queries import (
-        get_daily_brand_post_count,
-        get_weekly_brand_post_published_count,
-    )
+    from ..db.queries import get_daily_brand_post_count
     from ..services.brand_service import (
         calendar_days,
         get_next_pending_action_by_type,
@@ -2241,7 +2257,7 @@ async def plan_brand_post() -> None:
         logger.debug("Daily brand post cap reached (%d)", posted_today)
         return
 
-    posted_this_week = await run_db(get_weekly_brand_post_published_count)
+    posted_this_week = await _weekly_brand_posts_published()
     week_target = weekly_post_target(plan)
     if posted_this_week >= week_target:
         logger.debug(

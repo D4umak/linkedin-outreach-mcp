@@ -1266,6 +1266,44 @@ Return ONLY the comment text."""
 # ──────────────────────────────────────────────
 
 
+POST_RESULTS_LINE = (
+    "Post results and the leads each post brought: "
+    "brand_status(action='analytics') or the dashboard's Brand page."
+)
+
+
+async def _cloud_published_count(since: int) -> int | None:
+    """The API's count of this workspace's own posts since *since*, or None."""
+    try:
+        client = get_linkedin_client()
+    except Exception:
+        logger.debug("published-count: no client", exc_info=True)
+        return None
+    try:
+        return await client.get_published_count(since)
+    except Exception:
+        # A hosted account without a BackendClient is a bug worth seeing.
+        logger.debug("published-count call failed", exc_info=True)
+        return None
+    finally:
+        try:
+            await client.close()
+        except Exception:
+            logger.debug("published-count: client close failed", exc_info=True)
+
+
+async def _posts_published_since(since: int, *, local: int) -> int | None:
+    """Posts published since *since*; None when a hosted count is unknown.
+
+    A hosted account's posts publish in the cloud (calendar, dashboard, by
+    hand), so the laptop's actions_log never sees them: ask the API
+    (heylead-api#2794). Self-hosted accounts keep the local count.
+    """
+    if laptop_writes_refused():
+        return await _cloud_published_count(since)
+    return local
+
+
 async def _handle_progress(account_id: str) -> str:
     """Show before/after metrics and action progress."""
 
@@ -1312,8 +1350,16 @@ async def _handle_progress(account_id: str) -> str:
         plan,
         ssi_available=ssi_available,
     )
+    hosted = laptop_writes_refused()
+    if hosted:
+        # No baseline start means no window to count in: "—", not "since now".
+        captured_at = baseline.get("captured_at")
+        progress["posts_published"] = (
+            await _posts_published_since(int(captured_at), local=progress.get("posts_published", 0))
+            if captured_at else None
+        )
 
-    report = await run_db(_format_progress, progress, plan)
+    report = await run_db(_format_progress, progress, plan, hosted=hosted)
     if recorded_now:
         report = (
             "Baseline recorded today: this plan came without one, so the before and "
@@ -1322,8 +1368,14 @@ async def _handle_progress(account_id: str) -> str:
     return report
 
 
-def _format_progress(progress: dict[str, Any], plan: dict[str, Any]) -> str:
-    """Format progress report."""
+def _format_progress(
+    progress: dict[str, Any], plan: dict[str, Any], *, hosted: bool = False,
+) -> str:
+    """Format progress report.
+
+    ``posts_published`` None means the hosted count could not be read: it
+    shows "—", never 0 (heylead-api#2794).
+    """
 
     def _change_str(change: float | int, is_pct: bool = False) -> str:
         if change > 0:
@@ -1337,14 +1389,17 @@ def _format_progress(progress: dict[str, Any], plan: dict[str, Any]) -> str:
         "",
         "Brand work since plan start:",
     ]
+    posts = progress.get("posts_published", 0)
     lines.append(table(
         ["Work", "Count"],
         [
-            ["Posts published", str(progress.get("posts_published", 0))],
+            ["Posts published", "—" if posts is None else str(posts)],
             ["Brand engagements", str(progress.get("brand_engagements", 0))],
             ["Profile edits", str(progress.get("profile_changes", 0))],
         ],
     ))
+    if hosted:
+        lines.append(POST_RESULTS_LINE)
     lines.append("")
 
     # Account metrics — SSI only when the fetch succeeded (a miss is not 0).

@@ -33,6 +33,15 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.448 (2026-10-12)
+- Fix: a QA report counts when Chrome wrote the PDF, even if Chrome crashes on exit (#2889)
+- A3 spec amendment, internal agents may pool counts across workspaces (api #2879)
+- A3-D5 internal agents plan with the verdict revisions (api #2879)
+- the three QA roles told apart (api #2883)
+- Fix: a PR parked because Vercel was late comes back when Vercel reports (#2875)
+- polish: log published-count failures (#2794)
+- New: hosted accounts read published-post counts from the API (#2794)
+
 ## v0.10.447 (2026-10-12)
 - S8 campaign health plan (H1, H2) + the CSM spec and O0/O1 plan it builds on (api #2836)
 - Fix: the click gate refuses every dashboard write, not a hand list of verbs (#2827)

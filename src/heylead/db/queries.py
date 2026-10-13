@@ -4998,13 +4998,22 @@ def get_daily_brand_profile_count() -> int:
     return row["c"] if row else 0
 
 
-def get_weekly_brand_post_published_count() -> int:
-    """Count brand_post_published actions_log rows since Monday 00:00 local."""
+def brand_week_start_ts() -> int:
+    """Monday 00:00 local, the start of the brand plan's posting week."""
     import datetime
 
     today = datetime.date.today()
     week_start = today - datetime.timedelta(days=today.weekday())
-    week_start_ts = int(time.mktime(week_start.timetuple()))
+    return int(time.mktime(week_start.timetuple()))
+
+
+def get_weekly_brand_post_published_count() -> int:
+    """Count brand_post_published actions_log rows since Monday 00:00 local.
+
+    Local posts only; on a hosted account the planner asks the API instead
+    (planner._weekly_brand_posts_published, heylead-api#2794).
+    """
+    week_start_ts = brand_week_start_ts()
     db = get_db()
     row = db.execute(
         "SELECT COUNT(*) as c FROM actions_log "
