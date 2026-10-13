@@ -33,6 +33,12 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.449 (2026-10-13)
+- Fix: Last Action says each code the api's way, and a LinkedIn pause reads in words in the logs (#2922)
+- Fix: the QA report's print returns when the PDF is written and leaves no Chrome behind (#2889)
+- S3, S4, S5, S7 plan (api #2928, #2929)
+- a new production rule is two new files in heylead-api (#2919)
+
 ## v0.10.448 (2026-10-12)
 - Fix: a QA report counts when Chrome wrote the PDF, even if Chrome crashes on exit (#2889)
 - A3 spec amendment, internal agents may pool counts across workspaces (api #2879)

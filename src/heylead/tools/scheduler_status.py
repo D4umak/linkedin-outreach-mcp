@@ -929,6 +929,28 @@ async def _run_logs_from_backend(hours: int, event_type: str, campaign_id: str) 
     return _format_backend_logs(data, hours, event_type=event_type, campaign_id=campaign_id)
 
 
+#: LinkedIn's code for "slow down" (HTTP 422), as heylead-api writes it into a
+#: failure's text (its error_category.LINKEDIN_PAUSE_MARKER).
+LINKEDIN_PAUSE_MARKER = "temporary_provider_limit"
+_PAUSE_FALLBACK = "LinkedIn asked for a pause, so HeyLead waits until it lifts before trying again."
+
+
+def _linkedin_pause_words(evt: dict, ctx: dict) -> str:
+    """A LinkedIn pause in the cloud's job_failed rows, in plain words, else ``""``.
+
+    The api reads such a row as a pause: status skipped, ``error`` cleared and
+    a ``notice`` sentence (heylead-api#2782). This list fell back to the
+    context's raw provider text, so the assistant read "Invite rate limited
+    (422 temporary_provider_limit)" as a failure (heylead-api#2922). The
+    provider's text never reaches the reader.
+    """
+    notice = str(evt.get("notice") or "").strip()
+    raw = f"{evt.get('error') or ''} {ctx.get('error') or ''}".lower()
+    if not notice and LINKEDIN_PAUSE_MARKER not in raw and ctx.get("error_category") != "linkedin_limit":
+        return ""
+    return f"Paused by LinkedIn. {notice or _PAUSE_FALLBACK}"
+
+
 def _format_backend_logs(
     data: dict, hours: int, *, event_type: str, campaign_id: str,
 ) -> str:
@@ -959,10 +981,14 @@ def _format_backend_logs(
                 except Exception:
                     ctx = {}
             jtype = evt.get("job_type") or ctx.get("job_type", "?")
+            job_id = (evt.get("job_id") or "")[:8]
+            pause = _linkedin_pause_words(evt, ctx)
+            if pause:
+                lines.append(f"- [{t}] {jtype} {job_id}: {pause}")
+                continue
             cat = ctx.get("error_category", "")
             err = str(evt.get("error") or ctx.get("error", ""))[:80]
             cat_tag = f" [{cat}]" if cat else ""
-            job_id = (evt.get("job_id") or "")[:8]
             lines.append(f"- [{t}] {jtype} {job_id}{cat_tag}: {err}")
         lines.append("")
     if data.get("has_more"):
