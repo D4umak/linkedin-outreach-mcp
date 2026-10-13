@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..db.async_bridge import run_db
+from ..ops_log import message_hash
 from ..db.queries import (
     complete_ab_test,
     get_campaign_outcomes,
@@ -331,7 +332,10 @@ async def swap_headline_for_batch(campaign_id: str) -> str | None:
                 },
             )
             await run_db(sync_headline_ab_setting)
-            logger.info("Headline swapped to variant %s: %s", variant, headline[:50])
+            logger.info(
+                "Headline swapped to variant %s: %s (%d chars)",
+                variant, message_hash(headline), len(headline),
+            )
             return variant
     except Exception as e:
         logger.warning("Headline swap failed: %s", e)

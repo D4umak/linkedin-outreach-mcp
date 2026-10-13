@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from ..db.async_bridge import run_db
+from ..ops_log import message_hash
 from ..dashboard_links import page_url
 from .. import hosted_writes
 from ..hosted_writes import laptop_writes_refused
@@ -309,7 +310,7 @@ async def _resolve_chat(
             try:
                 candidates = await db.search_global_contacts(query=name, limit=5)
             except Exception as e:
-                logger.debug("global contact search failed for '%s': %s", name, e)
+                logger.debug("global contact search failed for '%s': %s", message_hash(name), e)
                 candidates = []
             for contact in candidates:
                 pid = _contact_provider_id(contact)
@@ -751,7 +752,7 @@ async def _reply_conversation(
     chat_id = resolved["chat_id"]
     contact_name = resolved["contact_name"] or "contact"
 
-    from ..ops_log import log_event, message_hash
+    from ..ops_log import log_event
     log_event(
         "inbox_reply_sent",
         channel="dm",

@@ -31,6 +31,7 @@ from ..db.queries import (
     _backfill_campaign_contact,
 )
 from ..linkedin import get_account_id, get_linkedin_client
+from ..ops_log import message_hash
 from ..textutil import first_name, full_name
 from ..tier import get_caps
 from .channel_selector import _extract_email
@@ -126,7 +127,7 @@ async def maybe_enroll_from_reply(contact: dict[str, Any], reply_text: str) -> d
             handoff=handoff,
         )
     except Exception:
-        logger.warning("Referral enroll failed for %s", handoff.email or handoff.name, exc_info=True)
+        logger.warning("Referral enroll failed for %s", campaign_id[:8], exc_info=True)
         return None
 
 
@@ -138,7 +139,7 @@ async def enroll_referral(
 ) -> dict[str, Any] | None:
     """Create or reuse the referred contact, then queue same-day email + LinkedIn."""
     if handoff.email and await run_db(is_excluded_by_email, handoff.email):
-        logger.info("Referral skipped — excluded address %s", handoff.email)
+        logger.info("Referral skipped — excluded address %s", message_hash(handoff.email))
         return None
 
     profile = await _enrich_linkedin(handoff)
@@ -146,7 +147,7 @@ async def enroll_referral(
         (profile.get("provider_id") or profile.get("public_id") or "").strip()
     )
     if not handoff.email and not linkedin_id:
-        logger.info("Referral skipped — no unique LinkedIn hit for %s", handoff.name)
+        logger.info("Referral skipped — no unique LinkedIn hit for %s", campaign_id[:8])
         return None
     has_email = bool(handoff.email)
     existing = await run_db(_find_existing, campaign_id, handoff.email, linkedin_id)
@@ -238,7 +239,7 @@ async def enroll_referral(
     await _ensure_jobs(campaign_id, outreach_id, profile)
     logger.info(
         "Referral enrolled %s (%s) into campaign %s via %s",
-        handoff.name, handoff.email, campaign_id[:8], referrer_name,
+        outreach_id[:8], contact_id, campaign_id[:8], referrer.get("id", ""),
     )
     return {"contact_id": contact_id, "outreach_id": outreach_id, "deduped": False}
 
@@ -297,7 +298,7 @@ async def _enrich_linkedin(handoff: ReferralHandoff) -> dict[str, Any]:
     try:
         hits = await client.search_people(account_id, keywords=keywords, count=5)
     except Exception:
-        logger.debug("Referral LinkedIn search failed for %s", handoff.name, exc_info=True)
+        logger.debug("Referral LinkedIn search failed for %s", message_hash(handoff.name), exc_info=True)
         hits = []
     hit = _pick_search_hit(hits, handoff)
     if not hit:

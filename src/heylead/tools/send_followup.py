@@ -369,7 +369,7 @@ async def run_send_followup(
         logger.info(
             "Followup #%d for %s delayed: %dd since last, need %dd (wait %dd)",
             followup_count + 1,
-            candidate.get("name", "?"),
+            outreach_id[:8],
             days_since_last,
             required_days,
             wait_days,
@@ -861,7 +861,7 @@ async def run_send_followup(
             )
             logger.warning(
                 "Blocking email follow-up to %s — no address on the contact",
-                prospect_name,
+                outreach_id[:8],
             )
             await client.close()
             return (
@@ -928,7 +928,7 @@ async def run_send_followup(
             result=result,
             details={"prospect": prospect_name, "outcome": guard.outcome},
         )
-        logger.warning("Blocking follow-up DM to %s — %s", prospect_name, guard.message)
+        logger.warning("Blocking follow-up DM to %s — %s", outreach_id[:8], guard.outcome)
         await client.close()
         return f"⏭️ Skipped follow-up to {prospect_name} — {guard.message}"
 
@@ -1019,7 +1019,7 @@ async def run_send_followup(
         if not dm_verified:
             logger.warning(
                 "DM to %s not confirmed in conversation (chat_id=%s)",
-                prospect_name, verify_chat_id,
+                outreach_id[:8], verify_chat_id,
             )
             await _release_followup_claim()
             await db.update_outreach(

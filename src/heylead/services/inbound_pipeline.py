@@ -604,7 +604,7 @@ async def _reactivate_existing_contact(
             )
             logger.info(
                 "Pre-outreach opt-out honored: %s (outreach=%s)",
-                contact.get("name", ""), outreach_id,
+                contact.get("id", ""), outreach_id,
             )
             return True
         logger.debug(
@@ -682,7 +682,7 @@ async def _reactivate_existing_contact(
     )
     logger.info(
         "Re-activated outreach %s for contact %s (%s -> %s, sentiment=%s)",
-        outreach_id[:8], contact.get("name", ""), old_status, new_status, sentiment,
+        outreach_id[:8], contact.get("id", ""), old_status, new_status, sentiment,
     )
     return True
 
@@ -732,7 +732,7 @@ async def _detect_seller_signal(signal: dict, content: str) -> None:
             )
             logger.info(
                 "Seller signal detected for %s (type=%s, conf=%.2f)",
-                signal.get("sender_name", "Unknown"),
+                str(signal.get("id") or "")[:8],
                 result.get("seller_type", ""),
                 result["confidence"],
             )
@@ -780,6 +780,7 @@ async def _classify_all_new() -> str:
                 signal_type=signal_type,
                 active_icps=active_icps,
                 our_last_message=our_last,
+                log_ref=str(signal.get("id") or ""),
             )
 
             # Resolve best-matching campaign. The helper is sync and reads the
@@ -820,7 +821,7 @@ async def _classify_all_new() -> str:
         except Exception as e:
             logger.warning(
                 "Failed to classify signal %s (%s): %s",
-                signal["id"], signal.get("sender_name"), e,
+                signal["id"], str(signal.get("sender_id") or "")[:12], e,
             )
 
     summary = f"{classified_count}/{len(new_signals)} classified"
@@ -901,7 +902,7 @@ async def _act_on_invitations(client: Any, account_id: str) -> str:
                     accepted += 1
                     logger.info(
                         "Accepted invitation from %s (intent=%s, conf=%.2f)",
-                        signal.get("sender_name", "Unknown"), intent, confidence,
+                        signal["id"][:8], intent, confidence,
                     )
                 else:
                     error = result.get("error", "unknown")
@@ -1472,7 +1473,7 @@ async def _send_discovery_dm(
                             if msg_ts and (int(time.time()) - msg_ts) < 86400:
                                 logger.info(
                                     "Pre-send dedup: already sent message to %s in last 24h, skipping",
-                                    signal.get("sender_name", sender_id),
+                                    str(sender_id)[:12],
                                 )
                                 await run_db(
                                     update_inbound_signal, signal["id"],
@@ -1573,7 +1574,7 @@ async def _send_discovery_dm(
             return await _dismiss_for_gone_chat(signal, chat_id)
         logger.warning(
             "Failed to send contextual reply to %s: %s",
-            signal.get("sender_name"), e,
+            str(signal.get("sender_id") or "")[:12], e,
         )
         return "error"
 
@@ -1587,7 +1588,7 @@ async def _dismiss_for_gone_chat(signal: dict[str, Any], chat_id: str) -> str:
     """
     logger.info(
         "Inbound reply not written: chat %s for %s no longer exists (404)",
-        chat_id, signal.get("sender_name") or signal.get("sender_id"),
+        chat_id, str(signal.get("sender_id") or "")[:12],
     )
     await run_db(
         update_inbound_signal, signal["id"],

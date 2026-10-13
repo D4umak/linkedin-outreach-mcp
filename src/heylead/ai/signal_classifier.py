@@ -42,6 +42,7 @@ from ..constants import (
     COMPANY_LEVEL_SIGNAL_TYPES,
 )
 from ..db.async_bridge import run_db
+from ..ops_log import message_hash
 
 logger = logging.getLogger(__name__)
 
@@ -524,7 +525,7 @@ async def classify_signal(
     if fast_result and fast_result.confidence >= 0.75:
         logger.info(
             "Signal classified (fast): %s → %s (%.0f%%)",
-            author_name or "unknown", fast_result.intent, fast_result.confidence * 100,
+            message_hash(content), fast_result.intent, fast_result.confidence * 100,
         )
         return fast_result
 
@@ -556,7 +557,7 @@ async def classify_signal(
         fast_result.pain_points_detected = list(set(fast_result.pain_points_detected + best_pain_points))
         logger.info(
             "Signal classified (fast+ICP boost): %s → %s (%.0f%%)",
-            author_name or "unknown", fast_result.intent, fast_result.confidence * 100,
+            message_hash(content), fast_result.intent, fast_result.confidence * 100,
         )
         return fast_result
 
@@ -585,7 +586,7 @@ async def classify_signal(
             )
             logger.info(
                 "Signal classified (backend): %s → %s (%.0f%%)",
-                author_name or "unknown", result.intent, result.confidence * 100,
+                message_hash(content), result.intent, result.confidence * 100,
             )
             return result
         except Exception as e:
@@ -613,7 +614,7 @@ async def classify_signal(
         result = _parse_classification_response(raw)
         logger.info(
             "Signal classified (LLM): %s → %s (%.0f%%)",
-            author_name or "unknown", result.intent, result.confidence * 100,
+            message_hash(content), result.intent, result.confidence * 100,
         )
         return result
 

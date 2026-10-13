@@ -22,6 +22,7 @@ from ..ai.inbound_qualifier import (
     qualify_inbound,
 )
 from ..db.async_bridge import run_db
+from ..ops_log import message_hash
 from ..db.queries import (
     enroll_prospect,
     get_inbound_signal_by_sender,
@@ -139,7 +140,7 @@ async def _send_classified_signals(
         if reply_decision == "dismiss":
             logger.info(
                 "Signal %s (%s): dismissed — intent=%s confidence=%.2f",
-                signal["id"], sender_name, intent, confidence,
+                signal["id"], str(sender_id)[:12], intent, confidence,
             )
             await run_db(update_inbound_signal, signal["id"], status="dismissed")
             lines.append(f"- {sender_name}: skipped ({intent})")
@@ -149,14 +150,14 @@ async def _send_classified_signals(
         if confidence < min_confidence:
             logger.info(
                 "Signal %s (%s): skipped — confidence %.2f below threshold %.2f",
-                signal["id"], sender_name, confidence, min_confidence,
+                signal["id"], str(sender_id)[:12], confidence, min_confidence,
             )
             lines.append(f"- {sender_name}: skipped (confidence {confidence:.0%} < {min_confidence:.0%})")
             skipped += 1
             continue
 
         if not sender_id:
-            logger.warning("Signal %s (%s): skipped — no sender_id", signal["id"], sender_name)
+            logger.warning("Signal %s (%s): skipped — no sender_id", signal["id"], str(sender_id)[:12])
             skipped += 1
             continue
 
@@ -165,7 +166,7 @@ async def _send_classified_signals(
         if existing_contact:
             logger.info(
                 "Signal %s (%s): dismissed — already a contact (id=%s)",
-                signal["id"], sender_name, existing_contact.get("id", "?"),
+                signal["id"], str(sender_id)[:12], existing_contact.get("id", "?"),
             )
             await run_db(update_inbound_signal, signal["id"], status="dismissed")
             lines.append(f"- {sender_name}: skipped (already a contact)")
@@ -204,7 +205,7 @@ async def _send_classified_signals(
             dm_type = "counter_pitch" if reply_decision == "counter_pitch" else "discovery"
             logger.info(
                 "Signal %s (%s): generating %s DM — intent=%s confidence=%.2f",
-                signal["id"], sender_name, dm_type, intent, confidence,
+                signal["id"], str(sender_id)[:12], dm_type, intent, confidence,
             )
             if reply_decision == "counter_pitch":
                 from ..ai.inbound_qualifier import generate_counter_pitch
@@ -224,11 +225,11 @@ async def _send_classified_signals(
             dm_text = dm_result.get("message", "")
             logger.info(
                 "Signal %s (%s): DM generated (%s) — %d chars, reasoning=%s",
-                signal["id"], sender_name, dm_type,
-                len(dm_text), dm_result.get("reasoning", "")[:100],
+                signal["id"], str(sender_id)[:12], dm_type,
+                len(dm_text), message_hash(dm_result.get("reasoning", "")),
             )
             if not dm_text:
-                logger.warning("Signal %s (%s): empty DM generated, skipping", signal["id"], sender_name)
+                logger.warning("Signal %s (%s): empty DM generated, skipping", signal["id"], str(sender_id)[:12])
                 lines.append(f"- {sender_name}: skipped (no DM generated)")
                 skipped += 1
                 continue
@@ -244,7 +245,7 @@ async def _send_classified_signals(
             chat_id = await client.find_chat_for_user(account_id, sender_id)
             logger.info(
                 "Signal %s (%s): sending via %s (chat_id=%s)",
-                signal["id"], sender_name,
+                signal["id"], str(sender_id)[:12],
                 "existing_chat" if chat_id else "new_message",
                 chat_id or "N/A",
             )
@@ -261,8 +262,8 @@ async def _send_classified_signals(
 
             if result.get("success"):
                 logger.info(
-                    "Signal %s (%s): DM sent successfully — text='%s'",
-                    signal["id"], sender_name, dm_text[:120],
+                    "Signal %s (%s): DM sent successfully — text=%s (%d chars)",
+                    signal["id"], str(sender_id)[:12], message_hash(dm_text), len(dm_text),
                 )
                 campaign_id = signal.get("campaign_id", "")
                 now = int(time.time())
@@ -301,7 +302,7 @@ async def _send_classified_signals(
                         actioned_at=now,
                     )
                 except Exception as e:
-                    logger.warning("Failed to create contact/outreach for %s: %s", sender_name, e)
+                    logger.warning("Failed to create contact/outreach for %s: %s", signal["id"], e)
 
                 await run_db(
                     log_action,
@@ -322,7 +323,7 @@ async def _send_classified_signals(
                 error_msg = result.get("error", "unknown error")
                 logger.warning(
                     "Signal %s (%s): DM send failed — error=%s full_result=%s",
-                    signal["id"], sender_name, error_msg, result,
+                    signal["id"], str(sender_id)[:12], error_msg, result,
                 )
                 if _dm_rate_limited(result):
                     lines.append(f"- {sender_name}: rate limited — stopping")
@@ -332,7 +333,7 @@ async def _send_classified_signals(
                 errors += 1
 
         except Exception as e:
-            logger.warning("Signal %s (%s): DM exception — %s", signal["id"], sender_name, e, exc_info=True)
+            logger.warning("Signal %s (%s): DM exception — %s", signal["id"], str(sender_id)[:12], e, exc_info=True)
             lines.append(f"- {sender_name}: error ({e})")
             errors += 1
 
@@ -464,7 +465,7 @@ async def _backfill(
             if existing_contact:
                 logger.debug(
                     "Phase 2: chat %s — sender %s already a contact, skipping",
-                    ci["chat_id"], ci.get("contact_name", sender_id),
+                    ci["chat_id"], str(sender_id)[:12],
                 )
                 skipped_existing += 1
                 continue
@@ -526,13 +527,13 @@ async def _backfill(
             if status in ("engaged",):
                 logger.debug(
                     "Phase 3: %s (sender=%s) — already engaged, skipping",
-                    u.get("sender_name", "?"), sender_id,
+                    str(existing.get("id") or "")[:8], str(sender_id)[:12],
                 )
                 continue  # Already handled
             if status in ("new", "classified", "accepted"):
                 logger.info(
                     "Phase 3: %s — reusing existing signal %s (status=%s, intent=%s)",
-                    u.get("sender_name", "?"), existing.get("id"),
+                    str(sender_id)[:12], existing.get("id"),
                     status, existing.get("intent", "?"),
                 )
                 # Use existing signal
@@ -559,9 +560,9 @@ async def _backfill(
             "title": u.get("sender_headline", ""),
         }
         logger.info(
-            "Phase 3: classifying %s — headline='%s', text='%s'",
-            u["sender_name"], u.get("sender_headline", "")[:60],
-            u["text"][:80],
+            "Phase 3: classifying %s — title_hash=%s, text_hash=%s (%d chars)",
+            str(signal_id)[:8], message_hash(u.get("sender_headline", "")),
+            message_hash(u["text"]), len(u["text"] or ""),
         )
         try:
             qual = await qualify_inbound(
@@ -570,15 +571,16 @@ async def _backfill(
                 signal_type="message",
                 active_icps=active_icps,
                 our_last_message=u.get("our_last_message") or "",
+                log_ref=str(signal_id or ""),
             )
             logger.info(
-                "Phase 3: %s classified — intent=%s confidence=%.2f action=%s icp=%s reason='%s'",
-                u["sender_name"], qual.intent, qual.confidence,
+                "Phase 3: %s classified — intent=%s confidence=%.2f action=%s icp=%s reason=%s",
+                str(signal_id)[:8], qual.intent, qual.confidence,
                 qual.recommended_action, qual.matched_icp_id or "none",
-                qual.reasoning[:100],
+                message_hash(qual.reasoning),
             )
         except Exception as e:
-            logger.warning("Phase 3: classify failed for %s: %s", u["sender_name"], e, exc_info=True)
+            logger.warning("Phase 3: classify failed for %s: %s", str(signal_id)[:8], e, exc_info=True)
             qual = InboundQualification(
                 intent="unknown",
                 matched_icp_id=None,
@@ -705,7 +707,7 @@ async def _backfill(
         if reply_decision == "dismiss":
             logger.info(
                 "Phase 5: %s — dismissed (intent=%s)",
-                item.get("sender_name"), intent,
+                str(sig.get("id") or "")[:8], intent,
             )
             await run_db(update_inbound_signal, sig["id"], status="dismissed")
             lines.append(f"- {item.get('sender_name')}: skipped ({intent})")
@@ -716,7 +718,7 @@ async def _backfill(
         if confidence < min_confidence:
             logger.info(
                 "Phase 5: %s — skipped (confidence %.2f < threshold %.2f)",
-                item.get("sender_name"), confidence, min_confidence,
+                str(sig.get("id") or "")[:8], confidence, min_confidence,
             )
             lines.append(
                 f"- {item.get('sender_name')}: skipped (confidence {confidence:.0%} < {min_confidence:.0%})"
@@ -756,7 +758,7 @@ async def _backfill(
             dm_type = "counter_pitch" if reply_decision == "counter_pitch" else "discovery"
             logger.info(
                 "Phase 5: %s — generating %s DM (intent=%s confidence=%.2f)",
-                item.get("sender_name"), dm_type, intent, confidence,
+                str(sig.get("id") or "")[:8], dm_type, intent, confidence,
             )
             if reply_decision == "counter_pitch":
                 from ..ai.inbound_qualifier import generate_counter_pitch
@@ -775,12 +777,12 @@ async def _backfill(
                 )
             dm_text = dm_result.get("message", "")
             logger.info(
-                "Phase 5: %s — DM generated (%s, %d chars): '%s' reasoning='%s'",
-                item.get("sender_name"), dm_type, len(dm_text),
-                dm_text[:120], dm_result.get("reasoning", "")[:80],
+                "Phase 5: %s — DM generated (%s, %d chars): %s reasoning=%s",
+                str(sig.get("id") or "")[:8], dm_type, len(dm_text),
+                message_hash(dm_text), message_hash(dm_result.get("reasoning", "")),
             )
             if not dm_text:
-                logger.warning("Phase 5: %s — empty DM generated, skipping", item.get("sender_name"))
+                logger.warning("Phase 5: %s — empty DM generated, skipping", str(sig.get("id") or "")[:8])
                 lines.append(f"- {item.get('sender_name')}: skipped (no DM generated)")
                 skipped += 1
                 continue
@@ -796,7 +798,7 @@ async def _backfill(
             chat_id = item.get("chat_id", "")
             logger.info(
                 "Phase 5: %s — sending via %s (chat_id=%s, sender_id=%s)",
-                item.get("sender_name"),
+                str(sig.get("id") or "")[:8],
                 "existing_chat" if chat_id else "new_message",
                 chat_id or "N/A", sender_id,
             )
@@ -814,7 +816,7 @@ async def _backfill(
             if result.get("success"):
                 logger.info(
                     "Phase 5: %s — DM sent successfully",
-                    item.get("sender_name"),
+                    str(sig.get("id") or "")[:8],
                 )
                 # Create contact + outreach for tracking
                 campaign_id = sig.get("campaign_id", "")
@@ -853,7 +855,7 @@ async def _backfill(
                 except Exception as e:
                     logger.warning(
                         "Failed to create contact/outreach for %s: %s",
-                        item.get("sender_name"), e,
+                        str(sig.get("id") or "")[:8], e,
                     )
 
                 await run_db(
@@ -875,7 +877,7 @@ async def _backfill(
                 error_msg = result.get("error", "unknown error")
                 logger.warning(
                     "Phase 5: %s — DM send failed: error=%s full_result=%s",
-                    item.get("sender_name"), error_msg, result,
+                    str(sig.get("id") or "")[:8], error_msg, result,
                 )
                 if _dm_rate_limited(result):
                     lines.append(
@@ -889,7 +891,7 @@ async def _backfill(
         except Exception as e:
             logger.warning(
                 "Phase 5: %s — DM exception: %s",
-                item.get("sender_name"), e, exc_info=True,
+                str(sig.get("id") or "")[:8], e, exc_info=True,
             )
             lines.append(f"- {item.get('sender_name')}: error ({e})")
             errors += 1

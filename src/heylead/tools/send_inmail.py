@@ -321,7 +321,7 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
             is_open_profile = bool(live.get("is_open_profile"))
             prospect_data["is_open_profile"] = is_open_profile
     except Exception as e:
-        logger.debug("Open Profile refresh failed for %s: %s", prospect_name, e)
+        logger.debug("Open Profile refresh failed for %s: %s", outreach_id[:8], e)
 
     if flagged_open and not is_open_profile:
         await adb.log_action(
@@ -591,7 +591,7 @@ async def run_send_inmail(campaign_id: str = "", outreach_id: str = "") -> str:
                 remaining_after = max(credits - 1, 0) if credits > 0 else credits
             logger.info(
                 "InMail sent to %s; credits remaining ~%s",
-                prospect_name, remaining_after,
+                outreach_id[:8], remaining_after,
             )
 
             # The success marker must land BEFORE the status write below:

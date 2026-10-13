@@ -12,6 +12,7 @@ import time
 from typing import Any
 
 from ..db.async_bridge import run_db
+from ..ops_log import message_hash
 from ..db.queries import get_setting, get_setting_updated_at, save_setting
 from ..linkedin import get_account_id, get_linkedin_client
 from ..linkedin.experience import apply_current_role
@@ -82,8 +83,9 @@ async def refresh_own_profile() -> dict[str, Any]:
     apply_current_role(merged)
     await run_db(save_setting, "profile", merged)
     logger.info(
-        "Refreshed own profile headline=%r company=%r",
-        merged.get("headline", "")[:80],
+        "Refreshed own profile headline=%s (%d chars) company=%r",
+        message_hash(merged.get("headline", "")),
+        len(merged.get("headline", "") or ""),
         merged.get("company", ""),
     )
     return merged

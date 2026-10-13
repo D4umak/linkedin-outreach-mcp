@@ -261,7 +261,7 @@ async def _research_single_contact(
             return {"posts": posts_analyzed}
 
         except Exception as e:
-            logger.warning("Research failed for %s: %s", contact_name, e)
+            logger.warning("Research failed for %s: %s", contact_id, e)
             await run_db(update_contact_research, contact_id, "failed")
             finished = True
             raise

@@ -1243,7 +1243,7 @@ async def enrich_prospects(
                 pass  # Post fetch is non-critical
 
             enriched += 1
-            logger.debug("Enriched %s (%d/%d)", prospect.get("name", lid), enriched, len(to_enrich))
+            logger.debug("Enriched %s (%d/%d)", lid, enriched, len(to_enrich))
 
         except Exception as e:
             logger.debug("Enrich failed for %s: %s", lid, e)
@@ -1347,7 +1347,7 @@ async def audit_campaign_connections(
 
             report["already_connected"] += 1
             report["updated"].append(name or outreach_id)
-            logger.info("Audit: %s is already 1st-degree connected — marked as 'connected'", name)
+            logger.info("Audit: %s is already 1st-degree connected — marked as 'connected'", outreach_id[:8])
 
     return report
 

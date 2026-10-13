@@ -190,7 +190,7 @@ def scan_signal_pool_for_campaign(
 
             logger.info(
                 "Retroactive signal match: %s (%s) → campaign %s",
-                sig.get("prospect_name", "Unknown"),
+                str(sig.get("id") or "")[:8],
                 sig.get("signal_type", ""),
                 campaign_id[:8],
             )
@@ -332,7 +332,7 @@ def match_signals_to_campaigns() -> str:
             matched += 1
             logger.info(
                 "Signal rematch: %s (%s) → campaign %s",
-                sig.get("prospect_name", "Unknown"),
+                str(sig.get("id") or "")[:8],
                 sig.get("signal_type", ""),
                 campaign_id[:8],
             )

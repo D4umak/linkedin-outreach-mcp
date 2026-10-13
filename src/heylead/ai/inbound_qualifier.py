@@ -121,9 +121,10 @@ def _classify_fast(
     # Check job-seeking signals
     for kw in _JOB_SEEKING_KEYWORDS:
         if kw in headline_lower or kw in content_lower:  # nosemgrep: title-keyword-substring-match -- long phrases, plurals must match (test_term_matching_whole_words)
+            matched_in = "title" if kw in headline_lower else "content"  # nosemgrep: title-keyword-substring-match -- long phrases, plurals must match (test_term_matching_whole_words)
             logger.info(
                 "Fast classify: job-seeking match — keyword='%s' in=%s",
-                kw, "headline" if kw in headline_lower else "content",  # nosemgrep: title-keyword-substring-match -- long phrases, plurals must match (test_term_matching_whole_words)
+                kw, matched_in,
             )
             return InboundQualification(
                 intent="job_seeking",
@@ -602,6 +603,7 @@ async def qualify_inbound(
     signal_type: str,
     active_icps: list[dict[str, Any]],
     our_last_message: str = "",
+    log_ref: str = "",
 ) -> InboundQualification:
     """Qualify an inbound signal against ICPs.
 
@@ -615,25 +617,28 @@ async def qualify_inbound(
         active_icps: List of ICP dicts from list_icps(status='active').
         our_last_message: Our last outbound in this thread, if any. Used to
             avoid treating answers to our discovery probes as buying signals.
+        log_ref: The signal's id, for log lines. Logs carry ids, never the
+            sender's name or words (api #2964).
 
     Returns:
         InboundQualification with intent, ICP match, confidence, and action.
     """
     headline = profile.get("headline", "") or profile.get("title", "")
     content_str = content or ""
+    ref = (log_ref or "-")[:8]
 
     elicited = _classify_elicited_reply(our_last_message, content_str)
     if elicited:
         logger.info(
             "Inbound qualified (elicited): %s → %s",
-            profile.get("name"), elicited.intent,
+            ref, elicited.intent,
         )
         return elicited
 
     # 1. Fast path: rule-based spam/recruiter detection
     fast_result = _classify_fast(headline, content_str)
     if fast_result:
-        logger.info("Inbound qualified (fast): %s → %s", profile.get("name"), fast_result.intent)
+        logger.info("Inbound qualified (fast): %s → %s", ref, fast_result.intent)
         return finalize_inbound_qualification(fast_result, profile, active_icps)
 
     # 2. Structured keyword matching (boost for LLM or standalone)
@@ -641,7 +646,7 @@ async def qualify_inbound(
 
     logger.info(
         "Keyword overlap result: %s — best_score=%.2f best_icp=%s",
-        profile.get("name"), best_overlap, best_icp_id or "none",
+        ref, best_overlap, best_icp_id or "none",
     )
 
     # 3. LLM qualification
@@ -704,15 +709,15 @@ async def qualify_inbound(
         parsed = _parse_qualification_response(raw, active_icps)
         if parsed.reasoning == UNREADABLE_REASON:
             from ..services.model_failure import UNPARSEABLE, record_skip
-            await record_skip(actor="inbound", failure=UNPARSEABLE, detail=str(profile.get("name") or "")[:40])
+            await record_skip(actor="inbound", failure=UNPARSEABLE, detail=ref)
         result = finalize_inbound_qualification(parsed, profile, active_icps)
-        logger.info("Inbound qualified (LLM): %s → %s (%.0f%%)", profile.get("name"), result.intent, result.confidence * 100)
+        logger.info("Inbound qualified (LLM): %s → %s (%.0f%%)", ref, result.intent, result.confidence * 100)
         return result
 
     except Exception as e:
         logger.warning("LLM qualify_inbound failed: %s, using keyword overlap", e)
         from ..services.model_failure import failure_of, record_skip
-        await record_skip(actor="inbound", failure=failure_of(e), detail=str(profile.get("name") or "")[:40])
+        await record_skip(actor="inbound", failure=failure_of(e), detail=ref)
 
     # 4. Fallback: keyword overlap only. Reached only when the model could not
     # answer, so it never says ask_purpose, which writes a DM (#2390): a

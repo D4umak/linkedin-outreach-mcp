@@ -788,7 +788,7 @@ async def activate_pending_signals() -> str:
                 skipped += 1
                 logger.info(
                     "Skipping %s signal for %s: no engagement hook (angle=%s)",
-                    sig.get("signal_type"), sig.get("prospect_name"), angle,
+                    sig.get("signal_type"), str(sig.get("id") or "")[:8], angle,
                 )
                 continue
 
@@ -821,7 +821,7 @@ async def activate_pending_signals() -> str:
                 logger.info(
                     "Hot fast-track: competitor %s (%s) for %s",
                     metadata.get("competitor_name", "?"), mention_ctx,
-                    sig.get("prospect_name", "Unknown"),
+                    str(sig.get("id") or "")[:8],
                 )
         elif signal_type in ("company_change", "promotion") and intent in SIGNAL_OUTREACH_INTENTS:
             composite_score = max(composite_score, eff_auto_threshold)
@@ -1014,7 +1014,7 @@ async def activate_pending_signals() -> str:
 
                 logger.info(
                     "Signal activation: created outreach for %s (score=%.2f, signal=%s%s)",
-                    sig.get("prospect_name", "Unknown"),
+                    str(sig.get("id") or "")[:8],
                     composite_score,
                     sig.get("signal_type", ""),
                     " [HOT-SKIP]" if next_action == "signal_hot_skip_warmup" else "",
@@ -1109,7 +1109,7 @@ async def activate_pending_signals() -> str:
 
             logger.info(
                 "Signal activation: behavioral outreach for %s (score=%.2f, icp=%.2f, signal=%s)",
-                sig.get("prospect_name", "Unknown"),
+                str(sig.get("id") or "")[:8],
                 composite_score,
                 icp_score,
                 sig.get("signal_type", ""),
@@ -1219,7 +1219,7 @@ async def activate_pending_signals() -> str:
 
                 logger.info(
                     "Signal activation: added %s to campaign (score=%.2f, signal=%s)",
-                    sig.get("prospect_name", "Unknown"),
+                    str(sig.get("id") or "")[:8],
                     composite_score,
                     sig.get("signal_type", ""),
                 )

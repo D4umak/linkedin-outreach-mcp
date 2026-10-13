@@ -291,9 +291,9 @@ async def run_close_outreach(
                         crm_contact_id=hs_contact_id,
                         crm_deal_id=hs_deal_id,)
                     hubspot_synced = True
-                    logger.info("Auto-synced won deal to HubSpot: %s", prospect_name)
+                    logger.info("Auto-synced won deal to HubSpot: %s", outreach_id[:8])
         except Exception as e:
-            logger.debug("HubSpot auto-sync failed for %s: %s", prospect_name, e)
+            logger.debug("HubSpot auto-sync failed for %s: %s", outreach_id[:8], e)
 
     # ── Format result ──
     icon = outcome_icon(new_status)

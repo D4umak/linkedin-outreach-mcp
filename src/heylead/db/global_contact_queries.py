@@ -9,6 +9,7 @@ import time
 import uuid
 from typing import Any, Optional
 
+from ..ops_log import message_hash
 from .schema import get_db
 
 logger = logging.getLogger(__name__)
@@ -242,8 +243,8 @@ def upsert_global_contact(
             ).fetchone()
             if existing:
                 logger.info(
-                    "Matched global contact by email %s (linkedin_id incoming=%s existing=%s)",
-                    email_key, linkedin_id, dict(existing).get("linkedin_id"),
+                    "Matched global contact by email %s (contact=%s)",
+                    message_hash(email_key), dict(existing).get("id"),
                 )
 
     if existing:

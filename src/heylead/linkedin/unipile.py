@@ -1174,7 +1174,7 @@ class UnipileClient:
                 if raise_on_error:
                     raise UnipileResultFormatError(
                         "LinkedIn search returned results in an unexpected format "
-                        f"({len(items)} items, none usable — expected first_name/last_name or name)."
+                        f"({len(items)} items, none usable — expected first_name and last_name, or name)."
                     )
             return results, next_cursor
         except UnipileAuthError:

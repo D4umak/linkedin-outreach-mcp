@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.452 (2026-10-13)
+- Fix: client logs and raises carry ids, never a prospect's name or words (#2964)
+- A3-D3 data plan, posts keep who drafted them and their day-7 reading (api #2969)
+
 ## v0.10.451 (2026-10-13)
 - Fix: skipped rows, blocked sends and the comment cap in the api's words (#2922 QA r1 F4)
 
@@ -4212,7 +4216,7 @@ async def _inbox_impl(
     """
     from .tools.inbox import run_inbox
 
-    logger.info("Running inbox: action=%s, name=%s", action, name)
+    logger.info("Running inbox: action=%s, name=%s", action, bool(name))
     try:
         return await run_traced(
             "inbox",

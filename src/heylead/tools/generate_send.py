@@ -379,7 +379,7 @@ async def run_generate_and_send(
         await adb.log_action("company_profile_skipped", outreach_id=outreach_id,
                    result="skipped",
                    details={"prospect": prospect.get("name", ""), "reason": "company_page"})
-        logger.info("Skipping company profile: %s", prospect.get("name", ""))
+        logger.info("Skipping company profile: %s", outreach_id[:8])
         return (
             f"⏭️ Skipped **{prospect.get('name', 'Unknown')}** — looks like a company/business page, "
             f"not a personal profile. Marked as error to prevent future retries."
@@ -775,7 +775,7 @@ async def run_generate_and_send(
             slug = prospect.get("linkedin_id", "") or prospect_data.get("public_id", "")
             logger.warning(
                 "No valid provider_id (ACoAAA) for %s — only have slug '%s'. Cannot send DM.",
-                prospect.get("name", "Unknown"), slug,
+                outreach_id[:8], slug,
             )
             await adb.update_outreach(
                 outreach_id, status="error",
@@ -902,7 +902,7 @@ async def run_generate_and_send(
                 )
                 logger.warning(
                     "Blocking DM to %s — %s",
-                    prospect.get("name", ""), guard.message,
+                    outreach_id[:8], guard.outcome,
                 )
                 return (
                     f"⏭️ Skipped {prospect.get('name', 'prospect')} — "
@@ -937,7 +937,7 @@ async def run_generate_and_send(
                         f"(detected via profile) — skipping invitation, queued for follow-up DM."
                     )
     except Exception as e:
-        logger.warning("Profile connection check failed for %s: %s", prospect.get("name", ""), e)
+        logger.warning("Profile connection check failed for %s: %s", outreach_id[:8], e)
         _profile_enrich_error = str(e)[:200]
     else:
         _profile_enrich_error = ""
@@ -962,7 +962,7 @@ async def run_generate_and_send(
             if shared and int(shared) > 0:
                 mutual_info = f"You share {shared} mutual connection(s) with this prospect."
                 prospect_data["mutual_connections"] = int(shared)
-                logger.info("Warm intro path: %d mutual connections with %s", shared, prospect.get("name", ""))
+                logger.info("Warm intro path: %d mutual connections with %s", shared, outreach_id[:8])
     except Exception as e:
         logger.debug("Mutual connection check failed (non-critical): %s", e)
 
@@ -997,12 +997,12 @@ async def run_generate_and_send(
     ):
         logger.info(
             "Ignoring data-gap analysis cache for %s — profile now has title/company",
-            prospect.get("name", "Unknown"),
+            outreach_id[:8],
         )
         cached = None
     if cached:
         prospect_analysis = cached
-        logger.info(f"Loaded cached prospect analysis for {prospect.get('name', 'Unknown')}")
+        logger.info(f"Loaded cached prospect analysis for {outreach_id[:8]}")
     else:
         try:
             prospect_analysis = await analyze_prospect(
@@ -1011,7 +1011,7 @@ async def run_generate_and_send(
                 icp_data=icp_data,
             )
             await adb.save_contact_analysis(contact_db_id, prospect_analysis)
-            logger.info(f"Generated and cached prospect analysis for {prospect.get('name', 'Unknown')}")
+            logger.info(f"Generated and cached prospect analysis for {outreach_id[:8]}")
         except Exception as e:
             logger.warning(f"Prospect analysis failed, proceeding without: {e}")
 
@@ -1120,7 +1120,7 @@ async def run_generate_and_send(
                     if conversation_history:
                         logger.info(
                             "Found %d prior messages with %s for outreach",
-                            len(conversation_history), prospect.get("name", "Unknown"),
+                            len(conversation_history), outreach_id[:8],
                         )
     except Exception as e:
         # Every failure here is fatal to the question this guard answers, not
@@ -1145,7 +1145,7 @@ async def run_generate_and_send(
                 logger.debug("Could not forget the gone chat id: %s", clear_err)
         logger.warning(
             "Pre-outreach chat lookup failed for %s — deferring rather than "
-            "assuming no conversation: %s", prospect.get("name", "Unknown"), e,
+            "assuming no conversation: %s", outreach_id[:8], e,
         )
 
     if conv_lookup_failed:
@@ -1263,7 +1263,7 @@ async def run_generate_and_send(
     if note_off:
         logger.info(
             "Invitation to %s goes without a note: the campaign's invite_note is off",
-            prospect.get("name", "Unknown"),
+            outreach_id[:8],
         )
     if not note_off:
         # Attempt 1: Generate + Improve + Validate (+ Fix if needed)
@@ -1464,7 +1464,7 @@ async def run_generate_and_send(
             slug = prospect.get("linkedin_id", "") or prospect_data.get("public_id", "")
             logger.warning(
                 "No valid provider_id (ACoAAA) for %s — only have slug '%s'. Cannot send DM.",
-                prospect_name, slug,
+                outreach_id[:8], slug,
             )
             await adb.update_outreach(outreach_id, status="error",
                             last_attempt_error=f"No valid provider_id for DM (only slug: {slug})")
@@ -1514,13 +1514,13 @@ async def run_generate_and_send(
                             account_id, dm_chat_id, message,
                         )
                     except Exception as e:
-                        logger.warning("DM verification error for %s: %s", prospect_name, e)
+                        logger.warning("DM verification error for %s: %s", outreach_id[:8], e)
                         dm_verified = True  # fail open — trust API response
 
                 if not dm_verified:
                     logger.warning(
                         "DM to %s not confirmed in conversation (chat=%s)",
-                        prospect_name, dm_chat_id,
+                        outreach_id[:8], dm_chat_id,
                     )
                     await adb.update_outreach(outreach_id,
                                     last_attempt_error="DM delivery not confirmed")
@@ -1682,7 +1682,7 @@ async def run_generate_and_send(
             await adb.log_action("pre_send_connection_guard", outreach_id=outreach_id,
                        result="connected",
                        details={"prospect": prospect_name, "matched_by": matched_by})
-            logger.info("Connection guard caught %s (%s) — skipping invitation", prospect_name, matched_by)
+            logger.info("Connection guard caught %s (%s) — skipping invitation", outreach_id[:8], matched_by)
             return (
                 f"Already connected with {prospect_name} "
                 f"(detected via local connections DB) — skipping invitation, queued for follow-up DM."
@@ -1725,7 +1725,7 @@ async def run_generate_and_send(
             await client.close()
             return f"ℹ️ {prospect_name} already has a pending invitation. Skipping."
     except Exception as e:
-        logger.debug("Live connection check failed for %s: %s — proceeding with invitation", prospect_name, e)
+        logger.debug("Live connection check failed for %s: %s — proceeding with invitation", outreach_id[:8], e)
 
     from ..services import experiment_service as _headline_ab
 
@@ -2097,8 +2097,8 @@ async def _send_email_outreach(
         )
         if found:
             logger.info(
-                "Email send reported failure but SENT has %s → %s; recording success",
-                subject, prospect_email,
+                "Email send reported failure but SENT has outreach %s; recording success",
+                outreach_id[:8],
             )
             return await _record_email_success()
 

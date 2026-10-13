@@ -60,6 +60,7 @@ async def collect_job_changes() -> str:
     Returns summary string.
     """
     from ..db.async_bridge import run_db
+    from ..ops_log import message_hash
     from ..db.queries import get_contacts_for_campaign, list_campaigns
     from ..db.signal_queries import (
         save_signal,
@@ -228,8 +229,8 @@ async def collect_job_changes() -> str:
                         logger.info(
                             "Profile change detected (%s) for %s: %s",
                             sig_type,
-                            new_name,
-                            content[:120],
+                            contact_id,
+                            message_hash(content),
                         )
 
                     # Update profile snapshot and last_scanned_at

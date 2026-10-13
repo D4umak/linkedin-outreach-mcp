@@ -117,7 +117,7 @@ class HubSpotClient:
                     f"/crm/v3/objects/contacts/{contact_id}",
                     {"properties": properties},
                 )
-                logger.info("Updated HubSpot contact %s: %s", contact_id, name)
+                logger.info("Updated HubSpot contact %s", contact_id)
                 return contact_id
 
         # Create new
@@ -128,12 +128,12 @@ class HubSpotClient:
             contact_id = result.get("id", "")
             if not contact_id:
                 raise HubSpotError("HubSpot create returned no contact id")
-            logger.info("Created HubSpot contact %s: %s", contact_id, name)
+            logger.info("Created HubSpot contact %s", contact_id)
             return contact_id
         except HubSpotConflictError as e:
             existing_id = existing_contact_id(e.body)
             if existing_id:
-                logger.info("HubSpot contact already exists %s: %s", existing_id, name)
+                logger.info("HubSpot contact already exists %s", existing_id)
                 return existing_id
             if email:
                 looked_up = await self._request(

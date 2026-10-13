@@ -94,6 +94,7 @@ async def process_inbound_signals() -> str:
                 signal_type=signal_type,
                 active_icps=active_icps,
                 our_last_message=our_last,
+                log_ref=str(signal.get("id") or ""),
             )
 
             # Resolve best-matching campaign for this signal
@@ -122,7 +123,7 @@ async def process_inbound_signals() -> str:
         except Exception as e:
             logger.warning(
                 "Failed to qualify signal %s (%s): %s",
-                signal["id"], signal.get("sender_name"), e,
+                signal["id"], str(signal.get("sender_id") or "")[:12], e,
             )
 
     summary = f"Qualified {qualified_count}/{len(new_signals)} inbound signals."
@@ -214,7 +215,7 @@ async def send_discovery_dms() -> str:
         if existing_contact:
             logger.info(
                 "Skipping discovery DM to %s — already a campaign contact",
-                signal.get("sender_name", sender_id),
+                str(sender_id)[:12],
             )
             await run_db(update_inbound_signal, signal["id"], status="dismissed")
             skipped += 1
@@ -226,7 +227,7 @@ async def send_discovery_dms() -> str:
             if excluded:
                 logger.info(
                     "Skipping discovery DM to %s — excluded from automation",
-                    signal.get("sender_name", sender_id),
+                    str(sender_id)[:12],
                 )
                 await run_db(update_inbound_signal, signal["id"], status="dismissed")
                 skipped += 1
@@ -246,7 +247,7 @@ async def send_discovery_dms() -> str:
             if is_friend:
                 logger.info(
                     "Skipping discovery DM to %s — prior conversation detected",
-                    signal.get("sender_name", sender_id),
+                    str(sender_id)[:12],
                 )
                 await run_db(update_inbound_signal, signal["id"], status="dismissed")
                 skipped += 1
@@ -300,7 +301,7 @@ async def send_discovery_dms() -> str:
                             if not dm_verified:
                                 logger.warning(
                                     "Discovery DM to %s not confirmed in conversation (chat_id=%s)",
-                                    signal.get("sender_name", sender_id), chat_id,
+                                    str(sender_id)[:12], chat_id,
                                 )
                                 await run_db(log_action,
                                     "inbound_dm_delivery_failed",
@@ -398,23 +399,23 @@ async def send_discovery_dms() -> str:
                         )
                         logger.info(
                             "Dismissed inbound signal %s — chat not found after %d attempts",
-                            signal.get("sender_name"), dm_attempts,
+                            signal["id"][:8], dm_attempts,
                         )
                     else:
                         await run_db(update_inbound_signal, signal["id"], dm_attempts=dm_attempts)
                         logger.info(
                             "Chat not found for %s — attempt %d/%d, will retry",
-                            signal.get("sender_name"), dm_attempts, INBOUND_MAX_DM_ATTEMPTS,
+                            signal["id"][:8], dm_attempts, INBOUND_MAX_DM_ATTEMPTS,
                         )
                     skipped += 1
                 except Exception as e:
-                    logger.warning("Failed to send discovery DM to %s: %s", signal.get("sender_name"), e)
+                    logger.warning("Failed to send discovery DM to %s: %s", signal["id"][:8], e)
                     errors += 1
             else:
                 skipped += 1
 
         except Exception as e:
-            logger.warning("Failed to generate discovery DM for %s: %s", signal.get("sender_name"), e)
+            logger.warning("Failed to generate discovery DM for %s: %s", signal["id"][:8], e)
             errors += 1
 
     await client.close()
@@ -536,10 +537,10 @@ async def check_post_comments() -> str:
                             )
                             logger.info(
                                 "Commenter cross-reference: %s is campaign contact (campaign=%s)",
-                                author_name, contact.get("campaign_id", "")[:8],
+                                contact.get("id", ""), (contact.get("campaign_id") or "")[:8],
                             )
                     except Exception as e:
-                        logger.debug("Commenter cross-reference failed for %s: %s", author_name, e)
+                        logger.debug("Commenter cross-reference failed for %s: %s", str(author_id)[:12], e)
 
             # Update monitoring state
             from ..db.queries import update_published_post

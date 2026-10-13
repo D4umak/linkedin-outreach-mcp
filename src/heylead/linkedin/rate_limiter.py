@@ -1064,10 +1064,9 @@ async def withdraw_oldest_to_free_spot(
             },
         )
         logger.info(
-            "Withdrew oldest invitation %s (%d days old, %s) to free spot",
+            "Withdrew oldest invitation %s (%d days old) to free spot",
             oldest_id,
             days_old,
-            name,
         )
         return {
             "success": True,

@@ -592,7 +592,7 @@ async def _honor_gated_opt_out(outreach_id: str, name: str, text: str) -> bool:
         log_action, "opt_out_detected", outreach_id=outreach_id,
         details={"text": text[:200], "note": "pre-outreach opt-out"},
     )
-    logger.info("Pre-outreach opt-out honored: %s (outreach=%s)", name, outreach_id)
+    logger.info("Pre-outreach opt-out honored (outreach=%s)", outreach_id)
     return True
 
 
@@ -1436,15 +1436,15 @@ async def run_check_replies() -> str:
                             )
                             logger.info(
                                 "Auto-booked meeting with %s at %s",
-                                contact.get("name", ""), result.get("booked_time", ""),
+                                str(contact.get("outreach_id") or "")[:8], result.get("booked_time", ""),
                             )
                         else:
                             logger.info(
                                 "Auto-booking failed for %s: %s",
-                                contact.get("name", ""), result.get("error", ""),
+                                str(contact.get("outreach_id") or "")[:8], result.get("error", ""),
                             )
                     except Exception as e:
-                        logger.warning("Auto-booking error for %s: %s", contact.get("name", ""), e)
+                        logger.warning("Auto-booking error for %s: %s", str(contact.get("outreach_id") or "")[:8], e)
             else:
                 logger.info("Skipping auto-booking: missing user name=%s email=%s", bool(booker_name), bool(booker_email))
         except Exception as e:
@@ -1574,17 +1574,17 @@ async def run_check_replies() -> str:
                                         )
                                         logger.info(
                                             "Calendar event created for %s on %s at %s",
-                                            prospect_name, m_date, m_time,
+                                            str(contact.get("outreach_id") or "")[:8], m_date, m_time,
                                         )
                                     else:
                                         logger.info(
                                             "Calendar event creation failed for %s: %s",
-                                            prospect_name, result.get("error", ""),
+                                            str(contact.get("outreach_id") or "")[:8], result.get("error", ""),
                                         )
                         except Exception as e:
                             logger.warning(
                                 "Meeting extraction/calendar error for %s: %s",
-                                contact.get("name", ""), e,
+                                str(contact.get("outreach_id") or "")[:8], e,
                             )
                 finally:
                     await bc.close()

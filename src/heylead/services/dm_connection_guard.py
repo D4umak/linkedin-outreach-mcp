@@ -118,7 +118,7 @@ async def verify_dm_eligible(
                     )
         except Exception as e:
             live_error = e
-            logger.warning("DM live connection check failed for %s: %s", name, e)
+            logger.warning("DM live connection check failed for %s: %s", (provider_id or public_id or "")[:12], e)
 
     if live_ok:
         if provider_id:
@@ -129,7 +129,7 @@ async def verify_dm_eligible(
             logger,
             "DM guard: %s absent from connections cache but LinkedIn says "
             "1st-degree — proceeding",
-            name,
+            (provider_id or public_id or "")[:12],
         )
         return DmGuardResult(True, "ok", "", provider_id, public_id)
 

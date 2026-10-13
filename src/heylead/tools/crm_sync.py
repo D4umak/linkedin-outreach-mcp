@@ -181,7 +181,7 @@ async def run_crm_sync(
                     )
                     await hs.create_note(hs_contact_id, note_body)
             except Exception as e:
-                logger.debug("Note creation failed for %s: %s", name, e)
+                logger.debug("Note creation failed for %s: %s", str(outreach.get("outreach_id") or "")[:8], e)
 
             # Save mapping
             await run_db(save_crm_mapping, contact_id=contact_id,
@@ -198,10 +198,10 @@ async def run_crm_sync(
 
         except HubSpotError as e:
             errors.append(f"{name}: {e}")
-            logger.error("HubSpot sync failed for %s: %s", name, e)
+            logger.error("HubSpot sync failed for %s: %s", str(outreach.get("outreach_id") or "")[:8], e)
         except Exception as e:
             errors.append(f"{name}: {e}")
-            logger.error("Unexpected sync error for %s: %s", name, e)
+            logger.error("Unexpected sync error for %s: %s", str(outreach.get("outreach_id") or "")[:8], e)
 
     # Build output
     parts: list[str] = []

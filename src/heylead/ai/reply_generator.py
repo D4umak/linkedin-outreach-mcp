@@ -17,6 +17,7 @@ proxies through the backend API (same pattern as followup_generator.py).
 
 from __future__ import annotations
 
+from ..ops_log import message_hash
 from ..textutil import first_name
 
 import logging
@@ -661,7 +662,10 @@ async def generate_reply(
     # If prospect expressed calendar intent AND we have a stored calendar URL, force calendar sentiment
     if sentiment != "calendar" and detect_calendar_intent(reply_text) and prospect_calendar_url:
         sentiment = "calendar"
-        logger.info("Calendar intent detected ('%s') with stored URL: %s", reply_text[:50], prospect_calendar_url)
+        logger.info(
+            "Calendar intent detected ('%s') with stored URL: %s",
+            message_hash(reply_text), bool(prospect_calendar_url),
+        )
 
     # Detect scheduling loop — append a directive; do not overwrite their words
     # or reuse the calendar prompt (that one assumes they already shared a link).

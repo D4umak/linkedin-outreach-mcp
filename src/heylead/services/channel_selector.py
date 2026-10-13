@@ -117,7 +117,7 @@ def select_channel(
             if email:
                 logger.info(
                     "LinkedIn limit hit — routing to email for %s",
-                    prospect.get("name", "unknown"),
+                    (str((outreach or {}).get("id") or prospect.get("id") or "-"))[:8],
                 )
                 return CHANNEL_EMAIL
         # No email address available → LinkedIn (will be queued for later)

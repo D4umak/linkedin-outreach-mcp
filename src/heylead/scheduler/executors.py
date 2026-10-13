@@ -32,6 +32,7 @@ class JobResult:
 from ..db.async_bridge import run_db
 from ..db import aio as db
 from ..next_step import FOLLOWUP_STATUSES
+from ..ops_log import classify_result
 from ..constants import (
     JOB_ACCEPT_INBOUND,
     JOB_ACTIVATE_SIGNALS,
@@ -281,7 +282,7 @@ async def _check_is_first_degree(outreach_id: str) -> str | None:
         )
         logger.warning(
             "DM pre-check: %s (outreach=%s) — marked as error",
-            outreach.get("name", "Unknown"), outreach_id[:8],
+            guard.outcome, outreach_id[:8],
         )
     return guard.message
 
@@ -917,7 +918,7 @@ async def _execute_send_dm(job: dict[str, Any]) -> str | JobResult:
         if categorize_error(result) == "permanent_failure":
             logger.warning(
                 "DM permanent failure for campaign %s (outreach=%s): %s",
-                campaign_id, outreach_id, result[:200],
+                campaign_id, outreach_id, categorize_error(result),
             )
             return JobResult("permanent_failure", result)
         raise RuntimeError(f"DM send failed: {result[:200]}")
@@ -928,7 +929,10 @@ async def _execute_send_dm(job: dict[str, Any]) -> str | JobResult:
         await _track_plan_execution(job, "send_dm", result or "", outcome=honest.outcome)
         return honest
 
-    logger.info("Scheduler: DM result for campaign %s: %s", campaign_id, result[:100])
+    logger.info(
+        "Scheduler: DM result for campaign %s: %s (outreach=%s)",
+        campaign_id[:8], classify_result(result)[0], (outreach_id or "")[:8],
+    )
     await _track_plan_execution(job, "send_dm", result or "")
     return JobResult("success", result or "")
 
@@ -1041,7 +1045,10 @@ async def _execute_invite(job: dict[str, Any]) -> str:
         await _track_plan_execution(job, "invite", result or "", outcome=honest.outcome)
         return honest
 
-    logger.info("Scheduler: invitation result for campaign %s: %s", campaign_id, result[:100])
+    logger.info(
+        "Scheduler: invitation result for campaign %s: %s (outreach=%s)",
+        campaign_id[:8], classify_result(result)[0], (outreach_id or "")[:8],
+    )
     if headline_variant and outreach_id:
         await experiment_service.persist_invite_headline_variant(
             campaign_id, outreach_id, headline_variant,
@@ -1258,7 +1265,7 @@ async def _execute_followup(job: dict[str, Any]) -> str | JobResult:
         await _track_plan_execution(job, "followup", result or "", outcome="skipped")
         return JobResult("skipped", result or "")
 
-    logger.info("Scheduler: follow-up result (format=%s): %s", fmt, result[:100])
+    logger.info("Scheduler: follow-up result (format=%s): %s", fmt, classify_result(result)[0])
     await _track_plan_execution(job, "followup", result or "")
     return JobResult("success", result or "")
 
@@ -1363,7 +1370,7 @@ async def _execute_engagement(job: dict[str, Any]) -> str:
         # Other failures — raise for normal retry logic
         raise RuntimeError(f"Engagement failed: {result[:200]}")
 
-    logger.info("Scheduler: engagement result: %s", result[:100])
+    logger.info("Scheduler: engagement result: %s", classify_result(result)[0])
     await _track_plan_execution(job, "engage_comment", result or "")
     return JobResult("success", result or "")
 
@@ -1432,7 +1439,7 @@ async def _execute_profile_view(job: dict[str, Any]) -> str:
         logger.warning("Profile view transient failure for outreach %s: %s", outreach_id, result)
         raise RuntimeError(f"Profile view failed: {result[:500] if result else 'empty result'}")
 
-    logger.info("Scheduler: profile view result: %s", result[:100] if result else "empty")
+    logger.info("Scheduler: profile view result: %s", classify_result(result)[0] if result else "empty")
     await _track_plan_execution(job, "profile_view", result or "")
     return JobResult("success", result or "")
 
@@ -1497,7 +1504,7 @@ async def _execute_follow(job: dict[str, Any]) -> str:
 
         raise RuntimeError(f"Follow failed: {result[:200]}")
 
-    logger.info("Scheduler: follow result: %s", result[:100])
+    logger.info("Scheduler: follow result: %s", classify_result(result)[0])
     await _track_plan_execution(job, "follow", result or "")
     return JobResult("success", result or "")
 
@@ -1514,7 +1521,10 @@ async def _execute_check_replies(job: dict[str, Any]) -> str:
     result = await run_check_replies()
 
     # Reply checks don't typically fail hard — just log
-    logger.info("Scheduler: reply check result: %s", result[:100] if result else "empty")
+    logger.info(
+        "Scheduler: reply check result: %s (%d chars)",
+        classify_result(result)[0] if result else "empty", len(result or ""),
+    )
     return result or "No new replies"
 
 
@@ -1642,7 +1652,10 @@ async def _execute_auto_reply(job: dict[str, Any]) -> str | JobResult:
     if _is_error:
         raise RuntimeError(f"Auto-reply failed: {result[:200] if result else 'empty result'}")
 
-    logger.info("Scheduler: auto-reply result (format=%s): %s", fmt, result[:100] if result else "empty")
+    logger.info(
+        "Scheduler: auto-reply result (format=%s): %s",
+        fmt, classify_result(result)[0] if result else "empty",
+    )
     await _track_plan_execution(job, "auto_reply", result or "")
     # auto_reply already classifies skips vs success via _is_skip above
     if _is_skip:
@@ -1739,7 +1752,7 @@ async def _execute_accept_inbound(job: dict[str, Any]) -> str:
                 )
                 logger.info(
                     "Accepted inbound invitation from %s (%s)",
-                    inv.get("sender_name", "Unknown"), inv_id,
+                    sender_id[:12], inv_id,
                 )
             else:
                 errors += 1
@@ -1842,7 +1855,7 @@ async def _execute_endorse(job: dict[str, Any]) -> str:
                 )
             logger.warning(
                 "Endorsement failed for outreach %s — cooldown 7d: %s",
-                outreach_id, result[:100],
+                outreach_id, classify_result(result)[0],
             )
             return JobResult("permanent_failure", result)
 
@@ -1852,7 +1865,7 @@ async def _execute_endorse(job: dict[str, Any]) -> str:
 
         raise RuntimeError(f"Endorsement failed: {result[:200]}")
 
-    logger.info("Scheduler: endorsement result: %s", result[:100])
+    logger.info("Scheduler: endorsement result: %s", classify_result(result)[0])
     await _track_plan_execution(job, "endorse", result or "")
     return JobResult("success", result or "")
 
@@ -2141,7 +2154,7 @@ async def _execute_brand_post(job: dict[str, Any]) -> str:
 
     try:
         result = await _execute_post_action(action, action_id, account_id)
-        logger.info("Scheduler: brand post result: %s", result[:100])
+        logger.info("Scheduler: brand post result: %s", classify_result(result)[0])
         return result
     except Exception as e:
         logger.error("Scheduler: brand post failed: %s", e)
@@ -2188,7 +2201,7 @@ async def _execute_brand_engage(job: dict[str, Any]) -> str:
 
     try:
         result = await _execute_engagement_action(action, action_id, account_id)
-        logger.info("Scheduler: brand engagement result: %s", result[:100])
+        logger.info("Scheduler: brand engagement result: %s", classify_result(result)[0])
         return result
     except Exception as e:
         logger.error("Scheduler: brand engagement failed: %s", e)
@@ -2241,7 +2254,7 @@ async def _execute_brand_profile(job: dict[str, Any]) -> str:
             result = await _handle_photo_enhance(account_id, action_id=action_id)
         else:
             result = await _execute_profile_action(action, action_id)
-        logger.info("Scheduler: brand profile result: %s", result[:100])
+        logger.info("Scheduler: brand profile result: %s", classify_result(result)[0])
         return result
     except Exception as e:
         logger.error("Scheduler: brand profile failed: %s", e)
@@ -2590,14 +2603,14 @@ async def _execute_partner_reminder(job: dict[str, Any]) -> str:
             if result.get("success"):
                 await db.advance_partner_followup(partner["id"])
                 sent += 1
-                logger.info("Partner reminder sent: %s (#%d)", name, count)
+                logger.info("Partner reminder sent: %s (#%d)", partner.get("id", ""), count)
             else:
                 logger.warning(
                     "Partner reminder email failed for %s: %s",
-                    name, result.get("error", "unknown"),
+                    partner.get("id", ""), result.get("error", "unknown"),
                 )
         except Exception as e:
-            logger.error("Partner reminder error for %s: %s", partner.get("name"), e)
+            logger.error("Partner reminder error for %s: %s", partner.get("id"), e)
 
     await client.close()
     msg = f"Sent {sent}/{len(due)} partner follow-up reminders"

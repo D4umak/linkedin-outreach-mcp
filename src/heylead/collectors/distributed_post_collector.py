@@ -349,7 +349,7 @@ async def _scan_batch(
             except Exception as e:
                 logger.warning(
                     "Error scanning posts for %s via account %s: %s",
-                    contact_name, account_id[:8], e,
+                    contact_id, account_id[:8], e,
                 )
                 errors += 1
 

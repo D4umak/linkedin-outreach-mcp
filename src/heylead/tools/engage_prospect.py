@@ -341,7 +341,7 @@ async def run_engage_prospect(
         try:
             posts = await client.get_user_posts(account_id, prospect_identifier, limit=5)
         except Exception as e:
-            logger.error(f"Failed to fetch posts for {cand.get('name')}: {e}")
+            logger.error("Failed to fetch posts for %s: %s", str(cand.get("outreach_id") or "")[:8], e)
             posts = []
 
         # Detect _status_code sentinel (e.g. 422 from Unipile)
@@ -899,7 +899,7 @@ async def _send_comment(
         await db.delete_engagement(engagement_id)
 
         # Fallback: try a reaction (LIKE) instead of giving up
-        logger.info(f"Comment failed for {prospect_name}, falling back to reaction: {error}")
+        logger.info("Comment failed for %s, falling back to reaction: %s", str(outreach_id or "")[:8], error)
         recovered = False
         try:
             ensure_laptop_may_write("send_post_reaction")

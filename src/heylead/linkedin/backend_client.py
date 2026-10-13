@@ -1375,7 +1375,7 @@ class BackendClient:
                 raise UnipileResultFormatError(
                     "Backend search returned results in an unexpected format "
                     f"({len(items)} items, none usable). "
-                    "Check heylead-api and Unipile response shape (expected first_name/last_name or name)."
+                    "Check heylead-api and Unipile response shape (expected first_name and last_name, or name)."
                 )
             return results, next_cursor
         except UnipileAuthError:

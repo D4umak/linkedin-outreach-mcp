@@ -118,7 +118,7 @@ async def collect_prospect_posts() -> str:
                     if posts and isinstance(posts[0], dict) and "_status_code" in posts[0]:
                         logger.info(
                             "get_user_posts returned %s for %s — skipping",
-                            posts[0].get("_status_code"), contact_name,
+                            posts[0].get("_status_code"), contact_id,
                         )
                         await run_db(_update_last_scanned, contact_id, now)
                         total_contacts_scanned += 1
@@ -224,7 +224,7 @@ async def collect_prospect_posts() -> str:
 
                 except Exception as e:
                     logger.warning(
-                        "Error scanning posts for %s: %s", contact_name, e,
+                        "Error scanning posts for %s: %s", contact_id, e,
                     )
                     errors += 1
                     # Stamp the attempt, exactly as the 422 sentinel above does.
