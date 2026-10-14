@@ -33,6 +33,19 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.454 (2026-10-14)
+- #3011 final state in the agentic hand-off
+- programme status and hand-off, 13 Oct (api #3014)
+- S8 plan status and hand-off, 13 Oct (#2836)
+- agents, A3, named agents and send-check scoring, 13 Oct 2026 (api #3013)
+- agentic framework hand-off of 13 Oct and the A3 spec's status (api #2793)
+- Fix: the spent-lookups read tolerates a client built without its constructor (#3006)
+- Rowan O1 inbound plan (api #3014)
+- Fix: a refusal that holds for the day is not retried, and the inbox says why names are missing (#3006)
+- A3-D4 data plan, enrolled signals name their outreach and strangers' replies are stamped (api #2998)
+- Fix: a skip by hand reads 'Skipped by you' (#2922)
+- named agents, Why? button and measure block (api #2946)
+
 ## v0.10.453 (2026-10-13)
 - #3011 final state in the agentic hand-off
 - S8 plan status and hand-off, 13 Oct (#2836)

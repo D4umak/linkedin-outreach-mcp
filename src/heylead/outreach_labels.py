@@ -196,6 +196,10 @@ SKIP_REASON_LABELS: dict[str, str] = {
 #: 74bf9205 read "Skipped: skipped") and the store's own placeholder.
 NO_SKIP_REASON = frozenset({"", "skipped", "unrecorded"})
 SKIPPED_NO_REASON = "Skipped (no reason recorded)"
+#: The marker a skip by the owner stores; it read "Skipped: operator skip"
+#: (heylead-api#2922 r2 F7).
+SKIPPED_BY_YOU_REASONS = frozenset({"operator_skip"})
+SKIPPED_BY_YOU = "Skipped by you"
 _FIT_FLOOR = re.compile(r"^below_min_fit \(([\d.]+) < ([\d.]+)\)$")
 _NOT_RECORDED = re.compile(r"^not recorded before (\d{4})-(\d{2})-(\d{2})$")
 #: Month names the dashboard writes (en-GB): "15 Sept", never an ISO date.
@@ -213,6 +217,8 @@ def skipped_label(reason: str | None) -> str:
     why = str(reason or "").strip()
     if why in NO_SKIP_REASON:
         return SKIPPED_NO_REASON
+    if why in SKIPPED_BY_YOU_REASONS:
+        return SKIPPED_BY_YOU
     floor = _FIT_FLOOR.match(why)
     if floor:
         pct = [f"{int(float(v) * 100 + 0.5)}%" for v in floor.groups()]
