@@ -201,9 +201,37 @@ class UnipileRateLimitError(UnipileError):
         self,
         message: str = "Rate limited by LinkedIn.",
         retry_after: float | None = None,
+        kind: str = "",
     ) -> None:
         self.retry_after = retry_after
+        # The server's own name for the refusal when it has one: the api's
+        # lookup budget says ``lookup_budget_spent`` (#3006). A transient 429
+        # from Unipile or the api's per-minute limit leaves it "".
+        self.kind = kind
         super().__init__(message)
+
+
+LOOKUP_BUDGET_SPENT = "lookup_budget_spent"
+
+
+def lookups_restart_words(retry_after: float | None, now: float | None = None) -> str:
+    """"at 01:00 BST" in the reader's clock from the server's retry_after, or "tomorrow".
+
+    The budget day is the server's; the reader is on this machine's clock. A
+    fixed "00:00 UTC" sent Denys to wait until 01:00 London in October (#3006).
+    """
+    if retry_after and retry_after > 0:
+        at = (now if now is not None else time.time()) + retry_after
+        return "at " + time.strftime("%H:%M %Z", time.localtime(at)).strip()
+    return "tomorrow"
+
+
+def lookups_spent_message(retry_after: float | None) -> str:
+    """What a caller that asked to hear about a rate limit is told when the budget is the reason."""
+    return (
+        "Today's LinkedIn profile lookups are used on this account. "
+        f"They start again {lookups_restart_words(retry_after)}."
+    )
 
 
 def parse_retry_after(resp: "httpx.Response") -> float | None:

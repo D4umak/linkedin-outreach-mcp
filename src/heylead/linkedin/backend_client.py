@@ -33,6 +33,8 @@ from .unipile import (
     UnipileAuthError,
     UnipileError,
     UnipileRateLimitError,
+    LOOKUP_BUDGET_SPENT,
+    lookups_spent_message,
     UnipileResultFormatError,
     _is_invalid_post_error,
     _is_newsletter_invitation,
@@ -71,6 +73,11 @@ _LLM_PATH = "/api/v1/llm/"
 _MAX_RETRIES = 3
 _RETRY_BACKOFF = [2, 4, 8]  # seconds
 _RETRYABLE_STATUS_CODES = {502, 503, 504}
+# A 429 whose Retry-After reaches past this holds longer than the retries here
+# could wait for: raised at once, never slept on (#3006). The retries sleep at
+# most this long per attempt (see _retry_request), so a hint beyond it is a
+# refusal that outlives them: the search budget's day or month (#2197).
+_RETRY_WINDOW_SECONDS = 60
 
 # find_chat_for_user used to fall back to POST /api/v1/chats when the recent-chat
 # scan came up empty. The proxy rejects that body with
@@ -114,17 +121,77 @@ def _raise_rate_limit(resp: httpx.Response) -> None:
     Raises UnipileRateLimitError, a UnipileError subclass, so every existing
     ``except UnipileError`` handler behaves exactly as before while callers that
     pace themselves can read ``.retry_after`` off it.
+
+    The backend's own sentence wins when it sent one (the search budget says
+    "searches start again tomorrow"): "Rate limited" says LinkedIn pushed back,
+    which a budget refusal is not (#3006).
     """
     retry_after = (resp.headers.get("Retry-After") or "").strip()
-    if retry_after.isdigit():
-        secs = int(retry_after)
-        if secs >= 60:
-            msg = f"Rate limited. Try again in {secs // 60} minutes."
+    msg = _refusal_detail(resp)
+    if not msg:
+        if retry_after.isdigit():
+            secs = int(retry_after)
+            if secs >= 60:
+                msg = f"Rate limited. Try again in {secs // 60} minutes."
+            else:
+                msg = f"Rate limited. Try again in {secs} seconds."
         else:
-            msg = f"Rate limited. Try again in {secs} seconds."
-    else:
-        msg = "Rate limited. Try again in a few minutes."
+            msg = "Rate limited. Try again in a few minutes."
     raise UnipileRateLimitError(msg, retry_after=parse_retry_after(resp))
+
+
+def _refusal_kind(resp: httpx.Response) -> str:
+    """The server's own name for a refusal (``type``), top-level or under ``detail``; "" otherwise."""
+    try:
+        body = resp.json()
+    except Exception:
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    detail = body.get("detail")
+    source = detail if isinstance(detail, dict) else body
+    kind = source.get("type")
+    return kind if isinstance(kind, str) else ""
+
+
+def _retry_after_in_body(resp: httpx.Response) -> float | None:
+    """``retry_after`` from the refusal body, for a response whose header was lost on the way."""
+    try:
+        body = resp.json()
+    except Exception:
+        return None
+    if not isinstance(body, dict):
+        return None
+    detail = body.get("detail")
+    source = detail if isinstance(detail, dict) else body
+    try:
+        secs = float(source.get("retry_after") or 0)
+    except (TypeError, ValueError):
+        return None
+    return secs if secs > 0 else None
+
+
+def holds_longer_than_a_retry(resp: httpx.Response) -> tuple[str, float | None] | None:
+    """Why a 429 is not worth retrying now, with how long it holds; None for a transient one.
+
+    Two refusals hold for hours, and sleeping four seconds before asking again
+    only repeats them: the api's profile-lookup budget (type
+    ``lookup_budget_spent``, #2200) and any 429 whose Retry-After reaches past
+    _RETRY_WINDOW_SECONDS (the search budget's day or month, #2197). Unipile's
+    own 429 and the api's per-minute limit ("Rate limit exceeded...", no header)
+    carry neither and are retried as before. On 13 Oct 2026 the first kind was
+    retried three times for each of thirty profiles in one inbox call: 183
+    refused requests in three minutes, every one shown as a Unipile error
+    (#3006). The body type is read first: the budget's Retry-After floors at
+    60 s near midnight, where the threshold alone would read it as transient.
+    """
+    kind = _refusal_kind(resp)
+    retry_after = parse_retry_after(resp)
+    if kind == LOOKUP_BUDGET_SPENT:
+        return kind, retry_after if retry_after is not None else _retry_after_in_body(resp)
+    if retry_after is not None and retry_after > _RETRY_WINDOW_SECONDS:
+        return "retry_after", retry_after
+    return None
 
 
 def _raise_if_pool_denied(resp: httpx.Response) -> None:
@@ -489,6 +556,10 @@ class BackendClient:
         self.base_url = backend_url.rstrip("/")
         self.jwt_token = jwt_token
         self._client = httpx.AsyncClient(timeout=_TIMEOUT)
+        # Monotonic time until which the seat behind this token has no profile
+        # lookups left (#3006). One per client, not per account_id: the proxy
+        # bills the token's seat and ignores the identifier a caller passes.
+        self._lookups_spent_until: float = 0.0
         # Search requests that actually went on the wire. search_posts and
         # search_jobs swallow transport errors and return ([], None), so this
         # is the only place a collector can learn whether its search budget
@@ -667,6 +738,16 @@ class BackendClient:
                     backend_ms=backend_ms,
                 )
                 if resp.status_code == 429:
+                    held = holds_longer_than_a_retry(resp)
+                    if held is not None:
+                        kind, held_for = held
+                        if kind == LOOKUP_BUDGET_SPENT:
+                            self._note_lookups_spent(held_for)
+                            raise UnipileRateLimitError(
+                                lookups_spent_message(held_for),
+                                retry_after=held_for, kind=kind,
+                            )
+                        _raise_rate_limit(resp)
                     if attempt < max_attempts - 1:
                         # Parse Retry-After header if present, else use backoff
                         retry_after = resp.headers.get("retry-after")
@@ -711,6 +792,23 @@ class BackendClient:
         """Raise a clear error for 429 so direct request paths surface rate-limit message."""
         if resp.status_code == 429:
             _raise_rate_limit(resp)
+
+    def _note_lookups_spent(self, held_for: float | None) -> None:
+        """Remember the seat's lookups are spent, so the next asks send nothing until the reset."""
+        import time as _time
+
+        self._lookups_spent_until = _time.monotonic() + (
+            held_for if held_for and held_for > 0 else _RETRY_WINDOW_SECONDS
+        )
+
+    def _lookups_spent_for(self) -> float:
+        """Seconds the seat's lookup budget is known to be spent for, 0.0 when it is not.
+
+        ``getattr`` because tests build the client with ``__new__``.
+        """
+        import time as _time
+
+        return max(0.0, getattr(self, "_lookups_spent_until", 0.0) - _time.monotonic())
 
     # ── Auth / Account Management ──
 
@@ -1535,6 +1633,20 @@ class BackendClient:
         params: dict[str, str] = {}
         if use_sales_navigator:
             params["linkedin_api"] = "sales_navigator"
+        held_for = self._lookups_spent_for()
+        if held_for > 0:
+            # The seat's lookups are spent until the reset (#3006): the other
+            # asks in a fan-out, and the next tool call, send nothing.
+            if raise_on_rate_limit:
+                raise UnipileRateLimitError(
+                    lookups_spent_message(held_for), retry_after=held_for,
+                    kind=LOOKUP_BUDGET_SPENT,
+                )
+            logger.info(
+                "Profile fetch skipped for %s: lookups spent for %ds",
+                identifier[:20], int(held_for),
+            )
+            return {}
         try:
             resp = await self._retry_request("GET", url, params=params)
             if resp.status_code in (404, 400):
@@ -3225,6 +3337,13 @@ class BackendClient:
                 result["success"] = True
             else:
                 result["error"] = f"Unipile returned {status_code}"
+        except UnipileRateLimitError as e:
+            # The seat's lookup budget, or a refusal that holds for hours
+            # (#3006): the server's sentence, and how long, for the caller.
+            result["error"] = str(e)
+            result["blocked"] = True
+            if e.retry_after:
+                result["retry_after_seconds"] = int(e.retry_after)
         except (httpx.TimeoutException, httpx.ConnectError) as e:
             result["error"] = str(_wrap_connection_error(e, self.base_url))
         except Exception as e:
