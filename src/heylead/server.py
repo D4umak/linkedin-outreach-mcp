@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.457 (2026-10-15)
+- Fix: a bare link preview reads as its link in both clients (#3077)
+- Fix: a file-only LinkedIn message reads as its file (#3077)
+
 ## v0.10.456 (2026-10-15)
 - Fix: reject boolean message timestamps (#2998)
 - Fix: bound relative timestamps and guard every log level (#2998)

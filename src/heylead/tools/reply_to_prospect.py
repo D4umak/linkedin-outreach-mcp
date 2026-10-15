@@ -725,6 +725,18 @@ async def run_reply_to_prospect(
             await client.close()
             reason = hold.get("reason") or "needs a human"
             return f"Held for operator — {reason}. No reply will be sent."
+        # A file nobody has read is not answered: the owner opens it (#3077).
+        from ..linkedin.message_attachments import is_file_only
+        if outstanding_texts and all(is_file_only(t) for t in outstanding_texts):
+            from ..services.reply_agent import persist_operator_hold
+            await client.close()
+            files = "; ".join(" ".join(t.split()).removeprefix("📎 ") for t in outstanding_texts)
+            reason = f"they sent a file HeyLead cannot read: {files}"
+            await run_db(
+                persist_operator_hold, outreach_id, reason, last_ts,
+                str(last_prospect_msg.get("id") or ""),
+            )
+            return f"Held for operator — {reason}. No reply will be sent."
         agent_outcome = await maybe_run_reply_agent(
             outreach_id=outreach_id,
             campaign=campaign,

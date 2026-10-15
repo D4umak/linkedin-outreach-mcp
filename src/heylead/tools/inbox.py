@@ -24,6 +24,7 @@ from ..linkedin.unipile import (
     UnipileRateLimitError,
     lookups_restart_words,
 )
+from ..linkedin.message_attachments import message_text
 from ..linkedin.message_sender import message_is_ours
 
 logger = logging.getLogger(__name__)
@@ -286,7 +287,8 @@ def _extract_chat_info(chat: dict) -> dict[str, Any]:
     last_text = ""
     if isinstance(chat_messages, list) and chat_messages:
         last_msg = chat_messages[-1] if isinstance(chat_messages[-1], dict) else {}
-        last_text = last_msg.get("text") or last_msg.get("body") or ""
+        # A file-only last message previews as its file (#3077).
+        last_text = message_text(last_msg)
         if not contact_name:
             contact_name = last_msg.get("sender_name") or last_msg.get("sender", {}).get("display_name", "")
 
