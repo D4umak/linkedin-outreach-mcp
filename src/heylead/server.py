@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.455 (2026-10-15)
+- Fix: keep unclaimed jobs pending while they wait
+
 ## v0.10.454 (2026-10-14)
 - #3011 final state in the agentic hand-off
 - programme status and hand-off, 13 Oct (api #3014)

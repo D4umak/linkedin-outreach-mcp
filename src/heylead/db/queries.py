@@ -5517,9 +5517,9 @@ def retry_job(job_id: str, new_scheduled_at: int) -> None:
 def recover_stuck_jobs(stuck_minutes: int = 30) -> int:
     """Mark stuck jobs as failed so they can be retried.
 
-    Recovers:
-    - 'running' jobs with started_at older than *stuck_minutes* (likely crashed)
-    - 'pending' jobs with scheduled_at older than *stuck_minutes* (never picked up)
+    Only a running job with an old started_at can be an abandoned execution.
+    Pending work has not claimed execution time: it may be waiting behind
+    other work or an execution gate. Its queue age is not a failure (#3052).
 
     Returns the number of jobs recovered.
     """
@@ -5536,17 +5536,8 @@ def recover_stuck_jobs(stuck_minutes: int = 30) -> int:
         (now, cutoff),
     )
 
-    # Recover stale pending jobs (scheduled long ago but never claimed)
-    c2 = db.execute(
-        """UPDATE scheduler_jobs
-           SET status = 'failed', error = 'stale_pending_recovered',
-               completed_at = ?
-           WHERE status = 'pending' AND scheduled_at < ?""",
-        (now, cutoff),
-    )
-
     db.commit()
-    count = c1.rowcount + c2.rowcount
+    count = c1.rowcount
     db.close()
     return count
 
