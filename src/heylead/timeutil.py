@@ -20,6 +20,9 @@ from typing import Any
 
 # Anything past this is milliseconds, not seconds (year 5138 in epoch seconds).
 _MILLIS_THRESHOLD = 100_000_000_000
+# Stored message epochs must fit SQLite's signed INTEGER.
+_MAX_EPOCH = (1 << 63) - 1
+_MIN_EPOCH = -(1 << 63)
 
 # Order matters: "mo" must be tried before "m", or a month reads as a minute.
 _RELATIVE_UNITS: tuple[tuple[str, int], ...] = (
@@ -42,7 +45,12 @@ def _from_relative(text: str, now: int) -> int | None:
     match = _RELATIVE_RE.match(text)
     if not match:
         return None
-    amount, unit = int(match.group(1)), match.group(2)
+    try:
+        amount = int(match.group(1))
+    except (ValueError, OverflowError):
+        # Python limits integer-string conversion; provider ages may exceed it.
+        return None
+    unit = match.group(2)
     for suffix, seconds in _RELATIVE_UNITS:
         if unit == suffix:
             return now - amount * seconds
@@ -61,14 +69,20 @@ def to_epoch(value: Any, now: int | None = None) -> int | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        if value <= 0:
+        if value <= 0 or (isinstance(value, float) and not math.isfinite(value)):
             return None
-        return int(value / 1000) if value >= _MILLIS_THRESHOLD else int(value)
+        # Integer division avoids converting arbitrarily large provider ints
+        # to float (which can overflow before int() ever runs).
+        if value >= _MILLIS_THRESHOLD:
+            value = value // 1000 if isinstance(value, int) else value / 1000
+        timestamp = int(value)
+        return timestamp if timestamp <= _MAX_EPOCH else None
     if isinstance(value, str) and value.strip():
         text = value.strip()
         try:
-            return int(datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp())
-        except (ValueError, TypeError):
+            timestamp = int(datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp())
+            return timestamp if _MIN_EPOCH <= timestamp <= _MAX_EPOCH else None
+        except (ValueError, TypeError, OverflowError, OSError):
             pass
         try:
             number = float(text)
@@ -76,7 +90,8 @@ def to_epoch(value: Any, now: int | None = None) -> int | None:
             number = None
         if number is not None:
             return to_epoch(number, now) if math.isfinite(number) else None
-        return _from_relative(text.lower(), now if now is not None else int(_time.time()))
+        timestamp = _from_relative(text.lower(), now if now is not None else int(_time.time()))
+        return timestamp if timestamp is not None and _MIN_EPOCH <= timestamp <= _MAX_EPOCH else None
     return None
 
 

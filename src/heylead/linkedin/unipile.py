@@ -23,6 +23,7 @@ from typing import Any
 import httpx
 
 from .. import config
+from ..timeutil import to_epoch
 from ..author_identity import (
     parse_author_identity,
     sendable_person_id,
@@ -2299,15 +2300,16 @@ class UnipileClient:
                             text = f"{text} {att_url}".strip()
                 sender_id = msg.get("sender_id") or msg.get("sender", {}).get("provider_id", "")
                 sender_name = msg.get("sender_name") or msg.get("sender", {}).get("display_name", "")
-                ts_raw = msg.get("timestamp") or msg.get("created_at") or msg.get("date") or ""
-                timestamp = 0
-                if isinstance(ts_raw, (int, float)):
-                    timestamp = int(ts_raw)
-                elif isinstance(ts_raw, str) and ts_raw:
-                    try:
-                        timestamp = int(datetime.fromisoformat(ts_raw.replace("Z", "+00:00")).timestamp())
-                    except (ValueError, TypeError):
-                        pass
+                ts_raw = next((
+                    msg.get(key) for key in ("timestamp", "created_at", "date")
+                    if isinstance(msg.get(key), bool) or msg.get(key) not in (None, "", 0)
+                ), "")
+                timestamp = to_epoch(ts_raw)
+                # A malformed supplied date is not an unknown/fresh reply.
+                # Keep the legacy zero for truly absent timestamp fields.
+                if timestamp is None and ts_raw != "":
+                    continue
+                timestamp = timestamp or 0
                 message_id = str(msg.get("id") or msg.get("message_id") or "")
                 messages.append({
                     "message_id": message_id,
@@ -2327,7 +2329,11 @@ class UnipileClient:
             # then failed with the same 404. Each caller says what it means.
             if getattr(getattr(e, "response", None), "status_code", None) == 404:
                 raise
-            logger.warning(f"Failed to fetch chat messages: {e}")
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            logger.warning(
+                "Failed to fetch chat messages: error=%s status=%s chat=%s",
+                type(e).__name__, status, chat_id[:8],
+            )
             return []
 
     async def verify_message_sent(

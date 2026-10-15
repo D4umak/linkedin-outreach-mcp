@@ -33,6 +33,11 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.456 (2026-10-15)
+- Fix: reject boolean message timestamps (#2998)
+- Fix: bound relative timestamps and guard every log level (#2998)
+- Fix: preserve valid replies after malformed chat timestamps (#2998)
+
 ## v0.10.455 (2026-10-15)
 - Fix: keep unclaimed jobs pending while they wait
 

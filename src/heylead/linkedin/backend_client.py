@@ -15,6 +15,7 @@ import httpx
 
 from heylead import __version__
 
+from ..timeutil import to_epoch
 from ..author_identity import parse_author_identity
 from ..constants import UNIPILE_POLL_INTERVAL_SECONDS, UNIPILE_POLL_TIMEOUT_SECONDS
 from ..guardrails import check_message, prepare_outbound_text, text_landed
@@ -521,15 +522,7 @@ def _classify_nested_response(
 
 def _parse_timestamp(ts_raw: Any) -> int:
     """Parse a timestamp from various formats into unix seconds."""
-    if isinstance(ts_raw, (int, float)):
-        return int(ts_raw)
-    if isinstance(ts_raw, str) and ts_raw:
-        try:
-            from datetime import datetime
-            return int(datetime.fromisoformat(ts_raw.replace("Z", "+00:00")).timestamp())
-        except (ValueError, TypeError):
-            pass
-    return 0
+    return to_epoch(ts_raw) or 0
 
 
 def multipart_headers(base: dict[str, str]) -> dict[str, str]:
@@ -684,6 +677,7 @@ class BackendClient:
         json: dict | None = None,
         params: dict | None = None,
         no_retry: bool = False,
+        private_read: bool = False,
     ) -> httpx.Response:
         """HTTP request with retry on transient failures.
 
@@ -708,6 +702,9 @@ class BackendClient:
         # Derive a short endpoint label from the URL path for metrics
         endpoint_label = url.rsplit("/", 1)[-1] if "/" in url else url
 
+        # Chat reads may contain private provider IDs in URLs and private
+        # bodies in failures. Keep their logs and flushed metrics metadata-only.
+        retry_target = endpoint_label if private_read else url
         last_error: Exception | None = None
         for attempt in range(max_attempts):
             t0 = _time.monotonic()
@@ -734,7 +731,8 @@ class BackendClient:
                     endpoint_label,
                     status_code=resp.status_code,
                     duration_ms=elapsed,
-                    error=resp.text[:200] if resp.status_code >= 400 else "",
+                    error=(f"HTTP {resp.status_code}" if private_read else resp.text[:200])
+                    if resp.status_code >= 400 else "",
                     backend_ms=backend_ms,
                 )
                 if resp.status_code == 429:
@@ -757,7 +755,7 @@ class BackendClient:
                             delay = _RETRY_BACKOFF[attempt] * 2  # double backoff for rate limits
                         logger.info(
                             "Rate limited (429), retrying %s %s in %ds (attempt %d)",
-                            method, url, delay, attempt + 1,
+                            method, retry_target, delay, attempt + 1,
                         )
                         await asyncio.sleep(delay)
                         continue
@@ -765,7 +763,7 @@ class BackendClient:
                 if resp.status_code in _RETRYABLE_STATUS_CODES and attempt < max_attempts - 1:
                     delay = _RETRY_BACKOFF[attempt]
                     logger.info(
-                        f"Retry {method} {url} (HTTP {resp.status_code}, "
+                        f"Retry {method} {retry_target} (HTTP {resp.status_code}, "
                         f"attempt {attempt + 1}, {delay}s)"
                     )
                     await asyncio.sleep(delay)
@@ -774,13 +772,14 @@ class BackendClient:
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 elapsed = int((_time.monotonic() - t0) * 1000)
                 api_metrics.record(
-                    endpoint_label, status_code=0, duration_ms=elapsed, error=str(e),
+                    endpoint_label, status_code=0, duration_ms=elapsed,
+                    error=type(e).__name__ if private_read else str(e),
                 )
                 last_error = e
                 if attempt < max_attempts - 1:
                     delay = _RETRY_BACKOFF[attempt]
                     logger.info(
-                        f"Retry {method} {url} ({type(e).__name__}, "
+                        f"Retry {method} {retry_target} ({type(e).__name__}, "
                         f"attempt {attempt + 1}, {delay}s)"
                     )
                     await asyncio.sleep(delay)
@@ -2053,7 +2052,7 @@ class BackendClient:
         params = {"limit": str(limit)}
         try:
             try:
-                resp = await self._retry_request("GET", url, params=params)
+                resp = await self._retry_request("GET", url, params=params, private_read=True)
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 raise _wrap_connection_error(e, self.base_url)
             if resp.status_code == 401:
@@ -2076,16 +2075,16 @@ class BackendClient:
                 text = msg.get("text") or msg.get("body") or msg.get("content") or ""
                 sender_id = msg.get("sender_id") or msg.get("sender", {}).get("provider_id", "")
                 sender_name = msg.get("sender_name") or msg.get("sender", {}).get("display_name", "")
-                ts_raw = msg.get("timestamp") or msg.get("created_at") or msg.get("date") or ""
-                timestamp = 0
-                if isinstance(ts_raw, (int, float)):
-                    timestamp = int(ts_raw)
-                elif isinstance(ts_raw, str) and ts_raw:
-                    try:
-                        from datetime import datetime
-                        timestamp = int(datetime.fromisoformat(ts_raw.replace("Z", "+00:00")).timestamp())
-                    except (ValueError, TypeError):
-                        pass
+                ts_raw = next((
+                    msg.get(key) for key in ("timestamp", "created_at", "date")
+                    if isinstance(msg.get(key), bool) or msg.get(key) not in (None, "", 0)
+                ), "")
+                timestamp = to_epoch(ts_raw)
+                # A malformed supplied date is not an unknown/fresh reply.
+                # Keep the legacy zero for truly absent timestamp fields.
+                if timestamp is None and ts_raw != "":
+                    continue
+                timestamp = timestamp or 0
                 message_id = str(msg.get("id") or msg.get("message_id") or "")
                 messages.append({
                     "message_id": message_id,
@@ -2105,7 +2104,11 @@ class BackendClient:
             response = getattr(e, "response", None)
             if getattr(response, "status_code", None) == 404 and _is_gone_chat(response):
                 raise
-            logger.warning(f"Failed to fetch chat messages via backend: {e}")
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            logger.warning(
+                "Failed to fetch chat messages: error=%s status=%s chat=%s",
+                type(e).__name__, status, chat_id[:8],
+            )
             return []
 
     async def verify_message_sent(
