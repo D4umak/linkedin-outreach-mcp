@@ -2110,6 +2110,29 @@ class BackendClient:
             )
             return []
 
+    async def get_message_attachment(
+        self, account_id: str, message_id: str, attachment_id: str,
+    ) -> tuple[bytes, str] | None:
+        """A file a message carries, through the api's owner-only route (#3077).
+
+        Returns the bytes and their content type, or None when the api says
+        there is no such file on this workspace's seat (404) or LinkedIn no
+        longer has it (410).
+        """
+        url = (f"{self.base_url}/api/v1/messages/{quote(message_id, safe='')}"
+               f"/attachments/{quote(attachment_id, safe='')}")
+        try:
+            resp = await self._retry_request("GET", url, private_read=True)
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            raise _wrap_connection_error(e, self.base_url)
+        if resp.status_code == 401:
+            raise UnipileAuthError()
+        if resp.status_code in (404, 410):
+            return None
+        _raise_proxy_refusal(resp, auth_on_403=True)
+        resp.raise_for_status()
+        return resp.content, str(resp.headers.get("content-type") or "")
+
     async def verify_message_sent(
         self,
         account_id: str,

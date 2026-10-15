@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 from ..textutil import first_name
+from .untrusted import fence, neutralise
 from .voice_block import voice_prompt_block
 from .copywriter import rules_for
 from .copywriter import provenance as copy_provenance
@@ -329,15 +330,19 @@ def format_transcript(
         when = (
             time.strftime("%Y-%m-%d %H:%M", time.gmtime(ts)) if ts else "unknown time"
         )
-        text = str(msg.get("text") or "").strip()
+        # One line per turn: a newline in their text would open a line that
+        # reads as one of ours (heylead-api#3086).
+        text = neutralise(msg.get("text"), multiline=False)
         suffix = LATEST_TURN_SUFFIX if i == latest_idx else ""
         lines.append(f"[{i + 1}/{total}] {label} ({when}): {text}{suffix}")
     return "\n".join(lines)
 
 
 def _format_history(messages: list[dict[str, Any]] | None) -> str:
-    """Format conversation history for v63 {{history}} variable."""
-    return format_transcript(messages)
+    """Format conversation history for v63 {{history}} variable, fenced as data (#3086)."""
+    if not messages:
+        return format_transcript(messages)
+    return fence(format_transcript(messages), "conversation, oldest first")
 
 
 def _format_latest_prospect_message(
@@ -354,12 +359,18 @@ def _format_latest_prospect_message(
     texts = [t for t in texts if t]
     fallback = (reply_text or "").strip()
     if not texts:
-        return fallback or "No unanswered prospect message."
+        return (
+            fence(neutralise(fallback, multiline=False), "their latest message")
+            if fallback else "No unanswered prospect message."
+        )
     if fallback and fallback not in texts:
         texts.append(fallback)
     if len(texts) == 1:
-        return texts[0]
-    return "\n".join(f"({i + 1}) {t}" for i, t in enumerate(texts))
+        return fence(neutralise(texts[0], multiline=False), "their latest message")
+    return fence(
+        "\n".join(f"({i + 1}) {neutralise(t, multiline=False)}" for i, t in enumerate(texts)),
+        "their unanswered messages",
+    )
 
 
 def _format_analysis_section(

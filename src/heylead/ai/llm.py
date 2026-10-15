@@ -308,6 +308,11 @@ class LLMClient:
         # (heylead-api #1766).
         prompt = strip_withdrawn_sentence(prompt)
         system = strip_withdrawn_sentence(system)
+        # A prompt that quotes someone else carries the rule that says it is
+        # data, whichever generator built it (heylead-api#3086).
+        from .untrusted import OPEN, UNTRUSTED_RULE
+        if OPEN in prompt and UNTRUSTED_RULE not in system:
+            system = (system + UNTRUSTED_RULE) if system else UNTRUSTED_RULE.lstrip()
         model = self._model_for(provider, tier)
         if provider == "gemini":
             return await self._call_gemini(

@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
+from urllib.parse import quote
 
 from .. import config
 from ..timeutil import to_epoch
@@ -2332,6 +2333,24 @@ class UnipileClient:
                 type(e).__name__, status, chat_id[:8],
             )
             return []
+
+    async def get_message_attachment(
+        self, account_id: str, message_id: str, attachment_id: str,
+    ) -> tuple[bytes, str] | None:
+        """A file a message carries: Unipile's message attachment read (#3077).
+
+        Self-hosted, the key is the user's own, so the only seat is theirs.
+        None when Unipile has no such file.
+        """
+        url = (f"{self.base_url}/api/v1/messages/{quote(message_id, safe='')}"
+               f"/attachments/{quote(attachment_id, safe='')}")
+        resp = await self._client.get(url, headers=self._headers())
+        if resp.status_code in (401, 403):
+            raise UnipileAuthError()
+        if resp.status_code in (404, 410):
+            return None
+        resp.raise_for_status()
+        return resp.content, str(resp.headers.get("content-type") or "")
 
     async def verify_message_sent(
         self,

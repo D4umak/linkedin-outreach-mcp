@@ -19,6 +19,7 @@ proxies through the backend API (same pattern as message_generator.py).
 
 from __future__ import annotations
 
+from .untrusted import fence, neutralise
 from ..textutil import first_name
 
 import json
@@ -178,19 +179,22 @@ def _format_engagement_history(engagements: list[dict[str, Any]] | None) -> str:
     lines = []
     for eng in engagements:
         action = eng.get("action_type", "unknown")
-        post_text = (eng.get("post_text") or "").strip()
+        post_text = neutralise(eng.get("post_text"), multiline=False)
         # Truncate long post text to a short summary
         if len(post_text) > 120:
             post_text = post_text[:117] + "..."
         if action == "comment":
             comment_text = (eng.get("text") or "").strip()
             if post_text and comment_text:
+                # nosemgrep: third-party-text-quoted-in-a-prompt -- the whole block is fenced below (heylead-api#3086)
                 lines.append(f'- [Comment] on post about "{post_text}": "{comment_text}"')
             elif comment_text:
+                # nosemgrep: third-party-text-quoted-in-a-prompt -- the whole block is fenced below (heylead-api#3086)
                 lines.append(f'- [Comment]: "{comment_text}"')
         elif action == "react":
             reaction = eng.get("reaction_type", "LIKE")
             if post_text:
+                # nosemgrep: third-party-text-quoted-in-a-prompt -- the whole block is fenced below (heylead-api#3086)
                 lines.append(f'- [{reaction}] on post about "{post_text}"')
             else:
                 lines.append(f"- [{reaction}] on their post")
@@ -200,7 +204,7 @@ def _format_engagement_history(engagements: list[dict[str, Any]] | None) -> str:
         return ""
     header = (
         "## PRIOR WARM-UP ENGAGEMENTS (things you already did on their posts)\n"
-        + "\n".join(lines)
+        + fence("\n".join(lines), "their posts and your engagements")
         + "\n\nIMPORTANT: Reference these interactions naturally — "
         "they are shared context the prospect may remember. "
         "Use them as an opener or bridge to the conversation."

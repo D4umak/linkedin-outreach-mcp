@@ -16,6 +16,7 @@ import re
 from typing import Any
 
 from ..constants import LLM_TIER_FAST
+from .untrusted import fence
 from .llm import LLMClient
 
 # What a reply reads as when the model could not classify it (#2390). Never
@@ -378,7 +379,8 @@ async def classify_sentiment(
             f"Earlier in this thread (oldest first):\n{_prior}\n\n" if _prior else ""
         )
         prompt = (
-            f'{_context}Classify this LinkedIn reply message:\n\n"{reply_text}"\n\n'
+            f'{_context}Classify this LinkedIn reply message:\n\n'
+            f'{fence(reply_text, "their message")}\n\n'
             "Output ONLY one word: positive, negative, question, neutral, "
             "engaged, out_of_office, or opt_out."
         )

@@ -13,6 +13,7 @@ Core engagement loop:
 
 from __future__ import annotations
 
+from ..ai.untrusted import fence, neutralise
 from ..hosted_writes import engage_prospect_refused, ensure_laptop_may_write, laptop_writes_refused
 import json
 import logging
@@ -890,6 +891,7 @@ async def _send_comment(
             pass  # Never block engagement flow
 
         output = f"Commented on {prospect_name}'s post:\n"
+        # nosemgrep: third-party-text-quoted-in-a-prompt -- our own comment, shown to the user
         output += f'   "{comment_text}"'
         if style:
             output += f"\n\n   Style: {style}"
@@ -1519,7 +1521,8 @@ def comment_reply_prompt(
     return f"""Generate a brief reply to this LinkedIn comment thread.
 
 Your original comment: "{our_comment}"
-{prospect_name}'s reply: "{reply_text}"
+{prospect_name}'s reply:
+{fence(neutralise(reply_text, multiline=False), "their reply")}
 
 Write a natural, voice-matched reply (2-3 sentences max).
 

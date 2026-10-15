@@ -24,6 +24,7 @@ import logging
 import re
 from typing import Any
 
+from .untrusted import fence, neutralise
 from . import schemas
 from .length_fixer import shorten_to_limit
 from .llm import LLMClient
@@ -93,6 +94,20 @@ def _apply_scheduling_loop_override(
         )
     return f"{reply_text}\n{note}", "scheduling_loop"
 
+
+def _latest_block(reply_text: str) -> str:
+    """Their message fenced as data; a note of ours after it stays outside (#3086).
+
+    ``_apply_scheduling_loop_override`` appends its note on the last line, and
+    only a line it wrote starts with "[Scheduling has gone back and forth".
+    """
+    body, note = reply_text, ""
+    head, sep, tail = (reply_text or "").rpartition("\n")
+    if sep and tail.startswith("[Scheduling has gone back and forth"):
+        body, note = head, tail
+    block = fence(neutralise(body, multiline=False), "their latest message")
+    return f"{block}\n{note}" if note else block
+
 REPLY_MAX_CHARS = 500
 NEGATIVE_MAX_CHARS = 200  # Graceful closes should be very short
 
@@ -142,7 +157,7 @@ Relevance: {relevance_hook}
 {conversation_history}
 
 ## THEIR LATEST MESSAGE (positive sentiment — they're interested)
-"{reply_text}"
+{reply_text}
 
 ## BOOKING LINK
 {booking_link_section}
@@ -200,7 +215,7 @@ Relevance: {relevance_hook}
 {conversation_history}
 
 ## THEIR LATEST MESSAGE (question — they want more info)
-"{reply_text}"
+{reply_text}
 
 ## STRATEGY
 The prospect asked a question. Your goal:
@@ -244,7 +259,7 @@ Name: {prospect_name}
 {conversation_history}
 
 ## THEIR LATEST MESSAGE (they asked if this was meant for them)
-"{reply_text}"
+{reply_text}
 
 ## STRATEGY
 We checked: they are not the buyer we were looking for. Your ONLY goal:
@@ -291,7 +306,7 @@ Target: {campaign_target}
 {conversation_history}
 
 ## THEIR LATEST MESSAGE (they asked if this was meant for them)
-"{reply_text}"
+{reply_text}
 
 ## STRATEGY
 We checked: they ARE the right person. Your goal:
@@ -332,7 +347,7 @@ Name: {prospect_name}
 {conversation_history}
 
 ## THEIR LATEST MESSAGE (negative sentiment — not interested)
-"{reply_text}"
+{reply_text}
 
 ## STRATEGY
 The prospect is not interested. Your ONLY goal:
@@ -385,7 +400,7 @@ Relevance: {relevance_hook}
 {conversation_history}
 
 ## THEIR LATEST MESSAGE (engaged — answering your question or sharing context)
-"{reply_text}"
+{reply_text}
 
 ## STRATEGY
 {engaged_strategy}
@@ -440,7 +455,7 @@ Relevance: {relevance_hook}
 {conversation_history}
 
 ## THEIR LATEST MESSAGE (neutral — acknowledgment without clear intent)
-"{reply_text}"
+{reply_text}
 
 ## STRATEGY
 The prospect gave a neutral response (e.g., "thanks", "cool", "got it").
@@ -480,7 +495,7 @@ Name: {sender_name}
 {conversation_history}
 
 ## THEIR LATEST MESSAGE
-"{reply_text}"
+{reply_text}
 
 ## YOUR BOOKING LINK
 {booking_link}
@@ -518,7 +533,7 @@ Name: {sender_name}
 {conversation_history}
 
 ## THEIR LATEST MESSAGE (shared a booking link)
-"{reply_text}"
+{reply_text}
 
 ## STRATEGY
 The prospect shared their calendar or booking link. This means they WANT to meet.
@@ -566,7 +581,9 @@ def _format_conversation_history(messages: list[dict]) -> str:
     prompts, the v63 prompt and the backend reply prompts all show the same
     thread shape (9 Sep reply-context incident).
     """
-    return format_transcript(messages)
+    if not messages:
+        return format_transcript(messages)
+    return fence(format_transcript(messages), "conversation, oldest first")
 
 
 def _build_intelligence_text(prospect_analysis: dict[str, Any] | None) -> str:
@@ -764,7 +781,7 @@ async def generate_reply(
             "sender_company": sender_profile.get("company", ""),
             "voice_block": voice_prompt_block(voice_signature),
             "prospect_name": prospect_name,
-            "reply_text": reply_text,
+            "reply_text": _latest_block(reply_text),
             "max_chars": max_chars,
         }
 
@@ -779,7 +796,7 @@ async def generate_reply(
             format_kwargs.update({
                 "prospect_title": prospect.get("title", ""),
                 "prospect_company": prospect.get("company", ""),
-                "prospect_headline": prospect.get("headline", ""),
+                "prospect_headline": neutralise(prospect.get("headline", ""), multiline=False, limit=300),
                 "prospect_intelligence": prospect_intelligence,
                 "campaign_target": campaign_context.get("target_description", ""),
                 "relevance_hook": campaign_context.get("relevance_hook", ""),

@@ -229,8 +229,10 @@ async def compile_daily_digest() -> str:
                 ts = eng.get("created_at", 0)
                 if ts:
                     t = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+                    # nosemgrep: third-party-text-quoted-in-a-prompt -- a digest for the user, not a prompt
                     lines.append(f'- "{text}" -> {name} ({title}) -- {t}')
                 else:
+                    # nosemgrep: third-party-text-quoted-in-a-prompt -- a digest for the user, not a prompt
                     lines.append(f'- "{text}" -> {name} ({title})')
             lines.append("")
     except Exception:

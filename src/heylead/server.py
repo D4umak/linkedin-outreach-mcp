@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.458 (2026-10-15)
+- Fix: fence prospect text as data in every client prompt and the inbox read (#3086)
+- New: open_file saves the files a person sent, to read them (#3077)
+
 ## v0.10.457 (2026-10-15)
 - Fix: a bare link preview reads as its link in both clients (#3077)
 - Fix: a file-only LinkedIn message reads as its file (#3077)
@@ -4229,7 +4233,7 @@ async def _inbox_impl(
     """Read the LinkedIn inbox, and answer from it.
 
     Read any conversation in your LinkedIn inbox, not just campaign contacts.
-    "list", "read" and "comment_drafts" only read. "reply" and "approve_draft"
+    "list", "read", "open_file" and "comment_drafts" only read. "reply" and "approve_draft"
     SEND a LinkedIn message and cannot be undone; "discard_draft" throws a
     draft away. Use send_message for a campaign contact, and this tool for
     anyone else.
@@ -4238,15 +4242,17 @@ async def _inbox_impl(
         action: What to do:
             "list" — List recent conversations with last message preview
             "read" — Read full conversation thread
+            "open_file" — Save the files a conversation carries (newest
+                first, at most 5) and return where they are, to read them
             "reply" — Send a message to any inbox conversation
             "comment_drafts" — Replies drafted for comments on your own posts,
                 waiting for your approval. Nothing is sent until you approve.
             "approve_draft" — Send one drafted reply (chat_id = draft id).
                 Pass text= to send an edited version instead.
             "discard_draft" — Throw a draft away without sending (chat_id = draft id)
-        chat_id: Chat ID to read (from list output). For 'read' and 'reply' actions.
+        chat_id: Chat ID to read (from list output). For 'read', 'open_file' and 'reply'.
             For 'approve_draft' and 'discard_draft', the draft id.
-        name: Contact name to search for (partial match). For 'read' and 'reply' actions.
+        name: Contact name to search for (partial match). For 'read', 'open_file' and 'reply'.
         limit: Max conversations (list) or messages (read) to show. Default 30.
         text: Message text to send. Required for 'reply' action.
     """
@@ -4966,7 +4972,7 @@ async def inbox(action: str = "list", chat_id: str = "", name: str = "", limit: 
     Replying, approving a draft and discarding one are answer_inbox.
 
     Args:
-        action: "list", "read" or "comment_drafts".
+        action: "list", "read", "open_file" (save the files a person sent, to read them) or "comment_drafts".
         chat_id: Which conversation.
         name: Find the conversation by the person's name.
         limit: How many to show.

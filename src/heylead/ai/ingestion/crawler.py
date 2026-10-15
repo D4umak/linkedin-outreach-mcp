@@ -142,19 +142,69 @@ async def _firecrawl_scrape(
 # Simple fallback
 # ──────────────────────────────────────────────
 
-async def _crawl_simple(url: str) -> list[dict[str, Any]]:
-    """Simple single-page fetch + HTML-to-text extraction."""
-    async with httpx.AsyncClient(
-        timeout=_TIMEOUT,
-        follow_redirects=True,
-        headers={"User-Agent": "HeyLead/1.0"},
-    ) as client:
+_MAX_REDIRECTS = 5
+
+
+def _public_destination(url: str) -> bool:
+    """True when every address ``url`` resolves to is a public one (heylead-api#3086)."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlsplit
+
+    parts = urlsplit((url or "").strip())
+    if parts.scheme.lower() not in ("http", "https") or not parts.hostname:
+        return False
+    try:
+        infos = socket.getaddrinfo(parts.hostname, parts.port or 443, proto=socket.IPPROTO_TCP)
+    except Exception:
+        return False
+    for info in infos or ():
         try:
-            resp = await client.get(url)
+            ip = ipaddress.ip_address(str(info[4][0]).split("%", 1)[0])
+        except ValueError:
+            return False
+        ip = getattr(ip, "ipv4_mapped", None) or ip
+        if (ip.is_loopback or ip.is_link_local or ip.is_private or ip.is_reserved
+                or ip.is_unspecified or ip.is_multicast):
+            return False
+    return bool(infos)
+
+
+async def _crawl_simple(url: str) -> list[dict[str, Any]]:
+    """Simple single-page fetch + HTML-to-text extraction, public addresses only.
+
+    Every hop is checked before it is opened and redirects are followed by
+    hand: ``follow_redirects=True`` let a page bounce the crawler to a cloud
+    metadata address or the user's own network (heylead-api#3086).
+    """
+    import asyncio
+    from urllib.parse import urljoin
+
+    resp = None
+    current = url
+    try:
+        for _ in range(_MAX_REDIRECTS + 1):
+            if not await asyncio.to_thread(_public_destination, current):
+                logger.warning(f"Simple crawl refused a non-public destination for {url}")
+                return []
+            async with httpx.AsyncClient(
+                timeout=_TIMEOUT,
+                follow_redirects=False,
+                headers={"User-Agent": "HeyLead/1.0"},
+            ) as client:
+                resp = await client.get(current)
+            location = resp.headers.get("location")
+            if resp.is_redirect and location:
+                current = urljoin(current, location)
+                resp = None
+                continue
             resp.raise_for_status()
-        except Exception as e:
-            logger.error(f"Simple crawl failed for {url}: {e}")
-            return []
+            break
+    except Exception as e:
+        logger.error(f"Simple crawl failed for {url}: {e}")
+        return []
+    if resp is None:
+        return []
 
     html = resp.text
     text = _html_to_text(html)
