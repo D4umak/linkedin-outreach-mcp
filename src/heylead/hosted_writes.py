@@ -191,6 +191,22 @@ def post_publish_failed() -> str:
     )
 
 
+def post_text_not_kept() -> str:
+    """create_post(text=...): the draft did not read back with those words."""
+    return (
+        "Nothing was posted. The draft did not keep your exact words, so it was "
+        f"not published. Check it in {_d('content/posts')}."
+    )
+
+
+def post_photo_not_kept() -> str:
+    """create_post(text=...): the draft's picture is not the one asked for."""
+    return (
+        "Nothing was posted. The draft does not carry the photo you chose, so it "
+        f"was not published. Check it in {_d('content/posts')}."
+    )
+
+
 def post_still_drafting() -> str:
     """The cloud saved the post but has not written its words yet."""
     return (

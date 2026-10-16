@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "heylead"
-version = "0.10.460"
+version = "0.10.461"
 description = "AI agent for LinkedIn outreach: finds the right people, writes in your voice, follows up and handles replies. From Claude Code, Cursor, any MCP client or a web dashboard."
 readme = "README.md"
 license = "MIT"
@@ -104,6 +104,12 @@ select = ["E9", "F821", "F811", "F823", "F632", "F702", "F706", "B006", "T10", "
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# The repo root on sys.path, so the plugin below imports under a bare `pytest`
+# (CI) as well as `python -m pytest`; pytest reads pythonpath before -p plugins.
+pythonpath = ["."]
+# tests/plugins/clockshift.py: off unless HEYLEAD_TEST_CLOCK or
+# HEYLEAD_TEST_CLOCK_JUMP is set (the pinned-instant lane, api #3167).
+addopts = "-p tests.plugins.clockshift"
 markers = [
     "real_job_ownership: see the real local_scheduler_engine_enabled, not the suite's default",
 ]

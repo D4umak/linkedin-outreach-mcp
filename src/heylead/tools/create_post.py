@@ -27,6 +27,7 @@ async def run_create_post(
     tone: str = "professional",
     platforms: str = "linkedin",
     image: str = "",
+    text: str = "",
 ) -> str:
     """Generate and publish a voice-matched LinkedIn post.
 
@@ -36,6 +37,10 @@ async def run_create_post(
         platforms: "linkedin". A request that names X gets X_NOT_AVAILABLE and
             nothing is sent to X; LinkedIn, if also named, still posts.
         image: Optional path to a photo to attach.
+        text: The post's own words, already approved. Published as given
+            (only blank space around it is trimmed): no drafting, and on a
+            hosted account no library photo; the draft is read back and
+            must match before it is published (heylead-api#3160).
     """
     platform_list = [p.strip().lower() for p in platforms.split(",")]
     wants_x = "x" in platform_list or "twitter" in platform_list
@@ -49,6 +54,13 @@ async def run_create_post(
             "Setup required before creating posts.\n\n"
             "Please run setup_profile first."
         )
+
+    text = (text or "").strip()
+    if text:
+        refused = _refuse_text(text)
+        if refused:
+            return refused
+        topic = (topic or "").strip() or _topic_from(text)
 
     if not topic:
         return (
@@ -70,7 +82,10 @@ async def run_create_post(
             post_image = load_post_image(image)
         except ValueError as e:
             return f"{e}"
-        answer = await _create_post_in_cloud(topic, tone, post_image)
+        if text:
+            answer = await _publish_exact_in_cloud(text, topic, tone, post_image)
+        else:
+            answer = await _create_post_in_cloud(topic, tone, post_image)
         return f"{answer}\n\n{X_NOT_AVAILABLE}" if wants_x else answer
 
     # Check at least one platform has credentials.
@@ -94,6 +109,12 @@ async def run_create_post(
         post_image = load_post_image(image)
     except ValueError as e:
         return f"{e}"
+
+    if text:
+        if not has_linkedin:
+            return X_NOT_AVAILABLE
+        answer = await _send_linkedin(account_id, text, topic, tone, post_image)
+        return f"{answer}\n\n{X_NOT_AVAILABLE}" if wants_x else answer
 
     # ── Load profile + voice ──
     profile = await run_db(get_setting, "profile", {})
@@ -155,6 +176,92 @@ def cloud_tone(tone: str) -> str:
     if key in _CLOUD_TONES:
         return key
     return _TONE_TO_CLOUD.get(key, "thought-leader")
+
+
+# The api's limits (content_posts.TEXT_MIN_TO_PUBLISH and TEXT_MAX): text
+# outside them would be saved and then refused at Publish.
+TEXT_MIN = 30
+TEXT_MAX = 3000
+
+
+def _refuse_text(text: str) -> str:
+    if len(text) < TEXT_MIN:
+        return f"Nothing was posted. A LinkedIn post needs at least {TEXT_MIN} characters."
+    if len(text) > TEXT_MAX:
+        return (
+            f"Nothing was posted. A LinkedIn post can be at most {TEXT_MAX:,} characters; "
+            f"this one is {len(text):,}."
+        )
+    return ""
+
+
+def _topic_from(text: str) -> str:
+    """The draft's topic label in Content: the post's first line."""
+    first = next((line for line in text.splitlines() if line.strip()), text)
+    return cut_at_word(first, 100)
+
+
+async def _publish_exact_in_cloud(text: str, topic: str, tone: str, image) -> str:
+    """create_post(text=...) for a hosted account: these words, this photo.
+
+    POST /content/posts always drafts its own words and reserves a library
+    photo, so the draft is created unscheduled (a default slot could publish
+    the drafter's words on its own), its text replaced, its picture replaced
+    or removed, and then read back. Only a draft that holds exactly *text*
+    and exactly *image* (or no picture) is published.
+    """
+    client = get_linkedin_client()
+    status, post = await client.create_content_post(topic, cloud_tone(tone), scheduled_at=0)
+    if status >= 400 or not post.get("id"):
+        detail = str(post.get("detail") or "").strip()
+        return f"Nothing was posted. {detail}" if detail else hosted_writes.post_publish_failed()
+    post_id = str(post["id"])
+
+    st, saved = await client.update_content_post_text(post_id, text)
+    if st >= 400:
+        detail = str(saved.get("detail") or "").strip()
+        return f"Nothing was posted. {detail}" if detail else hosted_writes.post_text_not_kept()
+
+    try:
+        if image:
+            filename, data, mime = image
+            st, _ = await client.put_content_post_image(post_id, filename, data, mime)
+        else:
+            st, _ = await client.delete_content_post_image(post_id)
+    except Exception as e:
+        logger.warning("create_post: the photo could not be set on %s: %s", post_id, e)
+        st = 500
+    if st >= 400:
+        return hosted_writes.post_photo_not_kept()
+
+    # Read back what Publish will send.
+    st, current = await client.get_content_post(post_id)
+    if st >= 400 or str(current.get("text") or "") != text:
+        return hosted_writes.post_text_not_kept()
+    img_status, img_bytes = await client.get_content_post_image(post_id)
+    has_picture = bool(current.get("has_image")) or (img_status < 400 and bool(img_bytes))
+    if image:
+        if img_status >= 400 or img_bytes != image[1]:
+            return hosted_writes.post_photo_not_kept()
+    elif has_picture:
+        return hosted_writes.post_photo_not_kept()
+
+    st, settings = await client.get_content_settings()
+    publish_mode = str(settings.get("publish_mode") or "") if st < 400 else ""
+    if publish_mode != "auto":
+        return hosted_writes.post_held()
+
+    st, published = await client.publish_content_post(post_id)
+    if st == 409 and "no linkedin account" in str(published.get("detail") or "").lower():
+        return hosted_writes.post_no_seat()
+    if st >= 400:
+        return hosted_writes.post_publish_failed()
+    await run_db(log_action, "post_created", details={
+        "topic": topic, "tone": tone, "post_id": published.get("post_id", ""),
+        "platform": "linkedin", "via": "cloud", "exact_text": True,
+        "chars": len(text), "image": image[0] if image else "",
+    })
+    return hosted_writes.post_published()
 
 
 async def _create_post_in_cloud(topic: str, tone: str, image) -> str:
@@ -283,6 +390,11 @@ Return ONLY the post text, nothing else."""
     except Exception as e:
         return f"LinkedIn: Failed to generate post: {e}"
 
+    return await _send_linkedin(account_id, post_text, topic, tone, image)
+
+
+async def _send_linkedin(account_id, post_text, topic, tone, image=None) -> str:
+    """Publish *post_text* as it is, from this machine."""
     try:
         ensure_laptop_may_write("create_post")
         client = get_linkedin_client()

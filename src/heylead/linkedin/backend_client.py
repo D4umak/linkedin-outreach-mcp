@@ -3820,10 +3820,20 @@ class BackendClient:
         try:
             if method == "GET":
                 resp = await self._client.get(url, headers=self._headers())
-            else:
+            elif method == "DELETE":
+                resp = await self._client.delete(url, headers=self._headers())
+            elif method == "POST":
                 resp = await self._post(url, json=json_body or {}, headers=self._headers())
+            else:
+                resp = await self._client.request(
+                    method, url, json=json_body or {}, headers=self._headers(),
+                )
         except (httpx.ConnectError, httpx.TimeoutException) as e:
             raise _wrap_connection_error(e, self.base_url) from e
+        return self._cloud_answer(resp)
+
+    @staticmethod
+    def _cloud_answer(resp: httpx.Response) -> tuple[int, dict[str, Any]]:
         if resp.status_code == 401:
             raise UnipileAuthError("Backend JWT expired or invalid.")
         try:
@@ -3832,9 +3842,56 @@ class BackendClient:
             body = {}
         return resp.status_code, body
 
-    async def create_content_post(self, topic: str, tone: str) -> tuple[int, dict[str, Any]]:
-        """POST /content/posts: the cloud drafts a post from a topic."""
-        return await self._cloud_call("POST", "/content/posts", {"topic": topic, "tone": tone})
+    async def create_content_post(
+        self, topic: str, tone: str, scheduled_at: int | None = None,
+    ) -> tuple[int, dict[str, Any]]:
+        """POST /content/posts: the cloud drafts a post from a topic.
+
+        ``scheduled_at=0`` leaves the draft unscheduled; omitted, the cloud
+        gives it the next free slot.
+        """
+        body: dict[str, Any] = {"topic": topic, "tone": tone}
+        if scheduled_at is not None:
+            body["scheduled_at"] = scheduled_at
+        return await self._cloud_call("POST", "/content/posts", body)
+
+    async def get_content_post(self, post_id: str) -> tuple[int, dict[str, Any]]:
+        """GET /content/posts/{id}: the post as the dashboard reads it."""
+        return await self._cloud_call("GET", f"/content/posts/{post_id}")
+
+    async def update_content_post_text(self, post_id: str, text: str) -> tuple[int, dict[str, Any]]:
+        """PATCH /content/posts/{id}: replace the draft's words."""
+        return await self._cloud_call("PATCH", f"/content/posts/{post_id}", {"text": text})
+
+    async def put_content_post_image(
+        self, post_id: str, name: str, data: bytes, mime: str,
+    ) -> tuple[int, dict[str, Any]]:
+        """POST /content/posts/{id}/image: this file, in place of any picture
+        the draft holds (a library photo reserved onto it goes back)."""
+        url = f"{self.base_url}/api/v1/content/posts/{post_id}/image"
+        try:
+            resp = await self._post(
+                url, files={"image": (name, data, mime)},
+                headers=multipart_headers(self._headers()),
+            )
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            raise _wrap_connection_error(e, self.base_url) from e
+        return self._cloud_answer(resp)
+
+    async def delete_content_post_image(self, post_id: str) -> tuple[int, dict[str, Any]]:
+        """DELETE /content/posts/{id}/image: the draft goes out with no picture."""
+        return await self._cloud_call("DELETE", f"/content/posts/{post_id}/image")
+
+    async def get_content_post_image(self, post_id: str) -> tuple[int, bytes]:
+        """GET /content/posts/{id}/image: the bytes the post would carry."""
+        url = f"{self.base_url}/api/v1/content/posts/{post_id}/image"
+        try:
+            resp = await self._client.get(url, headers=self._headers())
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            raise _wrap_connection_error(e, self.base_url) from e
+        if resp.status_code == 401:
+            raise UnipileAuthError("Backend JWT expired or invalid.")
+        return resp.status_code, resp.content if resp.status_code < 400 else b""
 
     async def attach_library_photo(self, post_id: str, photo_id: str) -> tuple[int, dict[str, Any]]:
         """POST /content/posts/{id}/image/library: put a library photo on a draft."""

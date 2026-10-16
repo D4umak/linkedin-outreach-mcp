@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.461 (2026-10-16)
+- New: publish the user's exact approved text and photo (#3160)
+
 ## v0.10.460 (2026-10-16)
 - Security: the mcp floor is 1.30.0 (GHSA-84m7-p3x7-pcfv, StreamableHTTP session accumulation)
 
@@ -3688,11 +3691,14 @@ async def create_post(
     tone: str = "professional",
     platforms: str = "linkedin",
     image: str = "",
+    text: str = "",
 ) -> str:
     """Generate and publish a voice-matched post to LinkedIn.
 
     Writes the post in your voice and publishes it immediately on your own
-    LinkedIn account. LinkedIn is the only platform HeyLead posts to.
+    LinkedIn account. LinkedIn is the only platform HeyLead posts to. To
+    publish words the user has already written or approved, pass them as
+    `text`: they go out exactly as given, with `image` or with no photo.
 
     Args:
         topic: What to post about (e.g., "share a tip about cold outreach",
@@ -3700,6 +3706,9 @@ async def create_post(
         tone: Post tone: "professional", "casual", "thought-leader", "storytelling".
         platforms: "linkedin" (the only one).
         image: Path to a photo to attach. png, jpg, gif or webp, up to 10MB.
+        text: The post's exact words, 30 to 3,000 characters. Nothing is
+            rewritten; the draft is checked against them before it is
+            published. `topic` is then only its label (default: first line).
     """
     from .tools.create_post import run_create_post
     from .tools.organization import refuse_if_viewer
@@ -3711,7 +3720,7 @@ async def create_post(
     logger.info(f"Running create_post: topic={topic}, tone={tone}, platforms={platforms}")
     try:
         return await run_traced(
-            "create_post", run_create_post(topic, tone, platforms, image),
+            "create_post", run_create_post(topic, tone, platforms, image, text),
         )
     except Exception as e:
         logger.error(f"create_post failed: {e}", exc_info=True)
