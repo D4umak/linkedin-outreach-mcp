@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.460 (2026-10-16)
+- Security: the mcp floor is 1.30.0 (GHSA-84m7-p3x7-pcfv, StreamableHTTP session accumulation)
+
 ## v0.10.459 (2026-10-16)
 - Fix: a file name stays one line; open_file step outside the fence (#3077)
 - New: the reviewer loop closes (#3096)
