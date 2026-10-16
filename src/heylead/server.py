@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.459 (2026-10-16)
+- Fix: a file name stays one line; open_file step outside the fence (#3077)
+- New: the reviewer loop closes (#3096)
+
 ## v0.10.458 (2026-10-15)
 - Fix: fence prospect text as data in every client prompt and the inbox read (#3086)
 - New: open_file saves the files a person sent, to read them (#3077)

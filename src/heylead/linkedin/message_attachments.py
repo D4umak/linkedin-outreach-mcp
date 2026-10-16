@@ -16,8 +16,12 @@ reads ``text`` without going through here.
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Mapping
 from typing import Any
+
+# The longest file name a line shows; longer ones end in "…".
+NAME_MAX = 120
 
 _TYPE_LABELS = {
     "application/pdf": "PDF",
@@ -49,6 +53,23 @@ def _readable_url(url: str) -> bool:
     return url.startswith(("http://", "https://"))
 
 
+def _one_line(value: Any, limit: int = 0) -> str:
+    """``value`` as one line: every control, format or separator character a space, runs folded.
+
+    The sender picks a file's name and a link's address. A line break in
+    either used to start a line of words under the file line, which
+    ``is_file_only`` and the reply prompt read as the person's own (#3077,
+    16 Oct 2026).
+    """
+    text = "".join(
+        " " if unicodedata.category(ch)[0] in "CZ" else ch for ch in str(value or "")
+    )
+    text = " ".join(text.split())
+    if limit and len(text) > limit:
+        text = text[: limit - 1].rstrip() + "…"
+    return text
+
+
 def _size(n: Any) -> int | None:
     if isinstance(n, bool):
         return None
@@ -63,17 +84,18 @@ def attachment_summary(raw: Mapping[str, Any]) -> list[dict[str, Any]]:
     """Each attachment of a raw Unipile message as name, type and size.
 
     Never the ``att://`` handle: it opens nothing. ``id`` is kept so a
-    caller can ask the api for the file.
+    caller can ask the api for the file. A name or link is one line
+    (``_one_line``), so it cannot add words to the message.
     """
     out: list[dict[str, Any]] = []
     for att in raw.get("attachments") or []:
         if not isinstance(att, Mapping):
             continue
-        url = str(att.get("url") or att.get("link") or att.get("href") or "")
+        url = _one_line(att.get("url") or att.get("link") or att.get("href"))
         item: dict[str, Any] = {
             "id": str(att.get("id") or ""),
             "type": str(att.get("type") or ""),
-            "name": str(att.get("file_name") or att.get("name") or att.get("title") or ""),
+            "name": _one_line(att.get("file_name") or att.get("name") or att.get("title"), NAME_MAX),
             "mimetype": str(att.get("mimetype") or att.get("mime_type") or ""),
             "size": _size(att.get("file_size") or att.get("size")),
             "unavailable": bool(att.get("unavailable")),
@@ -94,9 +116,10 @@ def _type_label(att: Mapping[str, Any]) -> str:
         return "video"
     if mimetype.startswith("audio/"):
         return "audio"
-    name = str(att.get("name") or "")
-    if "." in name:
-        return name.rsplit(".", 1)[1].upper()
+    ext = str(att.get("name") or "").rpartition(".")[2]
+    # An extension is a short word, never the rest of a name after a dot.
+    if ext and ext != att.get("name") and ext.isalnum() and len(ext) <= 8:
+        return ext.upper()
     return ""
 
 
