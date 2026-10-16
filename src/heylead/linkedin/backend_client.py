@@ -3843,16 +3843,20 @@ class BackendClient:
         return resp.status_code, body
 
     async def create_content_post(
-        self, topic: str, tone: str, scheduled_at: int | None = None,
+        self, topic: str, tone: str, scheduled_at: int | None = None, text: str = "",
     ) -> tuple[int, dict[str, Any]]:
         """POST /content/posts: the cloud drafts a post from a topic.
 
         ``scheduled_at=0`` leaves the draft unscheduled; omitted, the cloud
-        gives it the next free slot.
+        gives it the next free slot. ``text`` is the author's own words: an
+        api with heylead-api#3231 stores them and writes no draft; an older
+        one ignores the field and drafts from the topic.
         """
         body: dict[str, Any] = {"topic": topic, "tone": tone}
         if scheduled_at is not None:
             body["scheduled_at"] = scheduled_at
+        if text:
+            body["text"] = text
         return await self._cloud_call("POST", "/content/posts", body)
 
     async def get_content_post(self, post_id: str) -> tuple[int, dict[str, Any]]:

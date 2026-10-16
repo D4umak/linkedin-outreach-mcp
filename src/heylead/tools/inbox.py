@@ -471,7 +471,7 @@ async def run_inbox(
                 "'comment_drafts', 'approve_draft', or 'discard_draft'."
             )
     except InboxError as e:
-        return f"⚠️ **Inbox error**: {e}"
+        return f"❌ **Inbox error**: {e}"
     finally:
         await client.close()
 

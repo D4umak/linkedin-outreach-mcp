@@ -8,7 +8,8 @@ reached us only if they wrote in.
 registration. Each MCP call is timed and becomes a record of seven fields:
 the tool, its ``action`` (an identifier word, else "other"), the MCP host
 from a closed list, ok, the exception class, the duration and the transport.
-Never the arguments, the result, a prospect, a URL or a message.
+Never the arguments, the result, a prospect, a URL or a message. The result is read only to
+ask handled_error.classify whether the tool answered with a handled error (api #3206).
 
 Records wait in memory and are posted in batches (50 records, or 2 seconds
 after the first one) through the backend client to
@@ -33,6 +34,7 @@ import uuid
 from typing import Any, Callable
 
 from . import background
+from .handled_error import classify
 from .textutil import contains_term
 
 logger = logging.getLogger(__name__)
@@ -120,12 +122,13 @@ def _client_and_transport(rctx: Any) -> tuple[str, str]:
 
 def build_record(
     *, tool: str, action: str, rctx: Any, duration_s: float,
-    error: BaseException | None,
+    error: BaseException | None, result: Any = None,
 ) -> dict[str, Any] | None:
     """The seven-field record, or None when a name falls outside its shape."""
     if not _TOOL.fullmatch(tool):
         return None
-    error_class = type(error).__name__ if error is not None else ""
+    # A handled error ("❌ …") is a failed call too (api #3206); only its class leaves here.
+    ok, error_class = classify(result, error)
     if error_class and not _ERROR_CLASS.fullmatch(error_class):
         error_class = "Exception"
     client, transport = _client_and_transport(rctx)
@@ -135,7 +138,7 @@ def build_record(
         "tool": tool,
         "action": action,
         "client": client,
-        "ok": error is None,
+        "ok": ok,
         "error_class": error_class,
         "duration_ms": max(0, min(int(round(duration_s * 1000)), 3_600_000)),
         "transport": transport,
@@ -238,11 +241,12 @@ async def flush() -> int:
                         type(exc).__name__, len(batch))
 
 
-def _record(tool: str, action: str, rctx: Any, started: float, error: BaseException | None) -> None:
+def _record(tool: str, action: str, rctx: Any, started: float, error: BaseException | None,
+            result: Any = None) -> None:
     try:
         record = build_record(
             tool=tool, action=action, rctx=rctx,
-            duration_s=time.perf_counter() - started, error=error,
+            duration_s=time.perf_counter() - started, error=error, result=result,
         )
         if record is not None:
             enqueue(record)
@@ -274,7 +278,7 @@ def telemetered(name: str, fn: Callable[..., Any], is_async: bool) -> Callable[.
         except Exception as exc:
             _record(name, action, rctx, started, exc)
             raise
-        _record(name, action, rctx, started, None)
+        _record(name, action, rctx, started, None, result)
         return result
 
     setattr(wrapper, MARKER, True)

@@ -196,6 +196,7 @@ default; setting the variable gives a session the full set of 47.
 | Tool | Description |
 |------|-------------|
 | `backfill_inbox` | Process unreplied LinkedIn inbox messages through the inbound pipeline. |
+| `telegram` | Your own Telegram account: read chats and send a message only after you approve its exact text, one every 20 seconds. No campaigns, no messages to strangers. |
 
 ### Analytics & Reporting
 

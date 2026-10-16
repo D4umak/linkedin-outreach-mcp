@@ -106,6 +106,8 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "job_seeker_excluded": "Skipped: open to work",
     "job_trace_error": "Step failed",
     "lead_alert_emailed": "Emailed you about their reply",
+    # The owner's email for a turn that was only a file or a link (api #3128).
+    "file_alert_emailed": "Emailed you about their file",
     "lead_decayed_stale": "Gone quiet: no activity for a while",
     "linkedin_limit_observed": "Paused by LinkedIn",
     "model_failed": "Not sent: the check before sending didn't finish",

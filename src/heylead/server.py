@@ -33,6 +33,13 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.462 (2026-10-16)
+- New: send the approved text with the create (#3231)
+- Regenerate docs/tool-reference.json for the telegram tool (#3213)
+- Fix: a tool's handled error counts as a failed call (api #3206)
+- telegram tool: read the workspace's Telegram chats, queue and approve messages (#3213)
+- New: name the owner's file email in Last action (api #3128)
+
 ## v0.10.461 (2026-10-16)
 - New: publish the user's exact approved text and photo (#3160)
 
@@ -2021,7 +2028,7 @@ mcp = FastMCP(
         f"{facts.NO_POSTING_SENTENCE}\n"
         "\n"
         "HeyLead is an AI LinkedIn SDR that sends personalized outreach messages "
-        "that sound like the user wrote them. It has 47 tools: show_status, analytics, icp, inspect, suggest_next_action, accounts, campaign_status, prospect_view, scheduler_status, brand_progress, partners, knowledge, profile, signals, contacts, network, inbox, setup_profile, account, organization, generate_icp, create_campaign, edit_campaign, campaign, generate_and_send, send_message, send_email, answer_inbox, check_replies, engage_prospect, prospect, update_knowledge, update_contact, update_network, restore_profile, tune_signals, product, manage_watchlist, scheduler, create_post, brand_strategy, import_prospects, crm_sync, backfill_inbox, partner, profile_signals and book_meeting.\n"
+        "that sound like the user wrote them. It has 48 tools: show_status, analytics, icp, inspect, suggest_next_action, accounts, campaign_status, prospect_view, scheduler_status, brand_progress, partners, knowledge, profile, signals, contacts, network, inbox, setup_profile, account, organization, generate_icp, create_campaign, edit_campaign, campaign, generate_and_send, send_message, send_email, answer_inbox, check_replies, engage_prospect, prospect, update_knowledge, update_contact, update_network, restore_profile, tune_signals, product, manage_watchlist, scheduler, create_post, brand_strategy, import_prospects, crm_sync, backfill_inbox, partner, profile_signals, book_meeting and telegram.\n"
         "\n"
         "TOKEN RECOGNITION:\n"
         "A HeyLead setup message carries a HeyLead JWT (a long string starting with "
@@ -2982,6 +2989,53 @@ async def send_email(
     except Exception as e:
         logger.error("send_email failed: %s", e, exc_info=True)
         return f"Email send failed: {e}"
+
+
+# ──────────────────────────────────────────────
+# Tool: telegram (the workspace's own Telegram, operator use)
+# ──────────────────────────────────────────────
+
+@mcp.tool(annotations=_acts("Read Telegram chats and send approved messages"))
+async def telegram(
+    action: str,
+    chat_id: str = "",
+    text: str = "",
+    item_id: str = "",
+    chat_name: str = "",
+    status: str = "",
+    limit: int = 30,
+) -> str:
+    """The workspace's own Telegram account: read chats, send approved messages.
+
+    For the operator's own chats (a course group, people they already talk
+    to). Not outreach: no campaigns and no messages to strangers.
+
+    Every send is two steps. action='queue' holds the exact text and sends
+    nothing. Show the user that text; call action='approve' with its item_id
+    ONLY after the user said yes to that text in this conversation. The
+    approved text is sent verbatim, at most one message every 20 seconds.
+
+    Actions:
+        connect: a sign-in link to connect a Telegram account (once).
+        chats: list chats (1:1 and groups) with their chat_id.
+        read: the latest messages of chat_id.
+        queue: hold `text` for chat_id (chat_name is a label). Sends nothing.
+        outbox: held, sent and failed messages (status filters).
+        approve: send the held message item_id.
+        discard: drop the held message item_id.
+    """
+    from .tools.telegram import run_telegram
+
+    logger.info("Running telegram: action=%s", action)
+    try:
+        return await run_traced(
+            "telegram",
+            run_telegram(action, chat_id=chat_id, text=text, item_id=item_id,
+                         chat_name=chat_name, status=status, limit=limit),
+        )
+    except Exception as e:
+        logger.error("telegram failed: %s", e, exc_info=True)
+        return f"Telegram failed: {e}"
 
 
 # ──────────────────────────────────────────────

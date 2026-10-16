@@ -204,29 +204,35 @@ def _topic_from(text: str) -> str:
 async def _publish_exact_in_cloud(text: str, topic: str, tone: str, image) -> str:
     """create_post(text=...) for a hosted account: these words, this photo.
 
-    POST /content/posts always drafts its own words and reserves a library
-    photo, so the draft is created unscheduled (a default slot could publish
-    the drafter's words on its own), its text replaced, its picture replaced
-    or removed, and then read back. Only a draft that holds exactly *text*
-    and exactly *image* (or no picture) is published.
+    The words go with the create (heylead-api#3231): the cloud stores them,
+    writes no draft and attaches no library photo. An older api drafts from
+    the topic and reserves a library photo instead, so the text is PATCHed
+    and the picture removed whenever the answer shows that happened. The
+    draft is created unscheduled either way (a default slot could publish
+    it before it is checked), then read back: only a draft that holds
+    exactly *text* and exactly *image* (or no picture) is published.
     """
     client = get_linkedin_client()
-    status, post = await client.create_content_post(topic, cloud_tone(tone), scheduled_at=0)
+    status, post = await client.create_content_post(
+        topic, cloud_tone(tone), scheduled_at=0, text=text,
+    )
     if status >= 400 or not post.get("id"):
         detail = str(post.get("detail") or "").strip()
         return f"Nothing was posted. {detail}" if detail else hosted_writes.post_publish_failed()
     post_id = str(post["id"])
 
-    st, saved = await client.update_content_post_text(post_id, text)
-    if st >= 400:
-        detail = str(saved.get("detail") or "").strip()
-        return f"Nothing was posted. {detail}" if detail else hosted_writes.post_text_not_kept()
+    if str(post.get("text") or "") != text:
+        st, saved = await client.update_content_post_text(post_id, text)
+        if st >= 400:
+            detail = str(saved.get("detail") or "").strip()
+            return f"Nothing was posted. {detail}" if detail else hosted_writes.post_text_not_kept()
 
     try:
+        st = 200
         if image:
             filename, data, mime = image
             st, _ = await client.put_content_post_image(post_id, filename, data, mime)
-        else:
+        elif post.get("has_image"):
             st, _ = await client.delete_content_post_image(post_id)
     except Exception as e:
         logger.warning("create_post: the photo could not be set on %s: %s", post_id, e)

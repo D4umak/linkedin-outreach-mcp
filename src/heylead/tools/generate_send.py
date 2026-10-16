@@ -2090,7 +2090,7 @@ async def _send_email_outreach(
                 "email_blocked", outreach_id=outreach_id, result="blocked",
                 details={"error": error, "channel": "email"},
             )
-            return f"⚠️ Email not sent to {prospect_name}: {error}\n\nWill retry later."
+            return f"❌ Email not sent to {prospect_name}: {error}\n\nWill retry later."
 
         found = await confirm_email_in_sent(
             client, email_account_id, prospect_email, subject,
