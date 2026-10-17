@@ -16,8 +16,12 @@ VIEWER_BLOCKED = (
 HOSTED_SEND_BLOCKED = (
     "HeyLead sends from the cloud, not from this machine. Your active "
     "campaigns send on their own; use campaign(action='launch') to start a "
-    "campaign, or the dashboard to send something one-off. Nothing was sent."
+    "campaign. To answer someone yourself, use answer_inbox(action='reply', "
+    "chat_id='...', text='...'); inbox(action='list') shows the chat ids. "
+    "Nothing was sent."
 )
+# Until 17 Oct 2026 this sent the user to a one-off send on the dashboard,
+# which has no such box, so the advice led nowhere (heylead-api #3279).
 
 
 def next_step_hint() -> str:

@@ -7,7 +7,42 @@ from __future__ import annotations
 
 import logging
 
+from .. import hosted_writes
+from ..db.async_bridge import run_db
+from ..db.queries import get_outreach_with_contact
+from ..linkedin import get_linkedin_client
+
 logger = logging.getLogger(__name__)
+
+
+async def _send_in_cloud(outreach_id: str, text: str) -> str:
+    """reply/followup for a hosted account: POST /inbox/reply in the outreach's chat.
+
+    The same route and sentences as answer_inbox (heylead-api #2318). Until
+    17 Oct 2026 this answered HOSTED_SEND_BLOCKED, which pointed at a
+    dashboard send that does not exist (#3279). The words are the user's: the
+    laptop drafts nothing. Without a chat id it does not fall back to the
+    contact's name, because a name can match another conversation; it names
+    the call that does.
+    """
+    from .inbox import reply_in_cloud
+
+    if not (text or "").strip():
+        return hosted_writes.SEND_MESSAGE_NEEDS_TEXT
+    row = await run_db(get_outreach_with_contact, outreach_id) if outreach_id else None
+    if not row:
+        return hosted_writes.send_message_no_outreach(outreach_id)
+    chat_id = str(row.get("chat_id") or "").strip()
+    name = str(row.get("name") or "").strip()
+    if not chat_id:
+        return hosted_writes.send_message_no_chat(name)
+    out = await reply_in_cloud(get_linkedin_client(), chat_id, "", text)
+    if out == hosted_writes.reply_sent("") and name:
+        # The api names the recipient only for a reply found by name.
+        from ..textutil import first_name
+
+        return hosted_writes.reply_sent(first_name(name))
+    return out
 
 
 async def run_send_message(
@@ -31,7 +66,9 @@ async def run_send_message(
         campaign_id: Which campaign to send from. Uses active campaign if empty.
         outreach_id: Specific outreach to target. Auto-picks next if empty.
         format: Always 'text'; anything else is sent as text. For followup/reply.
-        text: For delete: optionally pass a Unipile message_id directly.
+        text: For followup/reply on a hosted account: the message, sent as
+            is by the cloud in the outreach's chat. For delete: optionally
+            pass a Unipile message_id directly.
     """
     action = action.lower().strip()
 
@@ -47,6 +84,8 @@ async def run_send_message(
         from .organization import refuse_if_hosted_send
 
         blocked = await refuse_if_hosted_send()
+        if blocked and action in ("followup", "reply"):
+            return await _send_in_cloud(outreach_id, text)
         if blocked:
             return blocked
 

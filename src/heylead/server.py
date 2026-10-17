@@ -33,6 +33,23 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.463 (2026-10-17)
+- New: run on Gemini via Vertex on the credits; Claude-on-Vertex is Marketplace, not credit-covered (#3292)
+- New: autonomous plan/build/review runner on the credits (#3292)
+- Fix: a local send marks a person replied only from a message after our first touch (api #3188)
+- create_post: an expired sign-in on the video routes is raised (heylead-api#3272)
+- create_post: the local log after a cloud publish is best effort (heylead-api#3272)
+- create_post: every cloud publish is one call; an error or 5xx may be live (heylead-api#3272)
+- Fix: a hosted send_message reply sends through the cloud
+- Fix: keep location_zone byte-identical to heylead-api's (#3027)
+- create_post: a gateway 5xx on a video publish may be live (heylead-api#3272)
+- server: create_post takes video as its last parameter; docs rows (heylead-api#3272)
+- create_post: publish approved words with a video from the cloud (heylead-api#3272)
+- backend_client: put and read back a Content post's video, per-call timeouts (heylead-api#3272)
+- post_media: load an mp4 for a post, up to the api's 25 MiB (heylead-api#3272)
+- Fix: one country-first location reader, shared with heylead-api (#3027)
+- review lesson for UI QA F3, a banner drawn for one seat status
+
 ## v0.10.462 (2026-10-16)
 - New: send the approved text with the create (#3231)
 - Regenerate docs/tool-reference.json for the telegram tool (#3213)
@@ -2931,8 +2948,11 @@ async def send_message(
         campaign_id: Which campaign to send from. Uses active if empty.
         outreach_id: Specific outreach to target. Required for inmail.
         format: 'text'. For followup/reply.
-        text: Custom message text. Auto-generates if empty.
-            For delete: optionally pass a Unipile message_id directly.
+        text: For followup/reply on a hosted account: the message to send,
+            required; the cloud sends it as is in the outreach's LinkedIn
+            chat (the same route as answer_inbox reply). Without a backend
+            the message is generated. For delete: optionally pass a Unipile
+            message_id directly.
     """
     from .tools.send_message import run_send_message
     from .tools.organization import refuse_if_viewer
@@ -3746,13 +3766,15 @@ async def create_post(
     platforms: str = "linkedin",
     image: str = "",
     text: str = "",
+    video: str = "",
 ) -> str:
     """Generate and publish a voice-matched post to LinkedIn.
 
     Writes the post in your voice and publishes it immediately on your own
     LinkedIn account. LinkedIn is the only platform HeyLead posts to. To
     publish words the user has already written or approved, pass them as
-    `text`: they go out exactly as given, with `image` or with no photo.
+    `text`: they go out exactly as given, with `image`, with `video`, or
+    with no media. A post carries a photo or a video, not both.
 
     Args:
         topic: What to post about (e.g., "share a tip about cold outreach",
@@ -3763,6 +3785,11 @@ async def create_post(
         text: The post's exact words, 30 to 3,000 characters. Nothing is
             rewritten; the draft is checked against them before it is
             published. `topic` is then only its label (default: first line).
+        video: Path to a short video to attach. mp4 only, up to 25MB. Needs
+            `text` and a cloud account, and cannot be combined with `image`.
+            The draft is read back, and it is published only when the words
+            and the video match what you gave; if your workspace asks for
+            approval, it is held as a draft instead.
     """
     from .tools.create_post import run_create_post
     from .tools.organization import refuse_if_viewer
@@ -3772,9 +3799,12 @@ async def create_post(
         return blocked
 
     logger.info(f"Running create_post: topic={topic}, tone={tone}, platforms={platforms}")
+    # `video` only when given: a call without one stays the five-argument
+    # call run_create_post has always had.
+    extra = {"video": video} if video else {}
     try:
         return await run_traced(
-            "create_post", run_create_post(topic, tone, platforms, image, text),
+            "create_post", run_create_post(topic, tone, platforms, image, text, **extra),
         )
     except Exception as e:
         logger.error(f"create_post failed: {e}", exc_info=True)

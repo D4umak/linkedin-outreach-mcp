@@ -136,7 +136,7 @@ Brand and content, signals, bulk import, CRM sync and the shared network pool ar
 | `engage_prospect` | Comment, react, follow, or endorse prospects |
 | `inbox` | Browse and read LinkedIn inbox messages |
 | `backfill_inbox` | Process unreplied inbox messages through the inbound pipeline |
-| `create_post` | Generate and publish posts to LinkedIn |
+| `create_post` | Generate and publish posts to LinkedIn, or publish your approved words with a photo or a short video |
 | `prospect` | Skip, close with outcome, view conversation or timeline |
 | `contacts` | Search and manage the global contact base |
 | `partner` | Track follow-ups with partners, vendors, and investors |

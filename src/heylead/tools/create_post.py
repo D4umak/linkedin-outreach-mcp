@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import logging
 
+import httpx
+
 from .. import hosted_writes
 from ..db.queries import get_setting, log_action, save_published_post
 from ..hosted_writes import ensure_laptop_may_write, laptop_writes_refused
 from ..linkedin import get_account_id, get_linkedin_client, UnipileError
+from ..linkedin.unipile import UnipileAuthError
 from ..db.async_bridge import run_db
 from ..services.campaign_naming import cut_at_word
 
@@ -28,6 +31,7 @@ async def run_create_post(
     platforms: str = "linkedin",
     image: str = "",
     text: str = "",
+    video: str = "",
 ) -> str:
     """Generate and publish a voice-matched LinkedIn post.
 
@@ -41,6 +45,9 @@ async def run_create_post(
             (only blank space around it is trimmed): no drafting, and on a
             hosted account no library photo; the draft is read back and
             must match before it is published (heylead-api#3160).
+        video: Optional path to an mp4 (25 MiB at most) to attach instead of
+            a photo. Needs ``text`` and a hosted account; the video's bytes
+            are read back too before Publish (heylead-api#3272).
     """
     platform_list = [p.strip().lower() for p in platforms.split(",")]
     wants_x = "x" in platform_list or "twitter" in platform_list
@@ -56,6 +63,16 @@ async def run_create_post(
         )
 
     text = (text or "").strip()
+    video = (video or "").strip()
+    # Before anything else can run: a wrong video call must never fall
+    # through to a post without its video (heylead-api#3272).
+    if video:
+        if (image or "").strip():
+            return hosted_writes.post_photo_and_video()
+        if not text:
+            return hosted_writes.post_video_needs_text()
+        if not laptop_writes_refused():
+            return hosted_writes.post_video_needs_cloud()
     if text:
         refused = _refuse_text(text)
         if refused:
@@ -77,12 +94,18 @@ async def run_create_post(
         if "linkedin" not in platform_list:
             return X_NOT_AVAILABLE
         try:
-            from ..services.post_media import load_post_image
+            from ..services.post_media import load_post_image, load_post_video
 
             post_image = load_post_image(image)
         except ValueError as e:
             return f"{e}"
-        if text:
+        try:
+            post_video = load_post_video(video)
+        except ValueError as e:
+            return f"Nothing was posted. {e}"
+        if post_video:
+            answer = await _publish_exact_in_cloud(text, topic, tone, None, post_video)
+        elif text:
             answer = await _publish_exact_in_cloud(text, topic, tone, post_image)
         else:
             answer = await _create_post_in_cloud(topic, tone, post_image)
@@ -201,8 +224,9 @@ def _topic_from(text: str) -> str:
     return cut_at_word(first, 100)
 
 
-async def _publish_exact_in_cloud(text: str, topic: str, tone: str, image) -> str:
-    """create_post(text=...) for a hosted account: these words, this photo.
+async def _publish_exact_in_cloud(text: str, topic: str, tone: str, image, video=None) -> str:
+    """create_post(text=...) for a hosted account: these words, this photo
+    or this video.
 
     The words go with the create (heylead-api#3231): the cloud stores them,
     writes no draft and attaches no library photo. An older api drafts from
@@ -211,6 +235,10 @@ async def _publish_exact_in_cloud(text: str, topic: str, tone: str, image) -> st
     draft is created unscheduled either way (a default slot could publish
     it before it is checked), then read back: only a draft that holds
     exactly *text* and exactly *image* (or no picture) is published.
+
+    With *video* (heylead-api#3272) the video is uploaded in place of the
+    photo step (the api releases any picture the draft held), and the
+    read-back also requires no picture and exactly the video's bytes.
     """
     client = get_linkedin_client()
     status, post = await client.create_content_post(
@@ -226,6 +254,12 @@ async def _publish_exact_in_cloud(text: str, topic: str, tone: str, image) -> st
         if st >= 400:
             detail = str(saved.get("detail") or "").strip()
             return f"Nothing was posted. {detail}" if detail else hosted_writes.post_text_not_kept()
+
+    if video:
+        refused = await _put_video(client, post_id, video)
+        if refused:
+            return refused
+        return await _check_and_publish_video(client, post_id, text, topic, tone, video)
 
     try:
         st = 200
@@ -257,17 +291,106 @@ async def _publish_exact_in_cloud(text: str, topic: str, tone: str, image) -> st
     if publish_mode != "auto":
         return hosted_writes.post_held()
 
-    st, published = await client.publish_content_post(post_id)
-    if st == 409 and "no linkedin account" in str(published.get("detail") or "").lower():
-        return hosted_writes.post_no_seat()
-    if st >= 400:
-        return hosted_writes.post_publish_failed()
-    await run_db(log_action, "post_created", details={
+    published, refused = await _publish_once(client, post_id)
+    if refused:
+        return refused
+    await _log_published({
         "topic": topic, "tone": tone, "post_id": published.get("post_id", ""),
         "platform": "linkedin", "via": "cloud", "exact_text": True,
         "chars": len(text), "image": image[0] if image else "",
     })
     return hosted_writes.post_published()
+
+
+async def _log_published(details: dict) -> None:
+    """The local action log for a post the cloud published. Best effort: the
+    post is on LinkedIn, and a failure here must not read as one there."""
+    try:
+        await run_db(log_action, "post_created", details=details)
+    except Exception as e:
+        logger.warning("create_post: published, but the local log failed: %s", e)
+
+
+async def _publish_once(client, post_id: str, *, timeout=None) -> tuple[dict, str]:
+    """Publish *post_id* with one call, never retried: (body, refusal or "").
+
+    The api may still be handing the post to LinkedIn when this side gives
+    up (a read timeout), or fail after the send went out (it reloads the row
+    after publishing; a gateway in front can time out), so an error or any
+    5xx answers "may already be on LinkedIn" and never "try again": a
+    second call would post it twice (heylead-api#3272). ``timeout`` None
+    keeps the client's shared window.
+    """
+    try:
+        if timeout is None:
+            st, published = await client.publish_content_post(post_id)
+        else:
+            st, published = await client.publish_content_post(post_id, timeout=timeout)
+    except (UnipileError, httpx.HTTPError) as e:
+        logger.warning("create_post: the publish of %s did not answer: %s", post_id, e)
+        return {}, hosted_writes.post_may_be_live()
+    if st >= 500:
+        return published, hosted_writes.post_may_be_live()
+    if st == 409 and "no linkedin account" in str(published.get("detail") or "").lower():
+        return published, hosted_writes.post_no_seat()
+    if st >= 400:
+        return published, hosted_writes.post_publish_failed()
+    return published, ""
+
+
+async def _put_video(client, post_id: str, video) -> str:
+    """Upload *video* onto the draft; the refusal to answer, or ""."""
+    filename, data, mime = video
+    try:
+        st, _ = await client.put_content_post_video(post_id, filename, data, mime)
+    except UnipileAuthError:
+        raise  # an expired sign-in, not a video the draft lost
+    except Exception as e:  # a timeout or a dropped connection: nothing published
+        logger.warning("create_post: the video could not be put on %s: %s", post_id, e)
+        return hosted_writes.post_video_not_kept()
+    if st == 413:
+        return hosted_writes.post_video_too_large()
+    if st == 415:
+        return hosted_writes.post_video_wrong_type()
+    if st >= 400:
+        return hosted_writes.post_video_not_kept()
+    return ""
+
+
+async def _check_and_publish_video(client, post_id: str, text: str, topic: str, tone: str, video) -> str:
+    """Read back the words, no picture and the video's bytes; then publish once."""
+    from ..linkedin.backend_client import VIDEO_PUBLISH_TIMEOUT
+
+    filename, data, _mime = video
+    st, current = await client.get_content_post(post_id)
+    if st >= 400 or str(current.get("text") or "") != text:
+        return hosted_writes.post_text_not_kept()
+    try:
+        img_status, img_bytes = await client.get_content_post_image(post_id)
+        vid_status, vid_bytes = await client.get_content_post_video(post_id)
+    except UnipileAuthError:
+        raise
+    except Exception as e:
+        logger.warning("create_post: the video on %s could not be read back: %s", post_id, e)
+        return hosted_writes.post_video_not_kept()
+    has_picture = bool(current.get("has_image")) or (img_status < 400 and bool(img_bytes))
+    if has_picture or vid_status >= 400 or vid_bytes != data:
+        return hosted_writes.post_video_not_kept()
+
+    st, settings = await client.get_content_settings()
+    publish_mode = str(settings.get("publish_mode") or "") if st < 400 else ""
+    if publish_mode != "auto":
+        return hosted_writes.post_held_with_video()
+
+    published, refused = await _publish_once(client, post_id, timeout=VIDEO_PUBLISH_TIMEOUT)
+    if refused:
+        return refused
+    await _log_published({
+        "topic": topic, "tone": tone, "post_id": published.get("post_id", ""),
+        "platform": "linkedin", "via": "cloud", "exact_text": True,
+        "chars": len(text), "image": "", "video": True, "video_name": filename,
+    })
+    return hosted_writes.post_published_with_video()
 
 
 async def _create_post_in_cloud(topic: str, tone: str, image) -> str:
@@ -309,12 +432,10 @@ async def _create_post_in_cloud(topic: str, tone: str, image) -> str:
     if not str(post.get("text") or "").strip():
         return hosted_writes.post_still_drafting()
 
-    st, published = await client.publish_content_post(post_id)
-    if st == 409 and "no linkedin account" in str(published.get("detail") or "").lower():
-        return hosted_writes.post_no_seat()
-    if st >= 400:
-        return hosted_writes.post_publish_failed()
-    await run_db(log_action, "post_created", details={
+    published, refused = await _publish_once(client, post_id)
+    if refused:
+        return refused
+    await _log_published({
         "topic": topic, "tone": tone, "post_id": published.get("post_id", ""),
         "platform": "linkedin", "via": "cloud",
     })

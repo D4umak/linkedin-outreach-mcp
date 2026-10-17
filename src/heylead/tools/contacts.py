@@ -403,7 +403,9 @@ def _hosted_label_refusal(action: str) -> str:
     never reads. On 4 Oct 2026 five stage changes and five notes on a hosted
     account landed here and nowhere else (heylead-api#2122). There is no
     route for this client to write them to the workspace yet, so the honest
-    answer is a refusal that says where they do live.
+    answer is a refusal that says where they do live. It named "the
+    dashboard" until 17 Oct 2026, which edits no tag, note or stage
+    (heylead-api #3279).
     """
     from ..config import is_backend_mode
 
@@ -413,8 +415,8 @@ def _hosted_label_refusal(action: str) -> str:
     return (
         f"{what} for a hosted account live in your HeyLead workspace, and "
         "this client has no way to write them there: a change here would "
-        "stay on this machine. Nothing was changed. Use the dashboard, or "
-        "the hosted assistant's update_contact. To leave a prospect out of "
+        "stay on this machine. Nothing was changed. The hosted assistant's "
+        "update_contact writes them there. To leave a prospect out of "
         "a campaign, prospect(action='skip', reason_code='not_a_fit') works "
         "from here."
     )

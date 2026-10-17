@@ -1188,6 +1188,28 @@ async def run_generate_and_send(
                 outreach_id, e,
             )
 
+        # Only a message after our first touch answers us; older ones are their
+        # history: the send is held either way, but history is never a reply
+        # (Denys, 17 Oct 2026; heylead-api #3188).
+        from .check_replies import _answers_our_outreach
+        stored_msgs = await adb.get_messages_for_outreach(outreach_id) if prospect_msgs else []
+        replies = [m for m in prospect_msgs if _answers_our_outreach(prospect, stored_msgs, m)]
+        if prospect_msgs and not replies:
+            await _release_claim()
+            await adb.log_action(
+                "dm_prior_conversation_skipped",
+                outreach_id=outreach_id,
+                result="skipped",
+                details={"before_first_touch": len(prospect_msgs)},
+            )
+            await adb.update_outreach(
+                outreach_id, status="skipped", last_attempt_error="conversation_before_first_touch",
+            )
+            return (
+                f"⏭️ Skipped {prospect.get('name', 'Unknown')} — you talked before this "
+                f"campaign ({len(prospect_msgs)} earlier message(s) from them).\n"
+                f"Use send_message(action='reply') to write to them yourself."
+            )
         if prospect_msgs:
             # Prospect messaged us at some point — this is an existing conversation
             last_prospect_text = cut_at_word(prospect_msgs[-1].get("text", ""), 100)

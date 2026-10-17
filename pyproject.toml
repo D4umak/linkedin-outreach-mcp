@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "heylead"
-version = "0.10.462"
+version = "0.10.463"
 description = "AI agent for LinkedIn outreach: finds the right people, writes in your voice, follows up and handles replies. From Claude Code, Cursor, any MCP client or a web dashboard."
 readme = "README.md"
 license = "MIT"
@@ -38,6 +38,8 @@ dependencies = [
     "cryptography>=50.0.0",
     "click>=8.3.3",
     "keyring>=24.0.0",
+    # location_zone reads the IANA country tables it ships (#3027).
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]

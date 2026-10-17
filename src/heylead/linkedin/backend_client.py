@@ -61,6 +61,14 @@ _KNOWLEDGE_UNAVAILABLE = "Knowledge base is unavailable right now — try again 
 
 _TIMEOUT = httpx.Timeout(30.0, connect=30.0, read=30.0, write=60.0)
 
+# A Content post's video (heylead-api#3272), passed per call so _TIMEOUT stays
+# the 30 s every other route relies on. Up to 25 MiB goes up and comes back
+# for the read-back, which the shared window does not fit; and the api waits
+# up to 90 s for Unipile to take a video post (heylead-api unipile.py
+# _VIDEO_POST_TIMEOUT), so its publish gets a read window above that.
+VIDEO_TRANSFER_TIMEOUT = httpx.Timeout(30.0, connect=30.0, read=120.0, write=120.0)
+VIDEO_PUBLISH_TIMEOUT = httpx.Timeout(30.0, connect=30.0, read=150.0, write=60.0)
+
 # The /api/v1/llm/* endpoints run model inference server-side, so they answer on
 # a completely different timescale to the Unipile REST proxy. generate-icp
 # produces several personas and then enriches them; generate-icp-rag also
@@ -3815,7 +3823,9 @@ class BackendClient:
 
     async def _cloud_call(
         self, method: str, path: str, json_body: dict[str, Any] | None = None,
+        timeout: httpx.Timeout | None = None,
     ) -> tuple[int, dict[str, Any]]:
+        """``timeout`` is for POST only; None keeps _post's default."""
         url = f"{self.base_url}/api/v1{path}"
         try:
             if method == "GET":
@@ -3823,7 +3833,9 @@ class BackendClient:
             elif method == "DELETE":
                 resp = await self._client.delete(url, headers=self._headers())
             elif method == "POST":
-                resp = await self._post(url, json=json_body or {}, headers=self._headers())
+                resp = await self._post(
+                    url, json=json_body or {}, headers=self._headers(), timeout=timeout,
+                )
             else:
                 resp = await self._client.request(
                     method, url, json=json_body or {}, headers=self._headers(),
@@ -3897,6 +3909,36 @@ class BackendClient:
             raise UnipileAuthError("Backend JWT expired or invalid.")
         return resp.status_code, resp.content if resp.status_code < 400 else b""
 
+    async def put_content_post_video(
+        self, post_id: str, name: str, data: bytes, mime: str,
+    ) -> tuple[int, dict[str, Any]]:
+        """POST /content/posts/{id}/video: this video on the draft (25 MiB at
+        most; 413 over it, 415 for a file the api does not take as MP4). The
+        api releases any picture the draft held."""
+        url = f"{self.base_url}/api/v1/content/posts/{post_id}/video"
+        try:
+            resp = await self._post(
+                url, files={"video": (name, data, mime)},
+                headers=multipart_headers(self._headers()),
+                timeout=VIDEO_TRANSFER_TIMEOUT,
+            )
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            raise _wrap_connection_error(e, self.base_url) from e
+        return self._cloud_answer(resp)
+
+    async def get_content_post_video(self, post_id: str) -> tuple[int, bytes]:
+        """GET /content/posts/{id}/video: the bytes Publish will send."""
+        url = f"{self.base_url}/api/v1/content/posts/{post_id}/video"
+        try:
+            resp = await self._client.get(
+                url, headers=self._headers(), timeout=VIDEO_TRANSFER_TIMEOUT,
+            )
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            raise _wrap_connection_error(e, self.base_url) from e
+        if resp.status_code == 401:
+            raise UnipileAuthError("Backend JWT expired or invalid.")
+        return resp.status_code, resp.content if resp.status_code < 400 else b""
+
     async def attach_library_photo(self, post_id: str, photo_id: str) -> tuple[int, dict[str, Any]]:
         """POST /content/posts/{id}/image/library: put a library photo on a draft."""
         return await self._cloud_call(
@@ -3907,9 +3949,16 @@ class BackendClient:
         """GET /content/settings: publish_mode is "auto" or "require_approval"."""
         return await self._cloud_call("GET", "/content/settings")
 
-    async def publish_content_post(self, post_id: str) -> tuple[int, dict[str, Any]]:
-        """POST /content/posts/{id}/publish: the cloud publishes it now."""
-        return await self._cloud_call("POST", f"/content/posts/{post_id}/publish")
+    async def publish_content_post(
+        self, post_id: str, timeout: httpx.Timeout | None = None,
+    ) -> tuple[int, dict[str, Any]]:
+        """POST /content/posts/{id}/publish: the cloud publishes it now.
+
+        A post with a video passes VIDEO_PUBLISH_TIMEOUT; None keeps _TIMEOUT.
+        """
+        return await self._cloud_call(
+            "POST", f"/content/posts/{post_id}/publish", timeout=timeout,
+        )
 
     async def send_content_comment(self, draft_id: str, text: str = "") -> tuple[int, dict[str, Any]]:
         """POST /content/comments/{id}/send: the cloud posts a drafted comment reply."""

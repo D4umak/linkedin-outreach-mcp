@@ -151,7 +151,7 @@ HeyLead gives your AI 22 tools:
 | `engage_prospect` | Comments on, reacts to, follows, or endorses a prospect to build trust |
 | `inbox` | Browses and reads LinkedIn inbox messages directly |
 | `backfill_inbox` | Processes unreplied inbox messages through the inbound pipeline |
-| `create_post` | Generates and publishes a voice-matched post to LinkedIn |
+| `create_post` | Generates and publishes a voice-matched post to LinkedIn, or publishes your approved words with a photo or a short video |
 
 ### Campaign Management
 

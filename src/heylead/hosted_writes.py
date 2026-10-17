@@ -207,6 +207,83 @@ def post_photo_not_kept() -> str:
     )
 
 
+# create_post(text=..., video=...) (heylead-api#3272).
+
+
+def post_published_with_video() -> str:
+    return f"Posted to LinkedIn from the cloud, with your video. It is in {_d('content/posts')}."
+
+
+def post_held_with_video() -> str:
+    return (
+        f"Saved as a draft in {_d('content/posts')}, with your video. Your posts need "
+        "approval before they go out, so open it there and press Publish. Nothing is "
+        "on LinkedIn yet."
+    )
+
+
+def post_video_not_kept() -> str:
+    """The draft does not read back with exactly that video and no picture.
+    No api route deletes a post, so the unscheduled draft stays behind."""
+    return (
+        "Nothing was posted. The draft does not carry the video you chose, so it was "
+        f"not published. It is saved in {_d('content/posts')} without it; add the video "
+        "there or delete the draft before you press Publish."
+    )
+
+
+def post_video_too_large() -> str:
+    """The api answered 413 to the upload."""
+    return (
+        "Nothing was posted. That video is larger than 25 MB. Export it smaller "
+        "(720p or 1080p MP4 is plenty for LinkedIn) and try again."
+    )
+
+
+def post_video_wrong_type() -> str:
+    """The api answered 415: the file is not an MP4 it accepts."""
+    return (
+        "Nothing was posted. That file is not a video LinkedIn accepts here. "
+        "Export it as MP4 and try again."
+    )
+
+
+def post_may_be_live() -> str:
+    """A publish call errored or answered 5xx. The api may still have sent
+    it, so this never suggests trying again (heylead-api#3272)."""
+    return (
+        "Nothing more was sent. The post may already be on LinkedIn: LinkedIn took "
+        "longer than expected to answer. The dashboard may show it as failed, so check "
+        "LinkedIn itself before you send it again."
+    )
+
+
+# The words say nothing about video, so a video post uses the same answer.
+post_video_may_be_live = post_may_be_live
+
+
+def post_photo_and_video() -> str:
+    return (
+        "Nothing was posted. A LinkedIn post carries a photo or a video, not both. "
+        "Pass `image` or `video`."
+    )
+
+
+def post_video_needs_text() -> str:
+    return (
+        "Nothing was posted. A video post needs the words you approved. Pass them as "
+        "`text` (30 to 3,000 characters) together with `video`."
+    )
+
+
+def post_video_needs_cloud() -> str:
+    """A laptop (self-hosted) account: video goes only through the cloud."""
+    return (
+        "Nothing was posted. A video is posted from the HeyLead cloud, and this "
+        "computer is not connected to one. Run setup_profile to connect it, then ask again."
+    )
+
+
 def post_still_drafting() -> str:
     """The cloud saved the post but has not written its words yet."""
     return (
@@ -249,6 +326,35 @@ def reply_name_not_found(name: str) -> str:
         f"Nothing was sent. No conversation with {name or 'that person'} was found. "
         "Check the name with inbox(action='list'), or pass chat_id."
     )
+
+
+# ── send_message reply/followup, done by the cloud (heylead-api #3279) ──
+#
+# The dashboard has no box to send a one-off message, so none of these send
+# the user there: they name the inbox route, which does send.
+
+SEND_MESSAGE_NEEDS_TEXT = (
+    "Nothing was sent. From here a reply goes out with the words you give it: "
+    "pass text='...' with the message."
+)
+
+
+def send_message_no_outreach(outreach_id: str) -> str:
+    which = f"Outreach {outreach_id} is not on this machine" if outreach_id else "No outreach_id was given"
+    return (
+        f"Nothing was sent. {which}. Find the conversation with inbox(action='list'), "
+        "then answer_inbox(action='reply', chat_id='...', text='...')."
+    )
+
+
+def send_message_no_chat(name: str) -> str:
+    if name:
+        return (
+            f"Nothing was sent. This outreach has no LinkedIn conversation on record. If you "
+            f"have one with {name}, use answer_inbox(action='reply', name='{name}', text='...'), "
+            "or find its chat_id with inbox(action='list')."
+        )
+    return send_message_no_outreach("")
 
 
 def reply_failed(detail: str = "") -> str:

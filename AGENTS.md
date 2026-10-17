@@ -107,7 +107,7 @@ Brand and content, signals, bulk import, CRM sync and the shared network pool ar
 | `book_meeting` | Book a meeting on Google Calendar and send the prospect an invite |
 | `inbox` | Browse and read LinkedIn inbox messages directly |
 | `backfill_inbox` | Process unreplied inbox messages through the inbound qualification pipeline |
-| `create_post` | Generate and publish a voice-matched post to LinkedIn |
+| `create_post` | Generate and publish a voice-matched post to LinkedIn, or publish your approved words with a photo or a short video |
 
 ### Prospects & Contacts
 | Tool | Description |

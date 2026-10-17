@@ -1264,6 +1264,9 @@ _OPERATOR_SKIP_REASONS = frozenset({
     # 1st-degree connection looks like once any guard has seen it — could not
     # be parked, and the campaign kept it in the DM queue for ever.
     "first_degree",
+    # Their only messages predate our first touch (heylead-api #3188): the send
+    # is held on an old conversation, and the row must not stay in the queue.
+    "conversation_before_first_touch",
 })
 _CONTACTED_STATUSES = frozenset({
     "invited", "connected", "messaged", "replied", "hot_lead",

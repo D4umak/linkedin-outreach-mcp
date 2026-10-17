@@ -477,6 +477,28 @@ async def run_send_followup(
     # This catches inbound leads who messaged first (e.g. months ago) — we shouldn't
     # pile automated follow-ups on top of their messages.
     prospect_msgs = [m for m in messages if m.get("role") == "prospect"]
+    # Only a message after our first touch answers us; older ones are their
+    # history. History still holds the drip, but never reads as a reply
+    # (Denys, 17 Oct 2026; heylead-api #3188).
+    from .check_replies import _answers_our_outreach
+    stored_msgs = await db.get_messages_for_outreach(outreach_id)
+    replies = [m for m in prospect_msgs if _answers_our_outreach(candidate, stored_msgs, m)]
+    if prospect_msgs and not replies:
+        await client.close()
+        await db.log_action(
+            "followup_prior_conversation_skipped",
+            outreach_id=outreach_id,
+            result="skipped",
+            details={"before_first_touch": len(prospect_msgs)},
+        )
+        await db.update_outreach(
+            outreach_id, status="skipped", last_attempt_error="conversation_before_first_touch",
+        )
+        return (
+            f"⏭️ Skipped follow-up for {candidate.get('name', 'Unknown')} — you talked "
+            f"before this campaign ({len(prospect_msgs)} earlier message(s) from them).\n"
+            f"Use send_message(action='reply') to write to them yourself."
+        )
     if prospect_msgs:
         last_prospect_text = cut_at_word(prospect_msgs[-1].get("text", ""), 100)
         await client.close()
