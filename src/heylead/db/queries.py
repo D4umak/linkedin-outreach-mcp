@@ -1862,14 +1862,14 @@ def get_followup_candidates(
            JOIN contacts c ON o.contact_id = c.id
            WHERE o.campaign_id = ?
              AND o.status IN ({_followup_statuses_sql()})
-             AND o.followup_count < ?
+             AND o.followup_count < CASE WHEN ? <= 0 THEN 0 ELSE ? + 1 END
            ORDER BY (
                EXISTS (
                    SELECT 1 FROM engagements e
                    WHERE e.outreach_id = o.id AND e.created_at > (strftime('%s', 'now') - 172800)
                )
            ) DESC, {_LAST_TOUCH_ORDER_SQL}""",
-        (campaign_id, max_followups),
+        (campaign_id, max_followups, max_followups),
     ).fetchall()
     db.close()
     return [dict(r) for r in rows]
@@ -1880,8 +1880,9 @@ def count_followup_ready(campaign_id: str, max_followups: int = 2) -> int:
     db = get_db()
     row = db.execute(
         """SELECT COUNT(*) as c FROM outreaches
-           WHERE campaign_id = ? AND status IN ('connected', 'messaged') AND followup_count < ?""",
-        (campaign_id, max_followups),
+           WHERE campaign_id = ? AND status IN ('connected', 'messaged')
+             AND followup_count < CASE WHEN ? <= 0 THEN 0 ELSE ? + 1 END""",
+        (campaign_id, max_followups, max_followups),
     ).fetchone()
     db.close()
     return row["c"] if row else 0
@@ -1906,8 +1907,8 @@ def get_followup_breakdown(campaign_id: str, max_followups: int = 2) -> dict:
     row = db.execute(
         """SELECT COUNT(*) as c FROM outreaches
            WHERE campaign_id = ? AND status IN ('connected', 'messaged')
-             AND followup_count < ?""",
-        (campaign_id, max_followups),
+             AND followup_count < CASE WHEN ? <= 0 THEN 0 ELSE ? + 1 END""",
+        (campaign_id, max_followups, max_followups),
     ).fetchone()
     eligible = row["c"] if row else 0
 

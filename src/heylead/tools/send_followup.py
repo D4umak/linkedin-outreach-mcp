@@ -68,7 +68,9 @@ def _cap_refusal(max_followups: int, followup_count: int, tier: str) -> str:
             "Follow-ups are off for this campaign.\n"
             "Turn them on with edit_campaign(enable_followups='on')."
         )
-    if followup_count < max_followups:
+    # The opener stamps followup_count to 1, so the counter is one ahead of
+    # follow-ups sent. Up to N means N after that opener (#1444).
+    if followup_count < max_followups + 1:
         return ""
     # A hosted workspace's plan lives in the api, and its tier never reaches
     # this install's config (it reads "free" on a paying workspace), so the

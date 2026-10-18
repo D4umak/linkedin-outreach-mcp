@@ -33,6 +33,9 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.464 (2026-10-18)
+- Fix: up to N follow-ups means N after the opener (#1444)
+
 ## v0.10.463 (2026-10-17)
 - New: run on Gemini via Vertex on the credits; Claude-on-Vertex is Marketplace, not credit-covered (#3292)
 - New: autonomous plan/build/review runner on the credits (#3292)

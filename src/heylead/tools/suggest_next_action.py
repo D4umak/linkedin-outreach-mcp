@@ -427,7 +427,7 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
                     })
 
             # Priority 4: Follow-ups due (R1: blocked for COLD prospects)
-            elif status == "connected" and followup_count < max_followups:
+            elif status == "connected" and max_followups > 0 and followup_count < max_followups + 1:
                 # R1: Cold prospects must warm up before follow-ups
                 if temperature == TEMP_COLD:
                     score = _score_action(7, temperature, eng_count, days_since, fit_score)
