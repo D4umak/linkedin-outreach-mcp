@@ -220,6 +220,26 @@ async def maybe_run_reply_agent(
         budget=budget,
         call_llm_fn=call_llm_fn,
     )
+    if result.failure:
+        # Not the agent's judgement (heylead-api#3390): no sibling is woken with it.
+        await run_db(
+            log_action, "reply_agent_decision",
+            outreach_id=outreach_id,
+            result=result.decision,
+            details={"reason": result.reason, "mode": mode, "exhausted": result.exhausted,
+                     "failure": result.failure},
+        )
+        outcome = apply_reply_agent_decision(result, mode=mode, has_booking_target=has_booking)
+        if mode == "observe":
+            return ReplyAgentOutcome(
+                kind="continue", reason=f"observe — {outcome.reason}", message=outcome.message,
+            )
+        from .model_failure import record_skip
+        await record_skip(
+            actor="reply", failure=result.failure, outreach_id=outreach_id,
+            campaign_id=str((campaign or {}).get("id") or ""),
+        )
+        return outcome
     await after_sibling_loop(
         agent="reply",
         campaign_id=campaign_id,
@@ -255,13 +275,6 @@ async def maybe_run_reply_agent(
             reason=f"observe — {outcome.reason}",
             message=outcome.message,
         )
-    if result.failure:
-        from .model_failure import record_skip
-        await record_skip(
-            actor="reply", failure=result.failure, outreach_id=outreach_id,
-            campaign_id=str((campaign or {}).get("id") or ""),
-        )
-        return outcome
     if outcome.kind == "hold":
         extra: dict[str, Any] = {}
         if prospect_calendar_url:

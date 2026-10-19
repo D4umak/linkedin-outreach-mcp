@@ -85,3 +85,35 @@ async def record_skip(
         logger.warning("model-failure journal skipped for %s: %s", actor, e)
     logger.warning("%s check did not finish (%s) for %s: not sent", actor, kind, (outreach_id or "-")[:8])
     return skip_line(kind)
+
+
+# A loop agent's run that did not finish (heylead-api#3390): the coordinator,
+# the strategist, the ICP review, the product agent and the closer used to
+# record it as their own decision (none, keep, hold), wake their siblings with
+# it and score it. Now they apply nothing and write one row through here.
+NOT_FINISHED = "not_finished"
+
+
+async def loop_failed(
+    *, actor: str, failure: str, outreach_id: str = "", campaign_id: str = "", detail: str = "",
+) -> None:
+    """Journal one agent loop run that did not finish. Never raises; never a decision row."""
+    kind = failure if failure in FAILURES else EXCEPTION
+    try:
+        from ..db.queries import log_action
+        from ..db.async_bridge import run_db
+
+        await run_db(
+            log_action, MODEL_FAILED,
+            outreach_id=outreach_id,
+            campaign_id=campaign_id,
+            result=NOT_FINISHED,
+            details={
+                "actor": actor, "outcome": "failed", "failure": kind,
+                "reason": MODEL_UNAVAILABLE, "detail": (detail or "")[:120],
+            },
+        )
+    except Exception as e:  # noqa: BLE001 - the journal never decides the outcome
+        logger.warning("loop failure journal skipped for %s: %s", actor, e)
+    logger.warning("%s run did not finish (%s) for %s: nothing applied", actor, kind,
+                   (outreach_id or campaign_id or "-")[:8])

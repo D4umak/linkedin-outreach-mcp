@@ -9,7 +9,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Literal
 
-from ..ai.agent_loop import AgentBudget, AgentResult, run_agent_loop
+from ..ai.agent_loop import LOOP_FAILED_REASON, AgentBudget, AgentResult, run_agent_loop
+from . import model_failure
 from ..ai.icp_research import ICP_RESEARCH_SYSTEM, build_icp_research_context
 from ..ai.icp_schemas import IcpResult, icp_result_from_dict, icp_result_to_json
 from ..ai.schemas import ICP_AGENT_STEP
@@ -135,6 +136,11 @@ async def maybe_run_icp_research(
             call_llm_fn=call_llm_fn,
             valid_decisions=ICP_RESEARCH_VALID_DECISIONS,
         )
+        if result.failure:
+            # Not a keep (heylead-api#3390): the ICP stays, nothing is scored, no sibling is woken.
+            await model_failure.loop_failed(actor="icp_research", failure=result.failure, detail=result.error)
+            return IcpResearchOutcome(decision=model_failure.NOT_FINISHED, reason=LOOP_FAILED_REASON,
+                                      summary="not finished — ICP unchanged")
         await after_sibling_loop(
             agent="icp_research",
             campaign_id="",
@@ -147,10 +153,11 @@ async def maybe_run_icp_research(
         )
     except Exception as e:
         logger.warning("ICP research agent failed: %s", e)
+        await model_failure.loop_failed(actor="icp_research", failure=model_failure.EXCEPTION, detail=str(e))
         return IcpResearchOutcome(
-            decision="keep",
-            reason=str(e)[:240],
-            summary="keep — research could not run",
+            decision=model_failure.NOT_FINISHED,
+            reason=LOOP_FAILED_REASON,
+            summary="not finished — ICP unchanged",
         )
 
 

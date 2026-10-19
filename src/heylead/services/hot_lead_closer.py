@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from ..ai.agent_loop import AgentBudget, run_agent_loop
+from ..ai.agent_loop import LOOP_FAILED_REASON, AgentBudget, run_agent_loop
+from . import model_failure
 from ..ai.hot_lead_closer import CLOSER_AGENT_SYSTEM, build_closer_context
 from ..ai.schemas import CLOSER_AGENT_STEP
 from ..constants import (
@@ -228,6 +229,16 @@ async def maybe_run_hot_lead_closer(
             call_llm_fn=call_llm_fn,
             valid_decisions=HOT_LEAD_CLOSER_VALID_DECISIONS,
         )
+        if result.failure:
+            # Not a hold (heylead-api#3390): no decision row, no sibling woken. The closer
+            # stands aside and the reply lane, which reads its own failure, keeps the thread.
+            await model_failure.loop_failed(actor="closer", failure=result.failure, outreach_id=outreach_id,
+                                            campaign_id=campaign_id, detail=result.error)
+            if mode == "observe":
+                return HotLeadCloserOutcome(kind="continue", reason=LOOP_FAILED_REASON)
+            return await _not_yet(
+                outreach_id, "my check didn't finish", last_message_ts, last_message_id, prospect_calendar_url,
+            )
         await after_sibling_loop(
             agent="closer",
             campaign_id=campaign_id,
@@ -327,18 +338,18 @@ async def maybe_run_hot_lead_closer(
         if hot_lead_closer_mode(campaign_config) == "observe":
             return HotLeadCloserOutcome(
                 kind="continue",
-                reason=str(e)[:240],
-                message=f"observe — closer could not run: {e}",
+                reason=LOOP_FAILED_REASON,
+                message="observe — the closer could not run",
             )
         try:
             return await _not_yet(
-                outreach_id, str(e)[:240], last_message_ts, last_message_id,
+                outreach_id, "the closer could not run", last_message_ts, last_message_id,
                 prospect_calendar_url,
             )
         except Exception:
             return HotLeadCloserOutcome(
                 kind="not_yet",
-                reason=str(e)[:240],
+                reason=LOOP_FAILED_REASON,
                 message="No booking yet — the closer could not run. The conversation continues.",
             )
 

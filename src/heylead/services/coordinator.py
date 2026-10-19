@@ -9,6 +9,7 @@ from dataclasses import replace
 from typing import Any, Literal
 
 from ..ai.agent_loop import AgentBudget, run_agent_loop
+from . import model_failure
 from ..ai.coordinator import COORDINATOR_SYSTEM, build_coordinator_context
 from ..ai.schemas import COORDINATOR_AGENT_STEP
 from ..constants import (
@@ -244,6 +245,11 @@ async def _run(
         call_llm_fn=call_llm_fn,
         valid_decisions=COORDINATOR_VALID_DECISIONS,
     )
+    if result.failure:
+        # Not the guard's judgement (heylead-api#3390): no beat, no decision row, no hold.
+        await model_failure.loop_failed(actor="coordinator", failure=result.failure, campaign_id=cid,
+                                        detail=result.error)
+        return
     if result.decision == "hold" and cid and not await run_db(campaign_level_evidence, cid):
         # The rule lives here, not only in the prompt, because the prompt did not hold.
         result = replace(

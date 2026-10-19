@@ -33,6 +33,10 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.466 (2026-10-19)
+- Fix: a failed agent loop run is recorded as a failure, never as the agent's decision
+- devflow picks by Pedro's RICE score; a needs-review outcome stops at the PR (#3440)
+
 ## v0.10.465 (2026-10-19)
 - Fix: the daemon reads replies and invitations before it sends
 - Fix: a failed intent lookup no longer borrows the previous prospect's compound intent (api #3412)

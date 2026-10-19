@@ -9,7 +9,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from ..ai.agent_loop import AgentBudget, AgentResult, run_agent_loop
+from ..ai.agent_loop import LOOP_FAILED_REASON, AgentBudget, AgentResult, run_agent_loop
+from . import model_failure
 from ..ai.schemas import REPLAN_AGENT_STEP
 from ..ai.strategist_replan import REPLAN_AGENT_SYSTEM, build_replan_context
 from ..constants import (
@@ -242,6 +243,12 @@ async def maybe_run_strategist_replan(
             call_llm_fn=call_llm_fn,
             valid_decisions=STRATEGIST_REPLAN_VALID_DECISIONS,
         )
+        if result.failure:
+            # Not a keep (heylead-api#3390): the plan stays, nothing is scored, no sibling is woken.
+            await model_failure.loop_failed(actor="strategist", failure=result.failure, outreach_id=outreach_id,
+                                            campaign_id=campaign_id, detail=result.error)
+            return StrategistReplanOutcome(decision=model_failure.NOT_FINISHED, reason=LOOP_FAILED_REASON,
+                                           summary="not finished — plan unchanged")
         await after_sibling_loop(
             agent="strategist",
             campaign_id=campaign_id,
@@ -252,10 +259,12 @@ async def maybe_run_strategist_replan(
         return await _apply_decision(outreach_id, plan, outreach, result, mode=mode, numbers=numbers)
     except Exception as e:
         logger.warning("Strategist replan failed: %s", e)
+        await model_failure.loop_failed(actor="strategist", failure=model_failure.EXCEPTION,
+                                        outreach_id=outreach_id, detail=str(e))
         return StrategistReplanOutcome(
-            decision="keep",
-            reason=str(e)[:240],
-            summary="keep — replan could not run",
+            decision=model_failure.NOT_FINISHED,
+            reason=LOOP_FAILED_REASON,
+            summary="not finished — plan unchanged",
         )
 
 

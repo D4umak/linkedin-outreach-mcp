@@ -15,7 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from ..ai.agent_loop import AgentBudget, AgentResult, run_agent_loop
+from ..ai.agent_loop import LOOP_FAILED_REASON, AgentBudget, AgentResult, run_agent_loop
+from . import model_failure
 from ..ai.product_agent import PRODUCT_AGENT_SYSTEM, build_product_context
 from ..ai.schemas import PRODUCT_AGENT_STEP
 from ..constants import (
@@ -290,6 +291,11 @@ async def maybe_run_product_agent(
             call_llm_fn=call_llm_fn,
             valid_decisions=PRODUCT_AGENT_VALID_DECISIONS,
         )
+        if result.failure:
+            # Not a decision (heylead-api#3390): nothing is drafted, scored or woken.
+            await model_failure.loop_failed(actor="product", failure=result.failure, detail=result.error)
+            return ProductAgentOutcome(decision=model_failure.NOT_FINISHED, reason=LOOP_FAILED_REASON,
+                                       summary="not finished — nothing drafted")
         await after_sibling_loop(
             agent="product",
             campaign_id="",
@@ -312,10 +318,11 @@ async def maybe_run_product_agent(
         )
     except Exception as exc:
         logger.warning("product agent failed: %s", exc)
+        await model_failure.loop_failed(actor="product", failure=model_failure.EXCEPTION, detail=str(exc))
         return ProductAgentOutcome(
-            decision="hold",
-            reason=str(exc)[:240],
-            summary="hold — product agent could not run",
+            decision=model_failure.NOT_FINISHED,
+            reason=LOOP_FAILED_REASON,
+            summary="not finished — nothing drafted",
         )
 
 

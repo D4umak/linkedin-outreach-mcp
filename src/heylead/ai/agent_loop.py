@@ -37,8 +37,17 @@ class AgentResult:
     extras: dict[str, str] = field(default_factory=dict)
     # When the loop did not finish (#2390): exception, timeout, unparseable or
     # budget (services.model_failure.FAILURES); "" when the model decided. A
-    # gate that writes to a person reads this, never the bare "none".
+    # gate that writes to a person reads this, never the bare "none". A decide
+    # step whose word is outside the agent's set is "unparseable" too
+    # (heylead-api#3390): until 19 Oct 2026 it became a real "none".
     failure: str = ""
+    # Why the loop failed, for the log; never the decision's reason.
+    error: str = ""
+
+
+# The reason every failed exit carries (heylead-api#3390). An exception's text
+# is never a reason: it reached beats and the decision log until 19 Oct 2026.
+LOOP_FAILED_REASON = "Could not finish this check this time."
 
 
 _VALID_DECISIONS = frozenset({"hold", "skip", "reply", "book", "none"})
@@ -55,7 +64,7 @@ async def run_agent_loop(
     call_llm_fn: Callable[..., Awaitable[str]] | None = None,
     valid_decisions: frozenset[str] | None = None,
 ) -> AgentResult:
-    """Run a bounded observe/act JSON loop. Exhaustion or LLM failure → none."""
+    """Run a bounded observe/act JSON loop. Exhaustion or LLM failure → ``failure`` set."""
     allowed = valid_decisions if valid_decisions is not None else _VALID_DECISIONS
     if call_llm_fn is None:
         from .llm_router import call_llm
@@ -76,9 +85,15 @@ async def run_agent_loop(
     steps: list[dict[str, Any]] = []
     started = time.monotonic()
 
+    def _failed(failure: str, error: str, *, exhausted: bool = False) -> AgentResult:
+        return AgentResult(
+            decision="none", reason=LOOP_FAILED_REASON, steps=steps, exhausted=exhausted,
+            failure=failure, error=error[:240],
+        )
+
     for _ in range(budget.max_steps):
         if time.monotonic() - started >= budget.timeout_seconds:
-            return AgentResult(decision="none", reason="timeout", steps=steps, exhausted=True, failure="timeout")
+            return _failed("timeout", f"over the {budget.timeout_seconds:.0f}s budget", exhausted=True)
         prompt = (
             f"{transcript}\n\n"
             "Return a JSON object with action, decision, reason, done. "
@@ -90,12 +105,12 @@ async def run_agent_loop(
         except Exception as e:
             logger.warning("agent loop LLM failed: %s", e)
             from ..services.model_failure import failure_of
-            return AgentResult(decision="none", reason=str(e)[:240], steps=steps, failure=failure_of(e))
+            return _failed(failure_of(e), str(e))
         try:
             parsed = _parse_step(raw, allowed)
         except Exception as e:
             logger.warning("agent loop step unparseable: %s", e)
-            return AgentResult(decision="none", reason=str(e)[:240], steps=steps, failure="unparseable")
+            return _failed("unparseable", str(e))
 
         steps.append(parsed)
         action = parsed["action"]
@@ -105,6 +120,10 @@ async def run_agent_loop(
         extras = parsed.get("extras") or {}
 
         if done or action == "decide":
+            if decision not in allowed:
+                # Not a choice the agent has: a failed step, never "none".
+                logger.warning("agent loop decision outside the set")
+                return _failed("unparseable", f"decision {decision[:40]!r} is not one of the agent's")
             return AgentResult(
                 decision=decision, reason=reason, steps=steps, extras=extras,
             )
@@ -122,9 +141,7 @@ async def run_agent_loop(
             text = f"error: {e}"
         transcript += f"\n\nTOOL {action}: {cut(text, budget.result_chars)}"
 
-    return AgentResult(
-        decision="none", reason="step budget exhausted", steps=steps, exhausted=True, failure="budget",
-    )
+    return _failed("budget", f"no decision in {budget.max_steps} steps", exhausted=True)
 
 
 def _parse_step(raw: str, valid_decisions: frozenset[str]) -> dict[str, Any]:
@@ -134,7 +151,9 @@ def _parse_step(raw: str, valid_decisions: frozenset[str]) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("agent step is not an object")
     action = str(data.get("action") or "decide")
-    decision = str(data.get("decision") or "none")
+    # Case and spaces are the fallback provider's, not a different word; a
+    # missing decision stays "" so a decide step without one fails.
+    decision = str(data.get("decision") or "").strip().lower()
     reason = str(data.get("reason") or "")
     done = data.get("done")
     if isinstance(done, str):
@@ -148,7 +167,8 @@ def _parse_step(raw: str, valid_decisions: frozenset[str]) -> dict[str, Any]:
     }
     return {
         "action": action,
-        "decision": decision if decision in valid_decisions else "none",
+        # Checked against the set only on a decide step (run_agent_loop).
+        "decision": decision,
         "reason": reason,
         "done": done,
         "extras": extras,
