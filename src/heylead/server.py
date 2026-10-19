@@ -33,6 +33,17 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.465 (2026-10-19)
+- Fix: the daemon reads replies and invitations before it sends
+- Fix: a failed intent lookup no longer borrows the previous prospect's compound intent (api #3412)
+- devflow: skip outcomes whose PR merged or whose plan stopped; wait out a failed preflight (#3292)
+- Fix: do not look up a company by its display name
+- devflow hand-off body (#3292)
+- devflow on the cloud credits, state and owed steps (#3292)
+- devflow: leave case-labelled outcomes to the case-loop sweep (#3292)
+- devflow: resume a phase that stops before its required ending; phase command reruns review/fix (#3292)
+- devflow: focused local tests (CI runs the suite), no Closes keyword, reviewer waits for CI (#3292)
+
 ## v0.10.464 (2026-10-18)
 - Fix: up to N follow-ups means N after the opener (#1444)
 

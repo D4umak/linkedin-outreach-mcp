@@ -213,8 +213,12 @@ _SLOW_JOBS = frozenset({
 })
 
 
+# Replies and invitations start with outreach, not after it (heylead-api#3421).
+_INBOUND_PASS_JOB_TYPES = frozenset({JOB_CHECK_REPLIES, JOB_PROCESS_INBOUND})
+
+
 def _job_start_priority(job_type: str, *, refill_critical: bool = False) -> int:
-    if job_type in _OUTREACH_JOB_TYPES:
+    if job_type in _OUTREACH_JOB_TYPES or job_type in _INBOUND_PASS_JOB_TYPES:
         return 0
     if refill_critical and job_type == "campaign_refill":
         return 0

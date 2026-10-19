@@ -20,6 +20,7 @@ import time
 from typing import Any
 
 from ..ai.copywriter import provenance as copy_provenance
+from ..linkedin.company_id import is_company_identifier
 from ..ai.message_fixer import fix_message
 from ..ai.message_generator import check_job_search_draft, generate_message
 from ..ai.message_improver import improve_message
@@ -819,7 +820,8 @@ async def run_generate_and_send(
 
     # ── Company Enrichment: fetch company profile for better personalization ──
     company_name = prospect_data.get("company") or prospect.get("company", "")
-    if company_name and not prospect_data.get("company_data"):
+    # A display name is not a company id and is not sent (#3327).
+    if company_name and not prospect_data.get("company_data") and is_company_identifier(company_name):
         try:
             company_data = await client.get_company_profile(account_id, company_name)
             if company_data and company_data.get("name"):

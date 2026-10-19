@@ -744,6 +744,10 @@ async def activate_pending_signals() -> str:
 
         # Apply compound intent boost: if the prospect has active intent events,
         # use the highest compound event score as a floor for the composite score.
+        # Bound before the lookup: when it failed, the name still held the
+        # previous person's events and their compound intent was written onto
+        # this one (api #3412).
+        intent_events: list[dict[str, Any]] = []
         try:
             intent_events = await run_db(list_intent_events, linkedin_id=linkedin_id, active_only=True)
             if intent_events:
@@ -806,7 +810,7 @@ async def activate_pending_signals() -> str:
                 if compound_hook:
                     signal_context["engagement_hook"] = compound_hook
         except Exception:
-            pass  # intent_events may not be defined if lookup failed
+            logger.debug("Compound intent context failed for signal %s", str(signal_id)[:8], exc_info=True)
 
         # ── Hot Signal Fast-Track ──
         # Certain signal+intent combos are so strong they should trigger outreach

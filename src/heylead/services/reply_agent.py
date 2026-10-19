@@ -146,15 +146,11 @@ def apply_reply_agent_decision(
             message=f"Reply agent skipped this job — {reason}.",
         )
     if decision == "book":
-        if mode == "act" and not has_booking_target:
-            return ReplyAgentOutcome(
-                kind="hold",
-                reason=reason or "book requested without a calendar",
-                message=(
-                    "Held for operator — they want a meeting but no calendar "
-                    "or booking link is available."
-                ),
-            )
+        if not has_booking_target:
+            # Nothing to book with: the usual reply answers and asks which
+            # time suits. Until heylead-api#3385 act held it, and the meeting
+            # ask waited for a person over a setting the prospect cannot see.
+            return ReplyAgentOutcome(kind="continue", reason=reason or "book requested without a calendar")
         return ReplyAgentOutcome(kind="book", reason=reason)
     return ReplyAgentOutcome(kind="continue", reason=reason)
 

@@ -20,6 +20,7 @@ import logging
 from typing import Any
 
 from ..ai.icp_schemas import IcpResult, icp_result_from_dict
+from ..linkedin.company_id import is_company_identifier
 from ..config import apply_free_monthly_caps, get_tier, is_backend_mode, load_config
 from ..constants import (
     CAMPAIGN_TYPE_JOB_SEARCH,
@@ -576,8 +577,11 @@ async def run_create_campaign(
             # Extract company identifier from URL (e.g., "google" from linkedin.com/company/google)
             import re
             match = re.search(r"linkedin\.com/company/([^/?#]+)", company_url)
-            identifier = match.group(1) if match else company_url.strip()
-            fetched = await client.get_company_profile(account_id, identifier)
+            identifier = match.group(1) if match else ""
+            fetched = (
+                await client.get_company_profile(account_id, identifier)
+                if is_company_identifier(identifier) else None
+            )
             if isinstance(fetched, dict):
                 company_data = fetched
                 abm_company_name = company_data.get("name") or company_data.get("company_name") or ""

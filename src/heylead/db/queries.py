@@ -5330,20 +5330,17 @@ def create_scheduler_job(
     return job_id
 
 
-def get_ready_jobs(limit: int = 10) -> list[dict]:
-    """Get jobs that are ready to execute (pending and scheduled_at <= now).
-
-    Core outreach jobs (invite, send_dm, followup, auto_reply) are prioritised
-    over warm-up jobs (engage, follow, endorse, profile_view) so that warm-up
-    never blocks outreach.
-    """
-    now = int(time.time())
-    db = get_db()
-    rows = db.execute(
-        """SELECT * FROM scheduler_jobs
-           WHERE status = 'pending' AND scheduled_at <= ?
-           ORDER BY
+# The order jobs are read and re-staggered in. Replies and invitations first:
+# reading what people sent this seat costs a few seconds and decides what the
+# sends after it should say. They were ELSE 3, behind every send and discover,
+# and the 20-row read hid them on a busy morning -- the hosted tick's version
+# of this kept an inbound pass waiting from 07:00 until it was swept at 08:01
+# on 19 Oct 2026 (heylead-api#3421). Core outreach next, warm-up last, so
+# warm-up never blocks outreach.
+_READY_JOB_ORDER = """
                CASE job_type
+                   WHEN 'process_inbound' THEN 0
+                   WHEN 'check_replies' THEN 0
                    WHEN 'invite' THEN 1
                    WHEN 'send_dm' THEN 1
                    WHEN 'followup' THEN 1
@@ -5356,7 +5353,22 @@ def get_ready_jobs(limit: int = 10) -> list[dict]:
                    WHEN 'profile_view' THEN 5
                    ELSE 3
                END,
-               scheduled_at ASC
+               scheduled_at ASC"""
+
+
+def get_ready_jobs(limit: int = 10) -> list[dict]:
+    """Get jobs that are ready to execute (pending and scheduled_at <= now).
+
+    Core outreach jobs (invite, send_dm, followup, auto_reply) are prioritised
+    over warm-up jobs (engage, follow, endorse, profile_view) so that warm-up
+    never blocks outreach.
+    """
+    now = int(time.time())
+    db = get_db()
+    rows = db.execute(
+        """SELECT * FROM scheduler_jobs
+           WHERE status = 'pending' AND scheduled_at <= ?
+           ORDER BY """ + _READY_JOB_ORDER + """
            LIMIT ?""",
         (now, limit),
     ).fetchall()
@@ -5393,21 +5405,7 @@ def restagger_stale_jobs(staleness_seconds: int = 600, spread_seconds: int = 30)
     rows = db.execute(
         """SELECT id FROM scheduler_jobs
            WHERE status = 'pending' AND scheduled_at <= ?
-           ORDER BY
-               CASE job_type
-                   WHEN 'invite' THEN 1
-                   WHEN 'send_dm' THEN 1
-                   WHEN 'followup' THEN 1
-                   WHEN 'auto_reply' THEN 1
-                   WHEN 'discover' THEN 2
-                   WHEN 'email_fallback' THEN 2
-                   WHEN 'engage' THEN 3
-                   WHEN 'follow' THEN 4
-                   WHEN 'endorse' THEN 4
-                   WHEN 'profile_view' THEN 5
-                   ELSE 3
-               END,
-               scheduled_at ASC""",
+           ORDER BY """ + _READY_JOB_ORDER,
         (cutoff,),
     ).fetchall()
 
