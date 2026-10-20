@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from heylead.services.booking_links import offered_link
+
 from typing import Any
 
 REPLY_AGENT_SYSTEM = """You are a safety operator for LinkedIn auto-replies.
@@ -38,5 +40,5 @@ def build_reply_agent_context(
 def booking_target_available(prospect_calendar_url: str, campaign_config: dict[str, Any]) -> bool:
     if (prospect_calendar_url or "").strip():
         return True
-    link = (campaign_config or {}).get("booking_link") or ""
+    link = offered_link(campaign_config)
     return bool(str(link).strip())

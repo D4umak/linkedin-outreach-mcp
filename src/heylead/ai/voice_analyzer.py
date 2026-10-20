@@ -11,6 +11,7 @@ positive reaction to voice matching.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from ..db.async_bridge import run_db
@@ -18,6 +19,7 @@ from ..linkedin.experience import format_experience
 from .llm import LLMClient
 from .llm import loads_json_object as parse_json
 from .prompt_loader import get_prompt_temperature, has_prompt, render_prompt
+from .voice_block import VOICE_MIN_POSTS, is_usable_voice, voice_excerpts, with_record
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +56,7 @@ Summary: {summary}
 Create two things:
 
 ### 1. VOICE SIGNATURE
-Analyze their writing style from posts, headline, and summary. If they have no posts, infer from their headline, summary, and professional context.
+Analyze their writing style from their own posts only. If the posts section says they have no posts of their own, leave every voice field empty and fill only the expertise map: a voice guessed from a headline is not theirs.
 
 Extract:
 - **tone**: One-line description (e.g., "Direct, technical, slightly informal")
@@ -95,30 +97,91 @@ Return ONLY valid JSON (no markdown, no explanation):
 }}"""
 
 
-def own_posts(posts: list[dict] | None) -> list[dict]:
-    """The posts the user wrote, with the reshares dropped.
+class VoiceAnalysisFailed(RuntimeError):
+    """The analysis gave no usable voice for posts the user did write.
+
+    Until api #3499 a local parse failure returned the "Could not analyze —
+    check your LLM API key" default as the user's voice, setup stored it,
+    and every writer rendered it as the tone. Callers now keep what they had.
+    """
+
+
+_NO_OWN_POSTS = (
+    "No posts of their own found, so there is no writing to learn a voice from. "
+    "Leave every voice field empty and fill only the expertise map, from the profile data."
+)
+
+
+def own_posts(
+    posts: list[dict] | None, published: set[str] | None = None,
+) -> list[dict]:
+    """The posts the user wrote: no reshares, nothing HeyLead published.
 
     A reshare is someone else's writing. Analysing one as the user's voice is
     how a signature ends up describing a blend of several people — the account
-    owner's had a FlyerOne job ad and a Leica role in it (9 Sep 2026).
+    owner's had a FlyerOne job ad and a Leica role in it (9 Sep 2026). A post
+    HeyLead published is the product's own prose; learning a voice from it
+    teaches the writer to imitate itself (api #3499).
+
+    ``published`` is the set of published post numbers; None reads it here.
     """
-    from ..services.voice_examples import _is_known_own_writing
+    from ..services.voice_examples import (
+        _is_known_own_writing,
+        is_published_by_heylead,
+        published_numbers,
+    )
 
-    return [p for p in (posts or []) if isinstance(p, dict) and _is_known_own_writing(p)]
+    if published is None:
+        published = published_numbers()
+    return [
+        p for p in (posts or [])
+        if isinstance(p, dict) and _is_known_own_writing(p)
+        and not is_published_by_heylead(p, published)
+    ]
 
 
-def _format_posts(posts: list[dict]) -> str:
+def _format_posts(posts: list[dict], published: set[str] | None = None) -> str:
     """The user's own posts, formatted for the prompt."""
-    if not posts:
-        return "No recent posts available — infer voice from profile data."
     lines = []
-    for post in own_posts(posts):
+    for post in own_posts(posts, published):
         text = post.get("text", "").strip()
         if text:
             lines.append(f"Post {len(lines) + 1}:\n{text[:500]}\n")
     if not lines:
-        return "No posts of their own found — infer voice from profile data."
+        return _NO_OWN_POSTS
     return "\n".join(lines)
+
+
+def _int_or(value: Any, default: int) -> int:
+    if isinstance(value, bool):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _backend_answer(answer: Any, own_count: int) -> dict[str, Any]:
+    """The route's answer in the client's shape, the route's record kept.
+
+    The route counts the posts itself (it also knows the workspace's
+    published posts); a route from before #3499 sends no count, so the
+    client's own count stands in.
+    """
+    answer = answer if isinstance(answer, dict) else {}
+    voice = answer.get("voice") if isinstance(answer.get("voice"), dict) else {}
+    expertise = answer.get("expertise") if isinstance(answer.get("expertise"), dict) else {}
+    post_count = _int_or(answer.get("post_count"), own_count)
+    if post_count <= 0:
+        # The zero-posts answer: no voice, expertise kept. A route from before
+        # #3499 still invents a voice from the headline here; it is dropped.
+        return {"voice": {}, "expertise": expertise, "post_count": 0, "thin": False}
+    if not is_usable_voice(voice):
+        raise VoiceAnalysisFailed("the backend returned no usable voice")
+    thin = answer.get("thin")
+    if not isinstance(thin, bool):
+        thin = 0 < post_count < VOICE_MIN_POSTS
+    return {"voice": voice, "expertise": expertise, "post_count": post_count, "thin": thin}
 
 
 async def analyze_voice(profile: dict[str, Any]) -> dict[str, Any]:
@@ -128,11 +191,16 @@ async def analyze_voice(profile: dict[str, Any]) -> dict[str, Any]:
         profile: Dict from linkedin.profile.fetch_own_profile()
 
     Returns:
-        Dict with 'voice' and 'expertise' keys containing the analysis.
+        ``{"voice", "expertise", "post_count", "thin"}``. Zero own posts give
+        ``voice == {}`` (the expertise map is still built). A local build's
+        voice carries its record (voice_block.with_record, source "client").
+
+    Raises:
+        VoiceAnalysisFailed: own posts exist but no usable voice came back.
     """
     # Route through backend if in backend mode and no local LLM key
     from ..config import has_local_llm_key, is_backend_mode
-    from ..services.voice_examples import apply_reshare_flags
+    from ..services.voice_examples import apply_reshare_flags, published_numbers
     posts = profile.get("posts") or []
     try:
         await run_db(
@@ -142,6 +210,9 @@ async def analyze_voice(profile: dict[str, Any]) -> dict[str, Any]:
     except Exception as e:
         logger.debug("reshare backfill skipped: %s", e)
 
+    published = await run_db(published_numbers)
+    own = own_posts(posts, published)
+
     if is_backend_mode() and not has_local_llm_key():
         from ..linkedin import get_linkedin_client
         client = get_linkedin_client()
@@ -149,9 +220,10 @@ async def analyze_voice(profile: dict[str, Any]) -> dict[str, Any]:
             # The backend builds its own prompt from this list, so
             # _format_posts never runs for a hosted account. Filter here or
             # the reshares reach the analyzer anyway.
-            return await client.analyze_voice(profile, own_posts(profile.get("posts")))
+            answer = await client.analyze_voice(profile, own)
         finally:
             await client.close()
+        return _backend_answer(answer, len(own))
 
     # Build template variables
     tpl_vars = {
@@ -164,8 +236,8 @@ async def analyze_voice(profile: dict[str, Any]) -> dict[str, Any]:
         "summary": profile.get("summary", ""),
         "experience": format_experience(profile.get("experience", [])),
         "skills": ", ".join(profile.get("skills", [])[:15]),
-        "post_count": str(len(own_posts(profile.get("posts")))),
-        "posts": _format_posts(profile.get("posts", [])),
+        "post_count": str(len(own)),
+        "posts": _format_posts(posts, published),
     }
 
     # v63 path: use JSON prompt template
@@ -182,26 +254,30 @@ async def analyze_voice(profile: dict[str, Any]) -> dict[str, Any]:
     client = LLMClient()
     raw = await client.generate(prompt, system=VOICE_ANALYSIS_SYSTEM, temperature=temperature)
 
-    # Parse JSON from response with 2-tier repair
-    default_result = {
-        "voice": {
-            "tone": "Could not analyze — check your LLM API key",
-            "sentence_length": "Unknown",
-            "signature_pattern": "Unknown",
-            "vocabulary_preferences": [],
-            "no_go": "Unknown",
-            "formality_level": 5,
-            "communication_style": [],
-        },
-        "expertise": {
-            "core": profile.get("headline", ""),
-            "credible_topics": "",
-            "off_limits": "",
-            "industry_context": profile.get("industry", ""),
-        },
-    }
+    try:
+        parsed = parse_json(raw)
+    except ValueError as e:
+        raise VoiceAnalysisFailed(f"the model's answer did not parse: {e}") from e
+    if not isinstance(parsed, dict):
+        raise VoiceAnalysisFailed("the model's answer was not an object")
+    expertise = parsed.get("expertise") if isinstance(parsed.get("expertise"), dict) else {}
 
-    return parse_json(raw, fallback=default_result)
+    if not own:
+        # Nothing the user wrote: the model was asked for the expertise map
+        # only, and whatever voice it gave anyway is discarded.
+        return {"voice": {}, "expertise": expertise, "post_count": 0, "thin": False}
+
+    voice = parsed.get("voice") if isinstance(parsed.get("voice"), dict) else {}
+    if not is_usable_voice(voice):
+        raise VoiceAnalysisFailed("the model returned no usable voice")
+    recorded = with_record(
+        voice, post_count=len(own), excerpts=voice_excerpts(own), source="client",
+        now=int(time.time()),
+    )
+    return {
+        "voice": recorded, "expertise": expertise,
+        "post_count": len(own), "thin": bool(recorded["thin"]),
+    }
 
 
 # ── Prompt rendering ──

@@ -11,6 +11,8 @@ Core follow-up loop:
 
 from __future__ import annotations
 
+from heylead.services.booking_links import booking_context
+
 from .. import facts
 from ..hosted_writes import ensure_laptop_may_write
 from ..services.campaign_naming import cut_at_word
@@ -557,7 +559,7 @@ async def run_send_followup(
     campaign_context = {
         "target_description": campaign_config.get("target_description", ""),
         "relevance_hook": icp_data.get("relevance_hook", ""),
-        "booking_link": campaign_config.get("booking_link", ""),
+        **booking_context(campaign_config),
         "campaign_intent": campaign_config.get("campaign_intent", ""),
         "campaign_type": campaign_config.get("campaign_type", ""),
     }

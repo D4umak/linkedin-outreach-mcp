@@ -1037,7 +1037,7 @@ class UnipileClient:
         return apply_current_role(profile)
 
     async def get_posts(
-        self, account_id: str, provider_id: str = "", limit: int = 10,
+        self, account_id: str, provider_id: str = "", limit: int = 10, *, strict: bool = False,
     ) -> list[dict[str, Any]]:
         """Fetch recent LinkedIn posts for the user.
 
@@ -1082,6 +1082,9 @@ class UnipileClient:
             return posts
         except Exception as e:
             logger.warning(f"Failed to fetch posts: {e}")
+            if strict:
+                # The voice build tells a failed read from no posts (api #3499).
+                raise
             return []
 
     # ── Search ──

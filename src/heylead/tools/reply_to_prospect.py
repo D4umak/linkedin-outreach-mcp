@@ -11,6 +11,8 @@ Core reply loop:
 
 from __future__ import annotations
 
+from heylead.services.booking_links import booking_context, offered_link
+
 from .. import facts
 from ..hosted_writes import ensure_laptop_may_write
 from ..services.campaign_naming import cut_at_word
@@ -777,14 +779,15 @@ async def run_reply_to_prospect(
         campaign_context = {
             "target_description": campaign_config.get("target_description", ""),
             "relevance_hook": icp_data.get("relevance_hook", ""),
-            "booking_link": campaign_config.get("booking_link", ""),
+            **booking_context(campaign_config),
             "campaign_intent": campaign_config.get("campaign_intent", ""),
             "campaign_type": campaign_config.get("campaign_type", ""),
         }
         campaign_ctx = await run_db(get_campaign_context, campaign_id)
         # Merge context_json fields (offerings, case_studies, social_proofs) into campaign_context
         campaign_context.update(campaign_ctx)
-        booking_link = campaign_config.get("booking_link", "")
+        campaign_context.update(booking_context(campaign_config))
+        booking_link = offered_link(campaign_config)
     else:
         # Inbound outreach — no campaign context available
         campaign_config = {}

@@ -157,24 +157,7 @@ _NEGATIVE_REGEX = re.compile(
 )
 
 # Calendar / booking URL patterns — detects when prospect shares their scheduling link
-_CALENDAR_URL_REGEX = re.compile(
-    # The booking hosts must match a whole host, not a substring: an unanchored
-    # `cal\.com` also matches vertical.com / acmemedical.com.
-    r"https?://(?:"
-    r"(?:[^\s/?#]*\.)?(?:"
-    r"calendly\.com|cal\.com|acuityscheduling\.com|"
-    r"savvycal\.com|tidycal\.com|zcal\.co|youcanbook\.me|"
-    r"meetingbird\.com|doodle\.com|koalendar\.com|chilipiper\.com"
-    r")(?![^\s/?#])"
-    r"|[^\s]*?(?:"
-    r"hubspot\.com/meetings|"
-    r"/book-a-call|/free-strategy-call|/schedule-a-call|/book-a-meeting|"
-    r"/free-consultation|/schedule-a-meeting|/book-a-demo|/schedule-call|"
-    r"/booking|/schedule\b|/meet/|/call/|/meeting/"
-    r")"
-    r")[^\s]*",
-    re.IGNORECASE,
-)
+from heylead.services.booking_links import scheduler_link_in
 
 # Calendar intent keywords — catches "check my calendar" style replies without URLs
 _CALENDAR_INTENT_REGEX = re.compile(
@@ -198,8 +181,10 @@ def detect_calendar_url(text: str) -> str | None:
 
     Returns the first calendar/booking URL found, or None.
     """
-    match = _CALENDAR_URL_REGEX.search(text)
-    return match.group(0) if match else None
+    return scheduler_link_in(
+        text, hosts=("meetingbird.com", "doodle.com"),
+        segments=frozenset({"meet", "call", "free-strategy-call", "free-consultation"}),
+    ) or None
 
 
 def detect_calendar_intent(text: str) -> bool:

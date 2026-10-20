@@ -16,6 +16,8 @@ the api's fixture.
 
 from __future__ import annotations
 
+from heylead.services.booking_links import offered_link
+
 import json
 import logging
 from dataclasses import dataclass
@@ -351,7 +353,7 @@ def campaign_plan(
     autopilot = str(state.get("send_approval_mode") or "").strip() == MODE_AUTOPILOT
     connections_only = _flag(cfg, "connections_only", False) or not _flag(cfg, "enable_invitations", True)
     job_search = _is_job_search(cfg, context)
-    booking_link = str(cfg.get("booking_link") or "").strip()
+    booking_link = offered_link(cfg)
     daily, weekly = _seat_caps(seat)
     status = plan_status(campaign)
     stopped = not_running_step(status)

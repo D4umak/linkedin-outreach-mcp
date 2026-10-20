@@ -100,6 +100,7 @@ async def run_edit_campaign(
     enable_strategist_replan_agent: str = "",
     enable_hot_lead_closer: str = "",
     enable_coordinator_agent: str = "",
+    booking_link_page_ok: bool = False,
 ) -> str:
     """Edit a campaign's settings.
 
@@ -107,6 +108,7 @@ async def run_edit_campaign(
         campaign_id: Which campaign to edit. Edits the first active campaign if empty.
         name: New campaign name. Leave empty to keep current name.
         mode: New mode: "copilot" or "autopilot". Leave empty to keep current mode.
+        booking_link_page_ok: Explicitly keep a website page as the booking link.
         booking_link: Calendar/booking URL for positive reply auto-responses.
         offerings: What you offer (products, services, value props).
         case_studies: Brief case studies or success stories.
@@ -445,10 +447,22 @@ async def run_edit_campaign(
         config = {}
 
     if booking_link:
+        from ..services.booking_links import BookingLinkInvalid, link_kind, link_line, normalise
+
+        try:
+            booking_link = normalise(booking_link)
+        except BookingLinkInvalid as exc:
+            return str(exc)
         old_booking = config.get("booking_link", "")
-        if booking_link != old_booking:
+        kept = bool(booking_link_page_ok) if booking_link != old_booking else (
+            config.get("booking_link_confirmed_page") is True or booking_link_page_ok
+        )
+        confirmed = link_kind(booking_link) == "page" and kept
+        if booking_link != old_booking or confirmed != config.get("booking_link_confirmed_page", False):
             config["booking_link"] = booking_link
-            change_descriptions.append(f"Booking link: {booking_link}")
+            config["booking_link_confirmed_page"] = confirmed
+        # Repeat saves still explain an unconfirmed page and can confirm it.
+        change_descriptions.append(link_line(booking_link, confirmed=confirmed))
 
     if voice_mode:
         old_voice = config.get("voice_mode", "text_only")
@@ -829,7 +843,7 @@ async def run_edit_campaign(
         if ctx_changed:
             changes["context_json"] = json.dumps(existing_ctx)
 
-    if not changes:
+    if not changes and not booking_link:
         # An explicit campaign_type still goes to the cloud. The cloud is what
         # sends, and it learned this key later than the client did: re-issuing
         # the same value is how an operator repairs a campaign whose earlier
@@ -862,7 +876,8 @@ async def run_edit_campaign(
             "The campaign already has those settings."
         )
 
-    await db.update_campaign(campaign_id, **changes)
+    if changes:
+        await db.update_campaign(campaign_id, **changes)
 
     # ── Log warmup changes so optimizer respects user decisions ──
     warmup_keys = {"enable_profile_views", "enable_follows", "enable_endorsements", "enable_engagements"}
@@ -939,6 +954,7 @@ async def run_edit_campaign(
         # Same key the dashboard Calendar Link field and reply prompts use.
         # Without this push a hosted campaign never learns the URL.
         sync_settings["booking_link"] = booking_link
+        sync_settings["booking_link_page_ok"] = bool(config.get("booking_link_confirmed_page"))
     if competitor_companies.strip():
         sync_settings["competitor_companies"] = competitor_companies.strip()
     if wanted_language:

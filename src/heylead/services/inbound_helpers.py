@@ -78,3 +78,23 @@ def resolve_campaign_for_signal(signal: dict[str, Any]) -> str:
 
     campaign_id = _match_best_campaign(signal_for_matching, active_campaigns)
     return campaign_id or ""
+
+
+async def count_unsent_reply(signal: dict[str, Any]) -> int:
+    """One more attempt on a signal whose reply was not sent: refused or drafted empty.
+
+    Until heylead-api#3498 (20 Oct 2026) both inbound lanes returned "skipped"
+    and left the signal as it was, so the same refused reply was written again
+    on every pass. It counts like a send that failed, and the signal is
+    dismissed at INBOUND_MAX_DM_ATTEMPTS. Returns the new count.
+    """
+    from ..constants import INBOUND_MAX_DM_ATTEMPTS
+    from ..db.async_bridge import run_db
+    from ..db.queries import update_inbound_signal
+
+    attempts = int(signal.get("dm_attempts") or 0) + 1
+    if attempts >= INBOUND_MAX_DM_ATTEMPTS:
+        await run_db(update_inbound_signal, signal["id"], status="dismissed", dm_attempts=attempts)
+    else:
+        await run_db(update_inbound_signal, signal["id"], dm_attempts=attempts)
+    return attempts

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,47 @@ def apply_reshare_flags(
     return n
 
 
+_POST_NUMBER = re.compile(r"(\d{6,})\s*$")
+
+#: The keys a post's id arrives under: the feed item, get_posts, the posts table.
+POST_ID_KEYS = ("id", "urn", "post_id", "social_id")
+
+
+def post_number(post_id: Any) -> str:
+    """The activity number inside any id form: bare, or an activity, ugcPost or share URN.
+
+    HeyLead records a published post under the create response's id, and the
+    feed names the same post by a URN, so an exact-string match never caught
+    it (api #3499; heylead-api own_post_engagers.numeric_post_id).
+    """
+    text = str(post_id or "").strip()
+    match = _POST_NUMBER.search(text)
+    return match.group(1) if match else text
+
+
+def published_numbers() -> set[str]:
+    """The numbers of every post HeyLead published from this install."""
+    from ..db.queries import get_published_post_ids
+
+    try:
+        ids = get_published_post_ids()
+    except Exception as e:  # a fresh DB, a migration mid-flight
+        logger.debug("published post ids unavailable: %s", e)
+        return set()
+    return {post_number(i) for i in ids if i} - {""}
+
+
+def is_published_by_heylead(post: dict[str, Any], published: set[str]) -> bool:
+    """True when any id the post carries is one HeyLead published."""
+    if not published:
+        return False
+    for key in POST_ID_KEYS:
+        value = post.get(key)
+        if value and post_number(value) in published:
+            return True
+    return False
+
+
 def _is_known_own_writing(post: dict[str, Any]) -> bool:
     """False for a reshare, and for a post whose is_repost flag was never set.
 
@@ -103,13 +145,8 @@ def select_example_posts(profile: dict[str, Any] | None, limit: int = 3) -> list
     provider_id = profile.get("provider_id") or ""
 
     from ..db.post_queries import get_posts_by_author
-    from ..db.queries import get_published_post_ids
 
-    try:
-        ours = get_published_post_ids()
-    except Exception as e:  # a fresh DB, a migration mid-flight
-        logger.debug("published post ids unavailable: %s", e)
-        ours = set()
+    ours = published_numbers()
 
     candidates: list[tuple[int, str, str]] = []  # (score, post_id, text)
 
@@ -123,7 +160,7 @@ def select_example_posts(profile: dict[str, Any] | None, limit: int = 3) -> list
             if not _is_known_own_writing(row):
                 continue
             post_id = str(row.get("post_id") or "")
-            if post_id and post_id in ours:
+            if is_published_by_heylead(row, ours):
                 continue
             text = _usable(row.get("text"))
             if text:
@@ -136,7 +173,7 @@ def select_example_posts(profile: dict[str, Any] | None, limit: int = 3) -> list
         if not _is_known_own_writing(post):
             continue
         post_id = str(post.get("urn") or "")
-        if post_id and post_id in ours:
+        if is_published_by_heylead(post, ours):
             continue
         text = _usable(post.get("text"))
         if text:

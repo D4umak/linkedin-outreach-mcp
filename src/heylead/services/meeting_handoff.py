@@ -20,14 +20,7 @@ from typing import Any
 
 # Their own booking page. Defined here and imported by unanswered_leads, so
 # the two cannot disagree about what a booking link is.
-BOOKING_URL_RE = re.compile(
-    r"https?://[^\s<>\"]*(?:"
-    r"calendly\.com|cal\.com|acuityscheduling\.com|savvycal\.com|"
-    r"hubspot\.com/meetings|/bookings?\b|/book-a-|/schedule"
-    r"|outlook\.office\.com"
-    r")[^\s<>\"]*",
-    re.IGNORECASE,
-)
+from .booking_links import scheduler_link_in
 
 # A run of digits somebody could ring, with the separators people type. Bounded
 # at both ends by a non-word character so it cannot start mid-token, and the
@@ -70,8 +63,7 @@ def phone_in(text: str) -> str:
 
 def booking_url_in(text: str) -> str:
     """Their own booking page in ``text``, or ""."""
-    found = BOOKING_URL_RE.search(text or "")
-    return found.group(0) if found else ""
+    return scheduler_link_in(text, hosts=("outlook.office.com",))
 
 
 def handoff_in(text: str) -> dict[str, str] | None:

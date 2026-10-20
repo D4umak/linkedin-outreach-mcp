@@ -336,46 +336,184 @@ def person_line(
     return line
 
 
-def format_voice_signature(voice: dict, expertise: dict) -> str:
-    """Format voice signature + expertise for display (the killer feature)."""
-    lines = [
-        "✅ Profile analyzed! Here's how I'll represent you:",
-        "",
-        "Your Voice:",
+# ── The voice in the setup_profile and switch_to replies (api #3499) ──
+#
+# States (designer-1, designer-2 on heylead-api#3499), decided in this order:
+#   K / X  the posts fetch or the analysis failed; K keeps the earlier voice
+#          of the same LinkedIn account, X has none to keep
+#   N / NK no posts the user wrote; NK keeps the same account's earlier voice
+#   T      a first read from 1-2 own posts
+#   F      3 or more own posts
+# Modes: M1 hosted, the cloud sends; M2 hosted, this Mac sends; M3 local mode
+# on the user's own LLM key. Only M3 is ever told to check an LLM key.
+
+VOICE_STATES = ("F", "T", "N", "NK", "K", "X")
+VOICE_MODES = ("M1", "M2", "M3")
+
+
+def _posts_phrase(count: int) -> str:
+    return "1 post" if count == 1 else f"{count} posts"
+
+
+def _what_failed(reason: str) -> str:
+    return "voice" if reason == "voice" else "LinkedIn posts"
+
+
+def voice_posts_line(state: str, *, post_count: int = 0, reason: str = "posts") -> str:
+    """The 📝 line under the profile header."""
+    if state == "F":
+        return f"📝 Learned your voice from {post_count} posts you wrote"
+    if state == "T":
+        return f"📝 Learned your voice from {_posts_phrase(post_count)} you wrote: a first read"
+    if state == "N":
+        return "📝 No posts you wrote yourself yet, so no voice"
+    if state == "NK":
+        return (
+            "📝 No posts you wrote yourself among your recent ones, "
+            "so your earlier voice stays in use"
+        )
+    if state == "K":
+        return (
+            f"📝 Couldn't read your {_what_failed(reason)} this time, "
+            "so your earlier voice stays in use"
+        )
+    return f"📝 Couldn't read your {_what_failed(reason)} this time, so there's no voice yet"
+
+
+def _tree(items: list[tuple[str, Any]]) -> list[str]:
+    out = []
+    for i, (label, value) in enumerate(items):
+        prefix = "└──" if i == len(items) - 1 else "├──"
+        out.append(f"{prefix} {label}: {value}")
+    return out
+
+
+def _expertise_lines(expertise: dict | None) -> list[str]:
+    expertise = expertise if isinstance(expertise, dict) else {}
+    items = [
+        (label, expertise[key])
+        for key, label in (("core", "Core"), ("credible_topics", "Credible topics"),
+                           ("off_limits", "Off-limits"))
+        if expertise.get(key)
+    ]
+    if not items:
+        return ["Your Expertise: not read yet"]
+    return ["Your Expertise:", *_tree(items)]
+
+
+def _voice_items(voice: dict) -> list[tuple[str, Any]]:
+    return [
+        (label, voice[key])
+        for key, label in (("tone", "Tone"), ("sentence_length", "Sentence length"),
+                           ("signature_pattern", "Signature pattern"), ("no_go", "No-go"))
+        if voice.get(key)
     ]
 
-    voice_items = []
-    if voice.get("tone"):
-        voice_items.append(("Tone", voice["tone"]))
-    if voice.get("sentence_length"):
-        voice_items.append(("Sentence length", voice["sentence_length"]))
-    if voice.get("signature_pattern"):
-        voice_items.append(("Signature pattern", voice["signature_pattern"]))
-    if voice.get("no_go"):
-        voice_items.append(("No-go", voice["no_go"]))
 
-    for i, (label, value) in enumerate(voice_items):
-        is_last = i == len(voice_items) - 1
-        prefix = "└──" if is_last else "├──"
-        lines.append(f"{prefix} {label}: {value}")
+def _recorded_count(voice: dict) -> int:
+    try:
+        value = voice.get("post_count")
+        return 0 if isinstance(value, bool) else int(value or 0)
+    except (TypeError, ValueError):
+        return 0
 
-    lines.append("")
-    lines.append("Your Expertise:")
 
-    exp_items = []
-    if expertise.get("core"):
-        exp_items.append(("Core", expertise["core"]))
-    if expertise.get("credible_topics"):
-        exp_items.append(("Credible topics", expertise["credible_topics"]))
-    if expertise.get("off_limits"):
-        exp_items.append(("Off-limits", expertise["off_limits"]))
+def _voice_heading(voice: dict, post_count: int = 0) -> str:
+    count = post_count or _recorded_count(voice)
+    if count >= 3:
+        return f"Your Voice (from {count} posts you wrote):"
+    if count > 0:
+        return f"Your Voice (a first read from {_posts_phrase(count)} you wrote):"
+    return "Your Voice:"  # a voice stored before its record existed
 
-    for i, (label, value) in enumerate(exp_items):
-        is_last = i == len(exp_items) - 1
-        prefix = "└──" if is_last else "├──"
-        lines.append(f"{prefix} {label}: {value}")
 
-    lines.append("")
-    lines.append("This ensures every message sounds like YOU, not a bot.")
+def _in_this_voice(voice: dict, mode: str, post_count: int = 0) -> str:
+    line = "HeyLead writes your messages and posts in this voice."
+    if 0 < (post_count or _recorded_count(voice)) < 3:
+        if mode == "M1":
+            return line + " It gets closer once you've written 3 posts."
+        return line + " Once you've written 3 posts, run setup_profile() again to sharpen it."
+    return line
 
-    return "\n".join(lines)
+
+def _retry_line(mode: str, *, with_key_hint: bool, retry_account_id: str = "") -> str:
+    if mode == "M1":
+        return "HeyLead tries again on its own."
+    if retry_account_id:
+        line = (
+            f"Run account(action='switch_to', account_id='{retry_account_id}') "
+            "again in a few minutes to retry."
+        )
+    else:
+        line = "Run setup_profile() again in a few minutes to retry."
+    if with_key_hint and mode == "M3":
+        line += (
+            " If it fails again, check your LLM key: "
+            "setup_profile(llm_api_key='...') replaces it."
+        )
+    return line
+
+
+def format_voice_reply(
+    state: str,
+    voice: dict | None,
+    expertise: dict | None,
+    *,
+    mode: str,
+    post_count: int = 0,
+    reason: str = "posts",
+    retry_account_id: str = "",
+) -> str:
+    """The voice and expertise section of the setup_profile / switch_to reply.
+
+    ``voice`` is the voice that is now stored (the kept one for K and NK).
+    ``post_count`` is this build's own-post count (F, T); 0 reads the count
+    the stored voice recorded.
+    ``retry_account_id`` makes X's retry line the switch_to call.
+    """
+    voice = voice if isinstance(voice, dict) else {}
+    head = ["✅ Profile analyzed! Here's how I'll represent you:", ""]
+
+    if state in ("F", "T", "NK", "K"):
+        count = post_count if state in ("F", "T") else 0
+        lines = [*head, _voice_heading(voice, count), *_tree(_voice_items(voice)), "",
+                 *_expertise_lines(expertise), ""]
+        if state == "K":
+            lines.append(_retry_line(mode, with_key_hint=True))
+        else:
+            lines.append(_in_this_voice(voice, mode, count))
+        return "\n".join(lines)
+
+    if state == "N":
+        if mode == "M1":
+            act = (
+                "Write a post or two on LinkedIn. HeyLead reads your posts again "
+                "on its own and learns your voice from them."
+            )
+        else:
+            act = (
+                "Write a post or two on LinkedIn, then run setup_profile() again "
+                "so HeyLead learns your voice from them."
+            )
+        return "\n".join([
+            *head,
+            "Your Voice: not learned yet",
+            "└── Your LinkedIn account has no posts you wrote yourself. "
+            "Reshares and posts HeyLead published for you don't count.",
+            "",
+            *_expertise_lines(expertise),
+            "",
+            "Until you post, HeyLead writes your messages in a plain, direct style.",
+            act,
+        ])
+
+    # X: nothing stored.
+    return "\n".join([
+        "Your Voice: not learned yet",
+        f"└── Couldn't read your {_what_failed(reason)} this time.",
+        "",
+        *_expertise_lines(expertise),
+        "",
+        "Until it's learned, HeyLead writes your messages in a plain, direct style.",
+        _retry_line(mode, with_key_hint=False, retry_account_id=retry_account_id),
+    ])

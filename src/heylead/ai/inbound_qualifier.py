@@ -6,7 +6,6 @@ post comments) against the user's active ICPs to determine lead potential.
 
 from __future__ import annotations
 
-from ..textutil import first_name
 
 import json
 import logging
@@ -748,18 +747,29 @@ async def _guard_inbound_result(
 ) -> dict[str, str]:
     """Run the shared draft guard so opaque consulting-speak cannot ship, then
     the copy rules' read-back, so a formula opener or a sign-off cannot
-    either (23 Sep 2026; the api reads its own inbound DMs back the same way)."""
+    either (23 Sep 2026; the api reads its own inbound DMs back the same way).
+
+    The read-back refuses (heylead-api#3498): a reply that still breaks a house
+    rule comes back with an empty message and ``refused`` "rule", and so does
+    a backend answer that was refused. The pipeline sends nothing for it.
+    """
     from .copywriter import channel_for_message_type
-    from .copywriter.polish import read_back
+    from .copywriter.polish import read_back_or_refuse
     from .draft_guard import guard_draft
 
     out = dict(result)
-    out["message"] = await read_back(
+    if out.get("refused"):
+        out["message"] = ""
+        return out
+    message, broken = await read_back_or_refuse(
         # A stranger wrote first; our reply is never their first touch from
         # us, so a defect like "leads with the sender" does not apply here.
         await guard_draft(result.get("message", ""), voice, message_type, max_chars, first_touch=False),
         channel=channel_for_message_type(message_type), max_chars=max_chars,
     )
+    out["message"] = message
+    if broken:
+        out["refused"] = "rule"
     return out
 
 
@@ -956,7 +966,10 @@ async def generate_counter_pitch(
                 "counter_pitch",
             )
         except Exception as e:
+            # Final: with no local key the local model below cannot run, and a
+            # failed draft sends nothing (heylead-api#3498).
             logger.warning("Backend generate_counter_pitch failed: %s", e)
+            return {"message": "", "reasoning": f"draft failed: {e}"}
         finally:
             await backend_client.close()
 
@@ -985,16 +998,11 @@ async def generate_counter_pitch(
                 "counter_pitch",
             )
     except Exception as e:
+        # A failed draft sends nothing. Until 20 Oct 2026 this returned a fixed
+        # line about "your own outbound prospecting", whatever the user sells,
+        # and the pipeline sent it in their name (heylead-api#3498).
         logger.warning("Counter-pitch generation failed: %s", e)
-        name = first_name(sender_profile.get("name"), "there")
-        return await _guard_inbound_result(
-            {
-                "message": f"Hey {name}, appreciate the outreach. Curious — how are you handling your own outbound prospecting?",
-                "reasoning": "Fallback generic counter-pitch",
-            },
-            voice,
-            "counter_pitch",
-        )
+        return {"message": "", "reasoning": f"draft failed: {e}"}
 
 
 async def generate_discovery_question(
@@ -1079,7 +1087,9 @@ async def generate_discovery_question(
                 "discovery",
             )
         except Exception as e:
+            # Final, as for the counter-pitch (heylead-api#3498).
             logger.warning("Backend generate_discovery_dm failed: %s", e)
+            return {"message": "", "reasoning": f"draft failed: {e}"}
         finally:
             await backend_client.close()
 

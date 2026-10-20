@@ -24,7 +24,8 @@ from urllib.parse import urlparse
 
 import httpx
 
-from ..ai.voice_analyzer import analyze_voice
+from ..ai.voice_analyzer import analyze_voice, own_posts
+from ..ai.voice_block import VOICE_MIN_POSTS, is_usable_voice
 from ..config import (
     backend_url_problem,
     get_backend_config,
@@ -39,7 +40,7 @@ from ..config import (
 )
 from ..constants import DEFAULT_BACKEND_URL, GEMINI_KEY_URL, LOGIN_URL_PATH
 from ..db.queries import get_setting, save_setting
-from ..formatter import format_voice_signature
+from ..formatter import format_voice_reply, voice_posts_line
 from ..linkedin import (
     UnipileAuthError,
     UnipileError,
@@ -481,6 +482,91 @@ async def _setup_direct_mode() -> str:
         await client.close()
 
 
+def same_linkedin_account(stored: dict | None, new: dict | None) -> bool:
+    """The stored profile and the new one are the same LinkedIn member.
+
+    Compared on provider_id or public_id, never the Unipile account id: a
+    reconnect issues a new account id for the same person.
+    """
+    for key in ("provider_id", "public_id"):
+        old = str((stored or {}).get(key) or "").strip()
+        now = str((new or {}).get(key) or "").strip()
+        if old and now and old == now:
+            return True
+    return False
+
+
+def voice_reply_mode(backend: bool) -> str:
+    """M1 hosted and the cloud sends, M2 hosted and this Mac sends, M3 local
+    mode on the user's own LLM key (read as the seat line below reads it)."""
+    if not backend:
+        return "M3"
+    from ..services.cloud_sync import local_scheduler_engine_enabled
+
+    return "M2" if local_scheduler_engine_enabled() else "M1"
+
+
+def analysis_failed_hint(mode: str, retry: str) -> str:
+    """What to do after a failed analysis. The LLM key is only M3's."""
+    if mode == "M3":
+        return (
+            "Check your LLM API key: setup_profile(llm_api_key='...') replaces it\n"
+            f"Get a free Gemini key at: {GEMINI_KEY_URL}"
+        )
+    return f"Run {retry} again in a few minutes to retry."
+
+
+def reported_post_count(value) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def settle_voice(
+    *,
+    same_account: bool,
+    previous_voice: dict | None,
+    previous_expertise: dict | None,
+    analysis: dict | None,
+    posts_failed: bool,
+    analysis_failed: bool,
+    own_count: int,
+) -> dict:
+    """Which voice and expertise to store, and the state the reply names.
+
+    Order (designer-2-o1 on heylead-api#3499): a failed fetch or analysis
+    (K keeps the same account's earlier voice, X has none); no own posts (NK
+    keeps it, N stores {}); thin (T); else F. A failed posts fetch is never
+    read as zero posts, and zero own posts never store a voice.
+    """
+    kept = previous_voice if same_account and is_usable_voice(previous_voice) else {}
+    stored_expertise = previous_expertise if same_account and isinstance(previous_expertise, dict) else {}
+    analysis = analysis if isinstance(analysis, dict) else None
+    expertise = (analysis or {}).get("expertise") or stored_expertise or {}
+    post_count = reported_post_count((analysis or {}).get("post_count"))
+    if post_count is None:
+        post_count = own_count
+    voice = (analysis or {}).get("voice") or {}
+    if analysis is not None and post_count > 0 and not is_usable_voice(voice):
+        analysis_failed = True
+
+    if posts_failed or analysis_failed or analysis is None:
+        reason = "posts" if posts_failed else "voice"
+        return {"state": "K" if kept else "X", "voice": kept, "expertise": expertise,
+                "post_count": 0, "reason": reason}
+    if post_count <= 0:
+        return {"state": "NK" if kept else "N", "voice": kept, "expertise": expertise,
+                "post_count": 0, "reason": ""}
+    thin = (analysis or {}).get("thin")
+    if not isinstance(thin, bool):
+        thin = post_count < VOICE_MIN_POSTS
+    return {"state": "T" if thin else "F", "voice": voice, "expertise": expertise,
+            "post_count": post_count, "reason": ""}
+
+
 async def _fetch_and_analyze(
     client, account_id: str, previous_account_id: str = "",
 ) -> str:
@@ -530,28 +616,52 @@ async def _fetch_and_analyze(
         )
 
     # ── Fetch posts ──
+    # A failed fetch is its own state, never zero posts: reading it as "no
+    # posts" replaced a good voice with nothing during a Unipile error.
+    posts_failed = False
     try:
         provider_id = profile.get("provider_id", "")
-        posts = await client.get_posts(account_id, provider_id=provider_id)
+        posts = await client.get_posts(account_id, provider_id=provider_id, strict=True)
         profile["posts"] = posts
     except Exception as e:
         logger.warning(f"Failed to fetch posts (non-fatal): {e}")
         profile["posts"] = []
+        posts_failed = True
+
+    previous_profile = await run_db(get_setting, "profile", {})
+    same_account = same_linkedin_account(previous_profile, profile)
+    mode = voice_reply_mode(is_backend_mode())
 
     # ── Analyze voice with LLM ──
+    analysis = None
+    analysis_failed = False
     try:
         analysis = await analyze_voice(profile)
     except Exception as e:
         logger.error(f"Voice analysis failed: {e}")
-        await _restore()
-        return (
-            f"❌ Voice analysis failed: {e}\n\n"
-            "Check your LLM API key: setup_profile(llm_api_key='...') replaces it\n"
-            "Get a free Gemini key at: https://aistudio.google.com/apikey"
-        )
+        if not same_account:
+            await _restore()
+            return (
+                f"❌ Voice analysis failed: {e}\n\n"
+                + analysis_failed_hint(mode, "setup_profile()")
+            )
+        # A re-run on the same LinkedIn account keeps the voice it had.
+        analysis_failed = True
 
-    voice = analysis.get("voice", {})
-    expertise = analysis.get("expertise", {})
+    own_count = 0
+    if reported_post_count((analysis or {}).get("post_count")) is None:
+        own_count = len(await run_db(own_posts, profile.get("posts")))
+    settled = settle_voice(
+        same_account=same_account,
+        previous_voice=await run_db(get_setting, "voice_signature", {}),
+        previous_expertise=await run_db(get_setting, "expertise_map", {}),
+        analysis=analysis,
+        posts_failed=posts_failed,
+        analysis_failed=analysis_failed,
+        own_count=own_count,
+    )
+    voice = settled["voice"]
+    expertise = settled["expertise"]
 
     # ── Store in database ──
     await run_db(save_setting, "profile", profile)
@@ -696,7 +806,10 @@ async def _fetch_and_analyze(
             logger.debug("Hosted sending default during setup failed", exc_info=True)
 
     # ── Format and return ──
-    output = format_voice_signature(voice, expertise)
+    output = format_voice_reply(
+        settled["state"], voice, expertise, mode=mode,
+        post_count=settled["post_count"], reason=settled["reason"],
+    )
 
     workspace_line = ""
     seat_line = ""
@@ -742,7 +855,9 @@ async def _fetch_and_analyze(
         + "\n"
         + (f"📍 {profile['location']}\n" if profile.get("location") else "")
         + (f"🔗 {profile['profile_url']}\n" if profile.get("profile_url") else "")
-        + f"📝 {len(profile.get('posts', []))} recent posts analyzed\n"
+        + voice_posts_line(
+            settled["state"], post_count=settled["post_count"], reason=settled["reason"],
+        ) + "\n"
         + "\n"
     )
 

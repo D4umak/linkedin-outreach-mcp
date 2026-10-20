@@ -22,6 +22,7 @@ from typing import Any
 
 from ..textutil import contains_term
 from .copywriter.greetings import has_sign_off, opens_with_greeting
+from .voice_block import is_sentinel_voice
 
 logger = logging.getLogger(__name__)
 
@@ -661,7 +662,9 @@ def validate_message(
         _apply_v63_guardrails(result, message, msg_lower)
 
     # ── Stage 4: Voice consistency ──
-    if voice_signature:
+    # A stored "Could not analyze" placeholder is no voice: its "Unknown"
+    # no_go and default formality were never the user's (api #3499, qa-1-o20).
+    if voice_signature and not is_sentinel_voice(voice_signature):
         formality = voice_signature.get("formality_level", 5)
         no_go = no_go_terms(voice_signature.get("no_go"))
 

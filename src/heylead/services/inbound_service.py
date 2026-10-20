@@ -278,6 +278,10 @@ async def send_discovery_dms() -> str:
             )
             dm_text = dm_result.get("message", "")
             if not dm_text:
+                # Counted, not redrafted on every pass (heylead-api#3498, qa-2-o1).
+                from .inbound_helpers import count_unsent_reply
+
+                await count_unsent_reply(signal)
                 skipped += 1
                 continue
 

@@ -12,6 +12,8 @@ accepted immediately and qualified later.
 
 from __future__ import annotations
 
+from heylead.services.booking_links import booking_context
+
 from ..hosted_writes import ensure_laptop_may_write
 import json
 import logging
@@ -1067,6 +1069,7 @@ async def _act_on_messages(client: Any, account_id: str) -> str:
     skipped = 0
     held = 0
     errors = 0
+    refused = 0
 
     for signal in all_signals:
         confidence = signal.get("confidence", 0) or 0
@@ -1165,12 +1168,17 @@ async def _act_on_messages(client: Any, account_id: str) -> str:
             break
         elif result == "error":
             errors += 1
+        elif result == "refused":
+            refused += 1
         else:
             skipped += 1
 
     parts = []
     if sent:
         parts.append(f"{sent} DMs sent")
+    if refused:
+        # The final read-back kept these back (heylead-api#3498).
+        parts.append(f"{refused} not sent: broke a writing rule")
     if held:
         parts.append(f"{held} held: no active campaign")
     if skipped:
@@ -1422,7 +1430,7 @@ async def _send_discovery_dm(
                             or _cp_parsed.get("offerings", "")
                             or _cp_parsed.get("company_context_raw", "")
                         )
-                        _cp_ctx["booking_link"] = _cp_parsed.get("booking_link", "")
+                        _cp_ctx.update(booking_context(_cp_parsed))
                 except Exception:
                     pass
             cp_result = await generate_counter_pitch(
@@ -1433,6 +1441,7 @@ async def _send_discovery_dm(
                 conversation_history=inbound_history,
             )
             dm_text = cp_result.get("message", "")
+            refused = str(cp_result.get("refused") or "")
         else:
             dm_text = await _generate_contextual_reply(
                 prospect=prospect_profile,
@@ -1443,7 +1452,16 @@ async def _send_discovery_dm(
                 signal=signal,
                 conversation_history=inbound_history,
             )
+            refused = ""
         if not dm_text:
+            # Not sent, refused or drafted empty: counted, so the same reply is
+            # not written again on every pass (heylead-api#3498).
+            from .inbound_helpers import count_unsent_reply
+
+            attempts = await count_unsent_reply(signal)
+            if refused == "rule":
+                logger.info("Counter-pitch not sent: final text breaks a house rule (try %d)", attempts)
+                return "refused"
             return "skipped"
 
         # Strip any trailing email-style signatures ("- Alex", "Best, Alex").

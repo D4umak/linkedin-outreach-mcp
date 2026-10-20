@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import logging
 
-from ..ai.voice_analyzer import analyze_voice
+from ..ai.voice_analyzer import analyze_voice, own_posts
 from ..config import is_backend_mode
 from ..db.queries import get_setting, save_setting
-from ..formatter import format_voice_signature
+from ..formatter import format_voice_reply, voice_posts_line
 from ..linkedin import (
     UnipileError,
     get_account_id,
@@ -303,27 +303,67 @@ async def run_switch_account_to(account_id: str) -> str:
                 f"account_id='{account_id}')."
             )
 
+        # A failed fetch is its own state, never zero posts (api #3499).
+        posts_failed = False
         try:
             provider_id = profile.get("provider_id", "")
-            posts = await client.get_posts(account_id, provider_id=provider_id)
+            posts = await client.get_posts(account_id, provider_id=provider_id, strict=True)
             profile["posts"] = posts
-        except Exception:
+        except Exception as e:
+            logger.warning("Failed to fetch posts for %s (non-fatal): %s", account_id, e)
             profile["posts"] = []
+            posts_failed = True
 
+        from .setup_profile import (
+            reported_post_count,
+            same_linkedin_account,
+            settle_voice,
+            voice_reply_mode,
+        )
+
+        same_account = same_linkedin_account(
+            await run_db(get_setting, "profile", {}), profile,
+        )
+        mode = voice_reply_mode(is_backend_mode())
+        analysis = None
+        analysis_failed = False
         try:
             analysis = await analyze_voice(profile)
         except Exception as e:
-            await _restore_binding()
-            return (
-                f"❌ Voice analysis failed for `{account_id}`: {e}\n\n"
-                "Nothing was changed — you are still on your previous account, "
-                "and its voice signature is intact.\n"
-                f"Try again with account(action='switch_to', "
-                f"account_id='{account_id}')."
-            )
+            if not same_account:
+                await _restore_binding()
+                hint = ""
+                if mode == "M3":
+                    hint = (
+                        "If it fails again, check your LLM key: "
+                        "setup_profile(llm_api_key='...') replaces it.\n"
+                    )
+                return (
+                    f"❌ Voice analysis failed for `{account_id}`: {e}\n\n"
+                    "Nothing was changed — you are still on your previous account, "
+                    "and its voice signature is intact.\n"
+                    f"Try again with account(action='switch_to', "
+                    f"account_id='{account_id}').\n"
+                    + hint
+                ).rstrip("\n")
+            # The same LinkedIn member: keep the voice it had and complete.
+            logger.warning("Voice analysis failed for %s, earlier voice kept: %s", account_id, e)
+            analysis_failed = True
 
-        voice = analysis.get("voice", {})
-        expertise = analysis.get("expertise", {})
+        own_count = 0
+        if reported_post_count((analysis or {}).get("post_count")) is None:
+            own_count = len(await run_db(own_posts, profile.get("posts")))
+        settled = settle_voice(
+            same_account=same_account,
+            previous_voice=await run_db(get_setting, "voice_signature", {}),
+            previous_expertise=await run_db(get_setting, "expertise_map", {}),
+            analysis=analysis,
+            posts_failed=posts_failed,
+            analysis_failed=analysis_failed,
+            own_count=own_count,
+        )
+        voice = settled["voice"]
+        expertise = settled["expertise"]
 
         # Commit: identity and voice move together or not at all.
         await run_db(set_account_id, account_id)
@@ -333,7 +373,11 @@ async def run_switch_account_to(account_id: str) -> str:
         await run_db(save_setting, "setup_complete", True)
 
         # Format output
-        output = format_voice_signature(voice, expertise)
+        output = format_voice_reply(
+            settled["state"], voice, expertise, mode=mode,
+            post_count=settled["post_count"], reason=settled["reason"],
+            retry_account_id=account_id,
+        )
 
         header = (
             f"✅ Switched to: **{profile['name']}**"  # nosemgrep: person-line-without-link -- the user's own profile, not a found person
@@ -341,7 +385,10 @@ async def run_switch_account_to(account_id: str) -> str:
             + (f" at {profile['company']}" if profile.get("company") else "")
             + "\n"
             + (f"🔗 {profile['profile_url']}\n" if profile.get("profile_url") else "")
-            + f"📝 {len(profile.get('posts', []))} recent posts analyzed\n"
+            + voice_posts_line(
+                settled["state"], post_count=settled["post_count"],
+                reason=settled["reason"],
+            ) + "\n"
             + "\n"
         )
 

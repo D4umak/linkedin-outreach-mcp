@@ -1239,7 +1239,7 @@ class BackendClient:
             await uni.close()
 
     async def get_posts(
-        self, account_id: str, provider_id: str = "", limit: int = 10,
+        self, account_id: str, provider_id: str = "", limit: int = 10, *, strict: bool = False,
     ) -> list[dict[str, Any]]:
         """Fetch recent LinkedIn posts via the backend proxy.
 
@@ -1289,6 +1289,9 @@ class BackendClient:
             return posts
         except Exception as e:
             logger.warning(f"Failed to fetch posts via backend: {e}")
+            if strict:
+                # The voice build tells a failed read from no posts (api #3499).
+                raise
             return []
 
     # ── Search ──
@@ -5591,6 +5594,8 @@ class BackendClient:
         return {
             "message": data.get("message", ""),
             "reasoning": data.get("reasoning", ""),
+            # Why the message is empty, when the backend refused it (heylead-api#3498).
+            "refused": str(data.get("refused") or ""),
         }
 
     async def generate_counter_pitch(
@@ -5623,6 +5628,7 @@ class BackendClient:
         return {
             "message": data.get("message", ""),
             "reasoning": data.get("reasoning", ""),
+            "refused": str(data.get("refused") or ""),
         }
 
     async def classify_signal(

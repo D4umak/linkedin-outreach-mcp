@@ -51,6 +51,16 @@ def _dm_rate_limited(result: dict) -> bool:
     return "rate limit" in err or "429" in err
 
 
+def _refused_line(sender_name: str, tries: int) -> str:
+    """The tool's line for a reply the final read-back kept back (heylead-api#3498, case-designer S5)."""
+    from ..constants import INBOUND_MAX_DM_ATTEMPTS
+
+    if tries >= INBOUND_MAX_DM_ATTEMPTS:
+        return (f"- {sender_name}: not sent after {tries} tries, the reply kept breaking HeyLead's "
+                "writing rules. Answer them yourself if they need an answer.")
+    return f"- {sender_name}: not sent, the reply broke one of HeyLead's writing rules. HeyLead tries again on the next pass."
+
+
 async def run_backfill_inbox(
     limit: int = 50,
     dry_run: bool = False,
@@ -228,6 +238,14 @@ async def _send_classified_signals(
                 signal["id"], str(sender_id)[:12], dm_type,
                 len(dm_text), message_hash(dm_result.get("reasoning", "")),
             )
+            if not dm_text and dm_result.get("refused") == "rule":
+                # Kept back by the final read-back (heylead-api#3498): counted, never redrafted every pass.
+                from ..services.inbound_helpers import count_unsent_reply
+
+                tries = await count_unsent_reply(signal)
+                lines.append(_refused_line(sender_name, tries))
+                skipped += 1
+                continue
             if not dm_text:
                 logger.warning("Signal %s (%s): empty DM generated, skipping", signal["id"], str(sender_id)[:12])
                 lines.append(f"- {sender_name}: skipped (no DM generated)")
@@ -781,6 +799,14 @@ async def _backfill(
                 str(sig.get("id") or "")[:8], dm_type, len(dm_text),
                 message_hash(dm_text), message_hash(dm_result.get("reasoning", "")),
             )
+            if not dm_text and dm_result.get("refused") == "rule":
+                # Kept back by the final read-back (heylead-api#3498).
+                from ..services.inbound_helpers import count_unsent_reply
+
+                tries = await count_unsent_reply(sig)
+                lines.append(_refused_line(str(item.get("sender_name") or ""), tries))
+                skipped += 1
+                continue
             if not dm_text:
                 logger.warning("Phase 5: %s — empty DM generated, skipping", str(sig.get("id") or "")[:8])
                 lines.append(f"- {item.get('sender_name')}: skipped (no DM generated)")

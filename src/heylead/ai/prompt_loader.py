@@ -13,6 +13,8 @@ Usage:
 
 from __future__ import annotations
 
+from heylead.services.booking_links import offered_link
+
 from ..textutil import first_name
 from .untrusted import fence, neutralise
 from .voice_block import voice_prompt_block
@@ -880,7 +882,7 @@ def build_context_block(
             ctx.get("custom_params", "") or "", _sender_facts,
         ),
         # Calendar / booking
-        "calendar_link": campaign_config.get("booking_link", "Not configured"),
+        "calendar_link": offered_link(campaign_config),
         # Sender
         "company": sender.get("company", "Our company"),
         # Conversation

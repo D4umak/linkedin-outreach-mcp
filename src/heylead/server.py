@@ -33,6 +33,20 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.468 (2026-10-20)
+- Fix: our own CI server and devflow lines stay out of the changelog
+- Fix: no voice from zero posts, never the "Could not analyze" default, a failed read is not zero posts
+- one session owns an outcome and its proof (heylead-api#3587)
+- Fix: any heylead-ci cancelled/timed_out/stale check waits, not only a restart title (heylead-api#3566)
+- Fix: hosted chat Off reaches the workspace whatever the local mode, and never says off on failure
+- Fix: a heylead-ci restart-cancel waits for the next run, never parks (heylead-api#3566)
+- Fix: Off words say nothing is read; hosted chat Off switches the workspace
+- Fix: Off plans and runs no inbound pass on a self-hosted engine (heylead-api#3545)
+- New: a STOP holds until what the planner read changes (heylead-api#3482 H1)
+- Fix: local comment writers check claims against the sender's profile
+- New: upload finding codes to the api for Pedro (heylead-api#3494)
+- New: stop at the PR when a devflow diff changes what users see (api #3481)
+
 ## v0.10.467 (2026-10-20)
 - one session owns an outcome and its proof (heylead-api#3587)
 - Fix: hosted chat Off reaches the workspace whatever the local mode, and never says off on failure
@@ -3235,6 +3249,7 @@ async def edit_campaign(
     send_in_business_hours: str = "",
     active_days: str = "",
     message_language: str = "",
+    booking_link_page_ok: bool = False,
 ) -> str:
     """Change one running or drafted campaign's settings.
 
@@ -3255,6 +3270,7 @@ async def edit_campaign(
         mode: Only "autopilot" supported (copilot mode was removed). Whether
             messages wait for a person is the workspace's approval mode:
             scheduler(action="approval_mode").
+        booking_link_page_ok: Explicitly keep a website page as the booking link.
         booking_link: Calendar/booking URL (e.g., "https://cal.com/you/15min").
             Used in reply_to_prospect() for positive replies to suggest meetings.
         offerings: What you offer (products, services, value props). Used in follow-up messages.
@@ -3365,6 +3381,7 @@ async def edit_campaign(
                 campaign_id, name, mode, booking_link,
                 offerings, case_studies, social_proofs, campaign_preferences,
                 project_brief=project_brief,
+                booking_link_page_ok=booking_link_page_ok,
                 offer_outcome=offer_outcome,
                 offer_how=offer_how,
                 offer_proof=offer_proof,

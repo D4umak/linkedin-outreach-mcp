@@ -257,7 +257,12 @@ async def polish(draft: str, *, channel: str, max_chars: int = 0) -> Polished:
 
 
 async def read_back(text: str, *, channel: str, max_chars: int = 0) -> str:
-    """``polish`` for a generator: the text, with what it broke in the log."""
+    """``polish`` for a generator: the text, with what it broke in the log.
+
+    Advisory: a rule polish could not take out is logged and the text is
+    returned. A draft for someone who wrote first goes through
+    ``read_back_or_refuse`` instead (heylead-api#3498).
+    """
     polished = await polish(text, channel=channel, max_chars=max_chars)
     if polished.offences:
         logger.info(
@@ -265,6 +270,30 @@ async def read_back(text: str, *, channel: str, max_chars: int = 0) -> str:
             ", ".join(polished.offences), ", ".join(polished.repaired) or "nothing",
         )
     return polished.text
+
+
+async def read_back_or_refuse(text: str, *, channel: str, max_chars: int = 0) -> tuple[str, str]:
+    """``polish``, and the rules it could not fix: ("", rule ids) when one is left.
+
+    The client twin of heylead-api's final check (copy_checks.final, #3498):
+    until 20 Oct 2026 the inbound counter-pitch and discovery DM were read back
+    with ``read_back``, which returns the text even when ``polished.refused``
+    names a rule still broken, so the reply went out with it. An empty draft
+    is ("", ""): drafted empty, not a rule refusal.
+    """
+    if not (text or "").strip():
+        return "", ""
+    polished = await polish(text, channel=channel, max_chars=max_chars)
+    if polished.offences:
+        logger.info(
+            "%s draft broke %s; repaired by %s", channel,
+            ", ".join(polished.offences), ", ".join(polished.repaired) or "nothing",
+        )
+    left = offences(polished.text, channel)
+    if polished.refused or left:
+        logger.info("%s not sent: final text breaks %s", channel, polished.refused or ", ".join(left))
+        return "", polished.refused or ", ".join(left)
+    return polished.text, ""
 
 
 async def keep_to_sources(

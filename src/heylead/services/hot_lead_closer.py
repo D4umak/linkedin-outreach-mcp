@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from heylead.services.booking_links import offered_link
+
 from .campaign_naming import cut_at_word
 
 import logging
@@ -205,7 +207,7 @@ async def maybe_run_hot_lead_closer(
             return f"name: {contact.get('name') or ''}\nemail: {known_email or '(none)'}"
 
         async def read_calendar_target() -> str:
-            link = (campaign_config or {}).get("booking_link") or prospect_calendar_url or ""
+            link = offered_link(campaign_config) or prospect_calendar_url or ""
             return f"booking_link: {link or '(none)'}\nprospect_calendar_url: {prospect_calendar_url or '(none)'}"
 
         result = await run_agent_loop(
