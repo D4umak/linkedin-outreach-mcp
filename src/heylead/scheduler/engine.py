@@ -226,11 +226,9 @@ def _job_start_priority(job_type: str, *, refill_critical: bool = False) -> int:
         return 2
     return 1
 
-# Inbound job types run even when the outbound scheduler is toggled off.
-# Job types that run even when the outbound scheduler is toggled off.
-#
-# The bar is deliberately narrow: handling messages other people sent us, plus
-# work that never leaves this machine. Everything else waits for the scheduler.
+# Inbound job types: they run in 'observe' as well as 'full' (in 'observe'
+# the pass reads and withholds its answers). In 'off' only _OFF_JOB_TYPES
+# below run.
 #
 # This set used to include the whole signal-intelligence pipeline on the
 # reasoning that analysis is "passive". It is not passive from LinkedIn's side —
@@ -247,13 +245,24 @@ _INBOUND_JOB_TYPES = frozenset({
 })
 
 
+# What still runs with the scheduler off: local reporting, nothing that reads
+# LinkedIn. The inbound pass used to be here too, reading invitations and
+# messages every 15 minutes and withholding only its answers; Denys decided
+# on 19 Oct 2026 that Off stops all LinkedIn activity, reads included
+# (D4umak/heylead-api#3545). Messages that arrive meanwhile are read on the
+# first pass after the switch is back on.
+_OFF_JOB_TYPES = frozenset({
+    JOB_DAILY_DIGEST,         # Local reporting, no LinkedIn call
+})
+
+
 def runs_while_scheduler_off(job_type: str) -> bool:
-    """Whether a job may execute with the outbound scheduler disabled.
+    """Whether a job may execute with the scheduler switched off.
 
     Unknown job types are blocked: a newly added job must opt in explicitly
     rather than inherit always-on behaviour by omission.
     """
-    return job_type in _INBOUND_JOB_TYPES
+    return job_type in _OFF_JOB_TYPES
 
 
 from . import leader
@@ -409,6 +418,8 @@ def runs_in_mode(job_type: str, mode: str) -> bool:
     enrols them into a campaign, is excluded from 'observe' by construction:
     membership is an allow-list, never a deny-list.
     """
+    if mode == "off":
+        return runs_while_scheduler_off(job_type)
     if job_type in _INBOUND_JOB_TYPES:
         return True
     if mode == "full":
@@ -1077,9 +1088,9 @@ class SchedulerEngine:
                 },
             )
 
-        # ── ALWAYS-ON: execute ready jobs from the DB queue ──
-        # Inbound jobs run regardless of scheduler_enabled.
-        # Outbound jobs are skipped when the scheduler is off.
+        # ── Execute ready jobs from the DB queue ──
+        # runs_in_mode decides each one: in 'off' only local reporting runs
+        # (#3545); in 'observe' reads but no sends; in 'full' everything.
         self._last_tick_jobs_finished = 0
         processed, failed = await self._process_ready_jobs(
             scheduler_on=scheduler_on,
@@ -1092,24 +1103,23 @@ class SchedulerEngine:
         tick_processed += processed
         tick_failed += failed
 
-        # ── ALWAYS-ON: inbound pipeline (independent of scheduler toggle) ──
-
-        # Unified classify-first inbound pipeline (every 15 min)
-        if now - self._timer("inbound_pipeline") >= INBOUND_PIPELINE_SECONDS:
-            await self._schedule_process_inbound()
-            self._set_timer("inbound_pipeline", now)
-
         # ── STOP HERE IN 'off' MODE ──
-        # Everything below reads LinkedIn on our own initiative or spends money
-        # on classification. In 'off' that is unwanted; in 'observe' it is the
-        # entire point, and nothing below sends because the outbound section is
-        # gated separately further down.
+        # Everything below reads LinkedIn or spends money on classification.
+        # In 'off' that is unwanted, the inbound pass included (#3545); in
+        # 'observe' it is the entire point, and nothing below sends because
+        # the outbound section is gated separately further down.
         if mode == "off":
             logger.info(
                 "tick#%d: processed=%d failed=%d planned=%d mode=off",
                 self._tick_count, tick_processed, tick_failed, tick_planned,
             )
             return
+
+        # Unified classify-first inbound pipeline (every 15 min). In 'observe'
+        # it reads and withholds its answers; in 'full' it acts.
+        if now - self._timer("inbound_pipeline") >= INBOUND_PIPELINE_SECONDS:
+            await self._schedule_process_inbound()
+            self._set_timer("inbound_pipeline", now)
 
         # Check post comments for inbound leads (every 30 min)
         if now - self._timer("post_comment_check") >= POST_COMMENT_CHECK_SECONDS:

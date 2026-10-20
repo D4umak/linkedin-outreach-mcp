@@ -1143,6 +1143,10 @@ Return ONLY the comment text."""
 
                     llm = LLMClient()
                     comment_text = await llm.generate(comment_prompt, max_tokens=200)
+                    # Read for claims like every comment (heylead-api#3120).
+                    from ..ai.comment_generator import ground_comment
+
+                    comment_text = await ground_comment(comment_text, profile, max_chars=200)
                 if comment_text and len(comment_text) >= 10 and not _comment_unfit(comment_text, voice):
                     ok, current, cap = await check_engagement_budget("comment")
                     if not ok:

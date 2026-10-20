@@ -33,6 +33,16 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.467 (2026-10-20)
+- one session owns an outcome and its proof (heylead-api#3587)
+- Fix: hosted chat Off reaches the workspace whatever the local mode, and never says off on failure
+- Fix: Off words say nothing is read; hosted chat Off switches the workspace
+- Fix: Off plans and runs no inbound pass on a self-hosted engine (heylead-api#3545)
+- New: a STOP holds until what the planner read changes (heylead-api#3482 H1)
+- Fix: local comment writers check claims against the sender's profile
+- New: upload finding codes to the api for Pedro (heylead-api#3494)
+- New: stop at the PR when a devflow diff changes what users see (api #3481)
+
 ## v0.10.466 (2026-10-19)
 - Fix: a failed agent loop run is recorded as a failure, never as the agent's decision
 - devflow picks by Pedro's RICE score; a needs-review outcome stops at the PR (#3440)
@@ -3713,7 +3723,7 @@ async def _scheduler_impl(
     Args:
         action: What to do:
             "status" — Show scheduler status, pending jobs, and recent activity
-            "toggle" — Enable or disable the scheduler
+            "toggle" — Switch HeyLead on or off; off sends nothing and reads nothing on LinkedIn
             "observe" — Collect and classify signals, and check replies, while this
                 machine sends nothing: no invitations, DMs, engagements, or
                 enrolments. Local only — it does not stop cloud scheduling,
@@ -3733,8 +3743,9 @@ async def _scheduler_impl(
             For 'report': True to enable email reports, False to disable.
         cloud: If True, toggle the cloud scheduler, which runs with your laptop closed (for 'toggle').
             Launching or resuming a campaign already switches it on for hosted
-            accounts; pass cloud=True, enabled=False to stop the backend sending
-            while leaving this machine's scheduler alone.
+            accounts; pass cloud=True, enabled=False to switch the workspace off:
+            it then sends and reads nothing. On a hosted install the toggle
+            always switches the workspace, cloud or not.
         hours: Lookback window in hours for 'logs' and 'activity' (default 24).
             For 'report': report interval in hours (1, 2, 4, 8, or 24).
             Omitted, 'report' leaves the stored interval unchanged.

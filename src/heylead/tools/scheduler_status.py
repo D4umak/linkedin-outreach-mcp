@@ -47,9 +47,9 @@ async def run_scheduler_status() -> str:
     elif observing:
         status_icon, status_word = "\U0001f440", "Observing"
     else:
-        status_icon, status_word = "\u23f8\ufe0f", "Disabled"
+        status_icon, status_word = "", ""
     lines = [
-        f"# {status_icon} Scheduler {status_word}",
+        f"# {status_icon} Scheduler {status_word}" if status_word else "# HeyLead is off",
         "",
     ]
 
@@ -97,8 +97,9 @@ async def run_scheduler_status() -> str:
 
     if not enabled and not observing:
         lines.append(
-            "The autonomous scheduler is currently **off**.\n"
-            "Enable it with: `scheduler(action='toggle', enabled=True)`\n\n"
+            "HeyLead is **off** on this machine: it sends nothing and reads nothing "
+            "on your LinkedIn.\n"
+            "Switch it on with: `scheduler(action='toggle', enabled=True)`\n\n"
             "When enabled, the scheduler will automatically:\n"
             "- Send invitations to pending prospects (autopilot campaigns)\n"
             "- Send follow-ups on schedule (1, 3, 7, 14 days)\n"
@@ -243,7 +244,7 @@ async def run_scheduler_status() -> str:
         lines.append("- `scheduler(action='toggle', enabled=False)` \u2014 stop collecting too")
     else:
         lines.append("- `scheduler(action='observe')` \u2014 collect signals without sending")
-        lines.append("- `scheduler(action='toggle', enabled=False)` \u2014 pause the scheduler")
+        lines.append("- `scheduler(action='toggle', enabled=False)` \u2014 switch HeyLead off (stops sending and reading)")
         lines.append("- `scheduler(action='toggle', enabled=True, cloud=True)` \u2014 send from the cloud, with your laptop closed, inside the sending window")
     lines.append("- `scheduler(action='logs')` \u2014 detailed event log and job metrics")
     lines.append("- `scheduler(action='diagnostics')` \u2014 full system diagnostics")
@@ -445,8 +446,9 @@ async def _cloud_status_section() -> str:
                     lines.append(f"  {icon} {jtype} ({status})")
         else:
             lines.append(
-                "Cloud scheduling is off. Enable with:\n"
-                "`toggle_scheduler(enabled=True, cloud=True)`"
+                "HeyLead is off in the cloud: it sends nothing and reads nothing on "
+                "your LinkedIn. Switch it on with "
+                "`scheduler(action='toggle', enabled=True, cloud=True)`."
             )
 
         return "\n".join(lines)
@@ -474,6 +476,27 @@ async def run_toggle_scheduler(enabled: bool, cloud: bool = False) -> str:
                 reason="scheduler(action='toggle', cloud=True)",
             )
         return await toggle_cloud_scheduler(enabled)
+
+    # A hosted install runs no scheduler on this machine (the engine never
+    # starts in backend mode): the switch that stops LinkedIn activity is the
+    # workspace's. Off goes there first, whatever the local mode says -- a
+    # user who tried Off here before #3545 already has it at "off" -- and the
+    # reply is the cloud's answer alone, so it never says "off" while the
+    # workspace is still on.
+    from ..config import is_backend_mode
+    if not enabled and is_backend_mode():
+        from ..services.cloud_sync import toggle_cloud_scheduler
+
+        answer = await toggle_cloud_scheduler(False)
+        if answer.startswith(("Toggle failed", "Cloud sync failed", "Cloud scheduling requires")):
+            detail = answer.split(":", 1)[-1].strip() if ":" in answer else answer
+            return f"Could not switch HeyLead off for this workspace: {detail}. It is still on."
+        if get_scheduler_mode() != "off":
+            set_scheduler_mode(
+                "off", caller="mcp_tool",
+                reason="User disabled via scheduler(action='toggle') on a hosted install",
+            )
+        return answer
 
     # Local scheduler toggle. Compared against the MODE, not against
     # is_scheduler_enabled(): that reads False in observe as well as in off, so
@@ -570,29 +593,17 @@ async def run_toggle_scheduler(enabled: bool, cloud: bool = False) -> str:
         )
     else:
         return (
-            "\u23f8\ufe0f **Scheduler disabled.**\n\n"
+            "**HeyLead is off on this machine.** It sends nothing and reads nothing "
+            "on your LinkedIn until you switch it on; replies and invitations that "
+            "arrive meanwhile are read then. A job already running finishes first.\n\n"
             + (
                 "Signal collection has stopped too \u2014 observe mode is "
                 "off.\n\n" if left_observe else ""
             ) +
-            "Autonomous outreach has been paused. No new jobs will be scheduled.\n"
-            "Already-running jobs will complete, but no new ones will start.\n\n"
-            "Your campaigns are still active \u2014 you can manually send with:\n"
-            "- `generate_and_send()` \u2014 send an invitation\n"
-            "- `send_message(action='followup')` \u2014 send a follow-up\n"
-            "- `check_replies()` \u2014 check for replies\n\n"
-            "Use `scheduler(action='toggle', enabled=True)` to re-enable."
+            "You can still act yourself: `generate_and_send()`, "
+            "`send_message(action='followup')`, `check_replies()`.\n\n"
+            "Switch it on with `scheduler(action='toggle', enabled=True)`."
         )
-
-
-def _cloud_scheduler_reports_disabled(msg: str) -> bool:
-    """True only for toggle_cloud_scheduler(False)'s single success string.
-
-    Every failure path in cloud_sync.toggle_cloud_scheduler returns a
-    "... failed: ..." sentence rather than raising, so the only safe test
-    for "the cloud really is off" is its success wording.
-    """
-    return "**disabled**" in (msg or "")
 
 
 async def run_send_from(host: str) -> str:
@@ -1687,7 +1698,7 @@ async def _format_diagnostics_local(campaign_id: str) -> str:
     status_word = {
         "full": "enabled",
         "observe": "observe (collecting, not sending)",
-        "off": "disabled",
+        "off": "off (sends nothing, reads nothing)",
     }[mode]
     lines.append(f"- Status: **{status_word}** (local)")
     lines.append(f"- Always-on: **{'active' if _is_always_on() else 'inactive'}**")
@@ -1823,7 +1834,7 @@ async def _format_diagnostics_local(campaign_id: str) -> str:
     if failed > 0:
         issues.append(f"{failed} failed jobs — `campaign(action='retry_failed')` to retry")
     if mode == "off":
-        issues.append("Scheduler is disabled — `scheduler(action='toggle', enabled=True)` to enable")
+        issues.append("HeyLead is off on this machine — `scheduler(action='toggle', enabled=True)` to switch it on")
     elif mode == "observe":
         issues.append(
             "Scheduler is in observe mode — collecting, sending nothing. "

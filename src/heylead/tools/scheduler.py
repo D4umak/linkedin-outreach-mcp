@@ -29,7 +29,7 @@ async def run_scheduler(
 
     Actions:
       status         — Show scheduler status, pending jobs, and recent activity
-      toggle         — Enable or disable the scheduler
+      toggle         — Switch HeyLead on or off; off sends nothing and reads nothing on LinkedIn
       observe        — Collect and classify signals, but send nothing
       always_on      — Enable/disable always-on mode (auto-re-enable + immediate alerts)
       logs           — Event log with metrics and recent failures
@@ -48,8 +48,9 @@ async def run_scheduler(
         cloud: If True, toggle the cloud scheduler (for 'toggle'), which keeps
             running with the laptop closed and sends inside the sending window.
             Launching or resuming a campaign already switches it on for hosted
-            accounts; pass cloud=True, enabled=False to stop the backend sending
-            while leaving this machine's scheduler alone.
+            accounts; pass cloud=True, enabled=False to switch the workspace off:
+            it then sends and reads nothing. On a hosted install the toggle
+            always switches the workspace, cloud or not.
         hours: Lookback window in hours for 'logs' (default 24).
             For 'report': report interval in hours (1, 2, 4, 8, or 24).
             Omitted, 'report' leaves the stored interval alone.

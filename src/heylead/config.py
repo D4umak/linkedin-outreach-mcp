@@ -623,9 +623,10 @@ SCHEDULER_MODES = ("off", "observe", "full")
 def get_scheduler_mode() -> str:
     """How much of the scheduler is allowed to run.
 
-    off      inbound message handling and local reporting only
-    observe  also collects and classifies signals, and checks replies. Never
-             sends, invites, engages, or enrols anyone.
+    off      nothing on LinkedIn, reads included (D4umak/heylead-api#3545);
+             local reporting only
+    observe  reads inbound messages, collects and classifies signals, and
+             checks replies. Never sends, invites, engages, or enrols anyone.
     full     everything
 
     A single on/off switch forced an all-or-nothing choice: stopping unreviewed

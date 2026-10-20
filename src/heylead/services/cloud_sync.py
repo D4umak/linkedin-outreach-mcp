@@ -3788,10 +3788,10 @@ async def toggle_cloud_scheduler(enabled: bool, *, sync_first: bool = True) -> s
         )
     else:
         return (
-            "Cloud scheduler **disabled**.\n\n"
-            "The backend will stop processing new outreach.\n"
-            "Already-running jobs will complete.\n\n"
-            "Use `toggle_scheduler(enabled=True, cloud=True)` to re-enable."
+            "HeyLead is **off** for this workspace. It sends nothing and reads "
+            "nothing on your LinkedIn until it is on again; replies and invitations "
+            "that arrive meanwhile are read then.\n\n"
+            "Switch it on with `scheduler(action='toggle', enabled=True, cloud=True)`."
         )
 
 

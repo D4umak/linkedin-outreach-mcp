@@ -172,7 +172,8 @@ LAST_ACTION_LABELS: dict[str, str] = {
 #: Why a send was refused, by send_gate's reason (and the coordinator's hold),
 #: for a send_blocked Last Action; any other reason reads its label above.
 SEND_BLOCKED_REASONS: dict[str, str] = {
-    "scheduler_disabled": "Not sent: your scheduler is off",
+    "scheduler_disabled": "Not sent: HeyLead is off",
+    "scheduler_off": "Not sent: HeyLead is off",
     "campaign_not_active": "Not sent: the campaign isn't running",
     "coordinator_hold": "Not sent: the campaign is on hold",
     "campaign_not_autopilot": "Not sent: the campaign isn't on autopilot",

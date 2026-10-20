@@ -156,6 +156,23 @@ def _build_intelligence_text(prospect_analysis: dict[str, Any] | None) -> str:
     return "\n".join(parts) if parts else "No analysis available — use profile data only."
 
 
+async def ground_comment(comment: str, sender_profile: dict[str, Any], *, max_chars: int = COMMENT_MAX_CHARS) -> str:
+    """A comment without the claims about its sender that their profile does not hold.
+
+    The client twin of heylead-api#3120 (E15, T-1): a comment is published
+    under the sender's name, and until then no comment writer read it for
+    claims, only the post writers did. Every local comment writer calls this;
+    the hosted path is the api's own ``llm.ground_comment``. The post is never
+    a source: a first-person echo of the post's figure is a claim about the
+    sender.
+    """
+    from .copywriter.polish import keep_to_sources
+
+    return await keep_to_sources(
+        comment, sources=(sender_profile,), channel="comment", max_chars=max_chars,
+    )
+
+
 async def generate_comment(
     prospect: dict[str, Any],
     sender_profile: dict[str, Any],
@@ -285,6 +302,7 @@ async def generate_comment(
     from .copywriter.polish import read_back
 
     comment = await read_back(comment, channel="comment", max_chars=max_chars)
+    comment = await ground_comment(comment, sender_profile, max_chars=max_chars)
 
     # Enforce character limit (LLM-based shortening with retry)
     comment = await shorten_to_limit(comment, max_chars)
