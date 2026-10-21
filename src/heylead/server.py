@@ -33,6 +33,22 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.470 (2026-10-21)
+- Fix: reopen the installed generation after taking its lock
+- Fix: enforce initial review holds in model GitHub calls
+- Fix: keep privileged bootstrap changes outside runtime admission
+- Fix: pause on install errors and use portable runtime locks
+- Fix: replace runtime files atomically during deployment
+- Fix: include phase retries in runtime lock coverage
+- Fix: keep the persistent proxy outside the phase lock
+- partner-followup: capture clock once and add grace to relative labels
+- Fix: preserve repository identity in claim file checks
+- Fix: skip outcomes held by a live claim in pick.py (#3662)
+- Fix: serialize shared timer authentication refreshes
+- Fix: restore credit-funded devflow and proof runners
+- New: the night's main_blocked_hours in stats, and the PostgreSQL log no longer buries FAILURES
+- New: a red main at night is the night fixer's too: re-run a flake, or open a hotfix
+
 ## v0.10.469 (2026-10-21)
 - New: batches are quiet too — port heylead-api #3692 into the one copy (api #3730)
 - Fix: do not quote prod-proof marker in shepherd merged_event checklist

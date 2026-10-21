@@ -29,6 +29,11 @@ from ..constants import PARTNER_DEFAULT_SCHEDULE_DAYS, PARTNER_MAX_AUTO_FOLLOWUP
 logger = logging.getLogger(__name__)
 
 
+def _now() -> int:
+    """Read the current unix timestamp."""
+    return int(time.time())
+
+
 def _ts_to_date(ts: int | None) -> str:
     """Convert unix timestamp to readable date string."""
     if not ts:
@@ -37,13 +42,15 @@ def _ts_to_date(ts: int | None) -> str:
     return dt.strftime("%Y-%m-%d")
 
 
-def _ts_to_relative(ts: int | None) -> str:
+def _ts_to_relative(ts: int | None, *, now: int | None = None) -> str:
     """Convert unix timestamp to relative time (e.g. 'in 2 days', '3 days ago')."""
     if not ts:
         return "—"
-    now = int(time.time())
-    diff = ts - now
-    days = abs(diff) // 86400
+    ref = _now() if now is None else int(now)
+    diff = ts - ref
+    # Add 30s grace so a 1-second tick across a DB commit (or between fast
+    # tool calls) doesn't truncate the day label (heylead-api#3745).
+    days = (abs(diff) + 30) // 86400
     if diff > 0:
         if days == 0:
             return "today"
@@ -121,6 +128,7 @@ def _handle_add(
     if not name:
         return "Name is required. Usage: partner(action='add', name='...', company='...', context='...')"
 
+    now = _now()
     # Parse next follow-up date
     if next_followup:
         try:
@@ -128,7 +136,7 @@ def _handle_add(
         except ValueError as e:
             return str(e)
     else:
-        next_ts = int(time.time()) + 86400  # tomorrow
+        next_ts = now + 86400  # tomorrow
 
     partner_id = create_partner_followup(
         name=name,
@@ -143,7 +151,7 @@ def _handle_add(
     base_ts = next_ts
     for i, gap_days in enumerate(PARTNER_DEFAULT_SCHEDULE_DAYS[:PARTNER_MAX_AUTO_FOLLOWUPS]):
         if i == 0:
-            schedule_lines.append(f"  1. {_ts_to_date(base_ts)} ({_ts_to_relative(base_ts)})")
+            schedule_lines.append(f"  1. {_ts_to_date(base_ts)} ({_ts_to_relative(base_ts, now=now)})")
         else:
             base_ts += gap_days * 86400
             schedule_lines.append(f"  {i + 1}. {_ts_to_date(base_ts)}")
@@ -182,7 +190,7 @@ def _handle_list() -> str:
             "Add one: partner(action='add', name='...', company='...', context='...')"
         )
 
-    now = int(time.time())
+    now = _now()
     lines = ["Partner Follow-Ups", "=" * 50, ""]
 
     for p in all_items:
@@ -194,7 +202,7 @@ def _handle_list() -> str:
             "cancelled": "❌",
         }.get(p["status"], "❓")
 
-        due_str = _ts_to_relative(p.get("next_followup"))
+        due_str = _ts_to_relative(p.get("next_followup"), now=now)
         if overdue and p["status"] == "active":
             due_str = f"⚠️ OVERDUE ({due_str})"
 
@@ -237,6 +245,7 @@ def _handle_update(
         return f"Partner {partner_id!r} not found."
 
     updates: dict = {}
+    now = _now()
     if name:
         updates["name"] = name
     if company:
@@ -253,7 +262,7 @@ def _handle_update(
             notes_list = []
         notes_list.append({
             "text": note,
-            "at": int(time.time()),
+            "at": now,
         })
         updates["notes"] = json.dumps(notes_list)
 
@@ -275,13 +284,14 @@ def _handle_complete(partner_id: str, note: str = "") -> str:
     if not record:
         return f"Partner {partner_id!r} not found."
 
+    now = _now()
     updates: dict = {"status": "completed"}
     if note:
         try:
             notes_list = json.loads(record.get("notes", "[]") or "[]")
         except (json.JSONDecodeError, TypeError):
             notes_list = []
-        notes_list.append({"text": f"[COMPLETED] {note}", "at": int(time.time())})
+        notes_list.append({"text": f"[COMPLETED] {note}", "at": now})
         updates["notes"] = json.dumps(notes_list)
 
     update_partner_followup(partner_id, **updates)
@@ -306,11 +316,12 @@ def _handle_snooze(partner_id: str, days: int) -> str:
     if days < 1:
         days = 7
 
-    new_ts = int(time.time()) + days * 86400
+    now = _now()
+    new_ts = now + days * 86400
     update_partner_followup(partner_id, next_followup=new_ts, status="active")
 
     return (
-        f"Snoozed {record['name']}: next follow-up {_ts_to_date(new_ts)} ({_ts_to_relative(new_ts)})"
+        f"Snoozed {record['name']}: next follow-up {_ts_to_date(new_ts)} ({_ts_to_relative(new_ts, now=now)})"
     )
 
 
