@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "heylead"
-version = "0.10.468"
+version = "0.10.469"
 description = "AI agent for LinkedIn outreach: finds the right people, writes in your voice, follows up and handles replies. From Claude Code, Cursor, any MCP client or a web dashboard."
 readme = "README.md"
 license = "MIT"
@@ -91,7 +91,7 @@ packages = ["src/heylead"]
 target-version = "py310"
 line-length = 100
 # .semgrep/*.py are rule fixtures: deliberately wrong code, not part of the package.
-extend-exclude = [".semgrep"]
+extend-exclude = [".semgrep", ".heylead-api"]
 
 [tool.ruff.lint]
 # The CI gate. Only rules that are clean today and catch real defects; widen
