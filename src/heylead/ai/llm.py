@@ -33,6 +33,21 @@ logger = logging.getLogger(__name__)
 
 _TIMEOUT = httpx.Timeout(30.0, connect=10.0, read=120.0)
 
+
+def answer_text(parts: Any) -> str:
+    """The answer in a Gemini candidate: every non-thought text part, joined.
+
+    A thinking model may answer in more than one part: a blank part, a
+    thought or a part carrying only a ``thoughtSignature`` can come first, and
+    reading ``parts[0]`` alone lost the answer (heylead-api#4118). The parts
+    are one text cut in pieces, so they join with nothing between them.
+    """
+    return "".join(
+        str(p["text"]) for p in parts or []
+        if isinstance(p, dict) and p.get("text") and not p.get("thought")
+    ).strip()
+
+
 # Gemini finish reasons that mean the text we got back is not a usable answer.
 # STOP is the only clean one; MAX_TOKENS means the output was cut mid-sentence,
 # which for a JSON-producing prompt yields an unparseable fragment.
@@ -370,11 +385,12 @@ class LLMClient:
         if finish in _GEMINI_BAD_FINISH:
             raise LLMError(f"Gemini stopped early (finishReason={finish})")
 
-        parts = candidates[0].get("content", {}).get("parts", [])
-        text = parts[0].get("text", "") if parts else ""
-        if not text.strip():
+        parts = (candidates[0].get("content") or {}).get("parts") or []
+        text = answer_text(parts)
+        if not text:
             raise LLMError(
-                f"Gemini returned empty text (finishReason={finish or 'unknown'})"
+                f"Gemini returned empty text (finishReason={finish or 'unknown'},"
+                f" parts={len(parts)})"
             )
         return text
 

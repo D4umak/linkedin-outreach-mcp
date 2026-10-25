@@ -33,6 +33,43 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.471 (2026-10-25)
+- Fix: a Gemini answer is every non-thought text part (heylead-api#4118)
+- a public badge's reason is checked against the board beside it (#4122)
+- Fix: the PR gate reads a line starting #1234 as text, not a heading (#4095)
+- Fix: Claude Code spend lands on the ticket its chat built (#3886)
+- Fix: the Claude Code spend upload runs hourly on the Mac (#4063)
+- Fix: the scan closes EOF) and hyphenated heredocs, reads pipes to a shell, $'..' and $((..)) (#3756 review round 2)
+- Fix: the shell scan keeps commands the shell runs gated (#3756 review)
+- Fix: a finished review lifts needs-review by itself (#4052)
+- Fix: prod_events.py reads its key through prod_read's account choice (api #4038)
+- Fix: prod_read.py reads the secret as an account that may (api #4038)
+- correct the evidence: the hold was never clicked off
+- Fix: Denys's recorded copy approval lifts the copy hold (heylead-api #4044)
+- Fix: a needs-denys hold wakes a waiting chat (#3903)
+- devflow could not build a page outcome (#3988)
+- Fix: prod_events counts reads /analytics/events, the route the api serves (api #3957)
+- Fix: Denys approves a PR's public copy once, not again after every queue update (#3968)
+- Fix: merge_gate blocks only a real push to main or gh pr merge (#3959)
+- Fix: update digest expectation and incident doc (#3847)
+- Fix: PR gates fire only on real PR-create command (#3756)
+- move CLI to denys_asks.py and rename commands
+- Fix: a hold a person clears is a hold that wakes the chat, not a silent wait (#3903)
+- New: structured denys-ask markers and daily digest (#3847)
+- New: implement review:light tier for non-sensitive paths
+- Fix: repo-level context hand-off hook with 450k escalation (#3841)
+- Use one explicit clock in the live-lock TTL regression (#3807)
+- Cover terminal result parsing and marker deduplication (#3807)
+- Complete devflow terminal facts, capacity and approval pin enforcement (#3807)
+- Fix: a cloud session can read SEO pace and arrivals
+- Fix: a cloud session reads production events over HTTPS (api #3831)
+- case-qa: readers follow a moved rule; fixed-time jobs checked against executor gates (heylead-api#3829)
+- case-analyst and case-pm: a reading that waits on a person says when and what it reads if nobody acts (heylead-api#3830)
+- New: one Slack post a day of the PRs that wait only on Denys's review (api #3824)
+- Office O1: devflow and Claude Code spend upload to heylead-api (api #3813)
+- merge queue: hold a PR that approves public office copy; guard needs-denys (#3814)
+- Fix: refuse free-text outcome and top-level finding status in validate() (#3635)
+
 ## v0.10.470 (2026-10-21)
 - Fix: reopen the installed generation after taking its lock
 - Fix: enforce initial review holds in model GitHub calls
