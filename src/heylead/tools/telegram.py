@@ -39,22 +39,25 @@ async def _call(method: str, path: str, *, json: dict[str, Any] | None = None,
             resp = await client._client.get(url, params=params, headers=client._headers(), timeout=30)
         else:
             resp = await client._post(url, json=json, params=params, headers=client._headers(), timeout=60)
-    except (httpx.ConnectError, httpx.TimeoutException) as exc:
-        return 0, {"detail": f"HeyLead did not answer ({type(exc).__name__}). Try again in a minute."}
+    except httpx.HTTPError as exc:
+        return 0, {"detail": f"HeyLead did not answer ({type(exc).__name__}). Try again in a minute.", "network_error": type(exc).__name__}
     try:
         body = resp.json()
+        if not isinstance(body, dict):
+            body = {"detail": f"HTTP {resp.status_code} from HeyLead."}
     except ValueError:
-        body = {"detail": resp.text[:200]}
+        body = {"detail": f"HTTP {resp.status_code} from HeyLead."}
     return resp.status_code, body
 
 
 def _detail(body: Any) -> str:
-    return str((body or {}).get("detail") or "something went wrong") if isinstance(body, dict) else str(body)
+    return str((body or {}).get("detail") or "something went wrong") if isinstance(body, dict) else "something went wrong"
 
 
 def _held_line(item: dict[str, Any]) -> str:
     where = item.get("chat_name") or item.get("chat_id")
-    return f"[{item.get('status')}] {item.get('id')} → {where}\n{item.get('text')}"
+    err = f" — {item.get('error')}" if item.get("status") == "failed" and item.get("error") else ""
+    return f"[{item.get('status')}] {item.get('id')} → {where}{err}\n{item.get('text')}"
 
 
 async def run_telegram(
@@ -130,6 +133,8 @@ async def run_telegram(
         return "Error: item_id is required (from telegram(action='queue') or 'outbox')."
     code, body = await _call("POST", f"/telegram/outbox/{item_id}/{action}")
     if code != 200:
+        if action == "approve" and code == 0 and isinstance(body, dict) and body.get("network_error"):
+            return f"Not sent: network error talking to HeyLead ({body['network_error']}). Run telegram(action='outbox') to check message {item_id}: if it is still [held], it was not sent and you can run telegram(action='approve', item_id='{item_id}') again."
         return f"{action.capitalize()} refused: {_detail(body)}"
     result = (body or {}).get("result") or {}
     if action == "discard":

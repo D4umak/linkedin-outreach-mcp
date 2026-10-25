@@ -26,12 +26,25 @@ from .logging_setup import setup_logging
 from .ops_log import run_traced
 
 
+def _err_text(exc: BaseException) -> str:
+    return str(exc).strip() or type(exc).__name__
+
+
 # ──────────────────────────────────────────────
 # Changelog (exposed via heylead://changelog resource)
 # ──────────────────────────────────────────────
 
 _CHANGELOG = """\
 # HeyLead Changelog
+
+## v0.10.473 (2026-10-25)
+- #4034 is the same shape as #3524 (heylead-api#4149)
+- Fix: re-run PR gates on edited and ready_for_review (heylead-api#3840)
+- case-designer checks every side of a moved element (heylead-api#4157)
+- Fix: fix semgrep rule and fixture for tool-http-call-misses-httperror
+- Fix: name spacing, Unipile HTTP status/type, and network errors on approve (#3607)
+- New: unify PR gates and implement 6-step token fallback
+- New: mirror hardened hooks and floor_guard from api
 
 ## v0.10.472 (2026-10-25)
 - Fix: compute relative day label from UTC calendar dates
@@ -2461,7 +2474,7 @@ async def setup_profile(
         return result
     except Exception as e:
         logger.error(f"setup_profile failed: {e}", exc_info=True)
-        return f"❌ Setup failed: {e}\n\nCheck ~/.heylead/logs/heylead.log for details."
+        return f"❌ Setup failed: {_err_text(e)}\n\nCheck ~/.heylead/logs/heylead.log for details."
 
 
 # ──────────────────────────────────────────────
@@ -2492,7 +2505,7 @@ async def _account_impl(
         return await run_traced("account", run_account(action, account_id), action=action)
     except Exception as e:
         logger.error(f"account failed: {e}", exc_info=True)
-        return f"Account action failed: {e}"
+        return f"Account action failed: {_err_text(e)}"
 
 
 @mcp.tool(annotations=_acts("List or switch HeyLead workspaces"))
@@ -2526,7 +2539,7 @@ async def organization(
         )
     except Exception as e:
         logger.error(f"organization failed: {e}", exc_info=True)
-        return f"Organization action failed: {e}"
+        return f"Organization action failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -2588,7 +2601,7 @@ async def generate_icp(
         )
     except Exception as e:
         logger.error(f"generate_icp failed: {e}", exc_info=True)
-        return f"ICP generation failed: {e}"
+        return f"ICP generation failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -2629,7 +2642,7 @@ async def profile_signals(
         )
     except Exception as e:
         logger.error("profile_signals failed: %s", e, exc_info=True)
-        return f"profile_signals failed: {e}"
+        return f"profile_signals failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -2695,7 +2708,7 @@ async def icp(
     except Exception as e:
         logger.error("icp failed: %s", e, exc_info=True)
         return (
-            f"ICP preview failed: {e}\n\n"
+            f"ICP preview failed: {_err_text(e)}\n\n"
             "No campaign, outreach or contact was created — this tool never "
             "creates any."
         )
@@ -2841,7 +2854,7 @@ async def create_campaign(
         )
     except Exception as e:
         logger.error(f"create_campaign failed: {e}", exc_info=True)
-        return f"❌ Campaign creation failed: {e}"
+        return f"❌ Campaign creation failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -2878,7 +2891,7 @@ async def generate_and_send(
         )
     except Exception as e:
         logger.error(f"generate_and_send failed: {e}", exc_info=True)
-        return f"❌ Message generation failed: {e}"
+        return f"❌ Message generation failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -2922,7 +2935,7 @@ async def book_meeting(
         )
     except Exception as e:
         logger.error(f"book_meeting failed: {e}", exc_info=True)
-        return f"❌ Booking failed: {e}"
+        return f"❌ Booking failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -2949,7 +2962,7 @@ async def check_replies() -> str:
         return await run_traced("check_replies", run_check_replies())
     except Exception as e:
         logger.error(f"check_replies failed: {e}", exc_info=True)
-        return f"❌ Reply check failed: {e}"
+        return f"❌ Reply check failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -2982,7 +2995,7 @@ async def show_status(
         )
     except Exception as e:
         logger.error(f"show_status failed: {e}", exc_info=True)
-        return f"❌ Status check failed: {e}"
+        return f"❌ Status check failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3043,7 +3056,7 @@ async def _campaign_impl(
         )
     except Exception as e:
         logger.error(f"campaign failed: {e}", exc_info=True)
-        return f"Campaign action failed: {e}"
+        return f"Campaign action failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3099,7 +3112,7 @@ async def send_message(
         )
     except Exception as e:
         logger.error(f"send_message failed: {e}", exc_info=True)
-        return f"Message send failed: {e}"
+        return f"Message send failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3135,7 +3148,7 @@ async def send_email(
         return await run_traced("send_email", run_send_email(to, subject, body, to_name))
     except Exception as e:
         logger.error("send_email failed: %s", e, exc_info=True)
-        return f"Email send failed: {e}"
+        return f"Email send failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3182,7 +3195,7 @@ async def telegram(
         )
     except Exception as e:
         logger.error("telegram failed: %s", e, exc_info=True)
-        return f"Telegram failed: {e}"
+        return f"Telegram failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3233,7 +3246,7 @@ async def engage_prospect(
         )
     except Exception as e:
         logger.error(f"engage_prospect failed: {e}", exc_info=True)
-        return f"Engagement failed: {e}"
+        return f"Engagement failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3268,7 +3281,7 @@ async def suggest_next_action(
         )
     except Exception as e:
         logger.error(f"suggest_next_action failed: {e}", exc_info=True)
-        return f"Failed to suggest next action: {e}"
+        return f"Failed to suggest next action: {_err_text(e)}"
 
 
 
@@ -3516,7 +3529,7 @@ async def edit_campaign(
         )
     except Exception as e:
         logger.error(f"edit_campaign failed: {e}", exc_info=True)
-        return f"Edit failed: {e}"
+        return f"Edit failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3587,7 +3600,7 @@ async def _prospect_impl(
         )
     except Exception as e:
         logger.error(f"prospect failed: {e}", exc_info=True)
-        return f"Prospect action failed: {e}"
+        return f"Prospect action failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3628,7 +3641,7 @@ async def analytics(
         )
     except Exception as e:
         logger.error(f"analytics failed: {e}", exc_info=True)
-        return f"Analytics failed: {e}"
+        return f"Analytics failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3686,7 +3699,7 @@ async def inspect(
         )
     except Exception as e:
         logger.error("inspect failed: %s", e, exc_info=True)
-        return f"Inspect failed: {e}"
+        return f"Inspect failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3774,7 +3787,7 @@ async def _knowledge_impl(
         )
     except Exception as e:
         logger.error("knowledge failed: %s", e, exc_info=True)
-        return f"Knowledge failed: {e}"
+        return f"Knowledge failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3804,7 +3817,7 @@ async def product(action: str = "status", request: str = "") -> str:
         )
     except Exception as e:
         logger.error("product failed: %s", e, exc_info=True)
-        return f"Product failed: {e}"
+        return f"Product failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3883,7 +3896,7 @@ async def _scheduler_impl(
         )
     except Exception as e:
         logger.error(f"scheduler failed: {e}", exc_info=True)
-        return f"Scheduler action failed: {e}"
+        return f"Scheduler action failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3939,7 +3952,7 @@ async def create_post(
         )
     except Exception as e:
         logger.error(f"create_post failed: {e}", exc_info=True)
-        return f"Post creation failed: {e}"
+        return f"Post creation failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -3991,7 +4004,7 @@ async def _brand_strategy_impl(
         )
     except Exception as e:
         logger.error("brand_strategy failed: %s", e, exc_info=True)
-        return f"Brand strategy failed: {e}"
+        return f"Brand strategy failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -4029,7 +4042,7 @@ async def _profile_impl(
         )
     except Exception as e:
         logger.error("profile failed: %s", e, exc_info=True)
-        return f"Profile action failed: {e}"
+        return f"Profile action failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -4097,7 +4110,7 @@ async def import_prospects(
         )
     except Exception as e:
         logger.error("import_prospects failed: %s", e, exc_info=True)
-        return f"Import failed: {e}"
+        return f"Import failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -4142,7 +4155,7 @@ async def crm_sync(
         )
     except Exception as e:
         logger.error("crm_sync failed: %s", e, exc_info=True)
-        return f"CRM sync failed: {e}"
+        return f"CRM sync failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
@@ -4185,7 +4198,7 @@ async def manage_watchlist(
         )
     except Exception as e:
         logger.error("manage_watchlist failed: %s", e, exc_info=True)
-        return f"Watchlist management failed: {e}"
+        return f"Watchlist management failed: {_err_text(e)}"
 
 
 async def _signals_impl(
@@ -4235,7 +4248,7 @@ async def _signals_impl(
         )
     except Exception as e:
         logger.error("signals failed: %s", e, exc_info=True)
-        return f"Signals failed: {e}"
+        return f"Signals failed: {_err_text(e)}"
 
 
 async def _partner_impl(
@@ -4283,7 +4296,7 @@ async def _partner_impl(
         )
     except Exception as e:
         logger.error("partner failed: %s", e, exc_info=True)
-        return f"Partner tracking failed: {e}"
+        return f"Partner tracking failed: {_err_text(e)}"
 
 
 async def _contacts_impl(
@@ -4379,7 +4392,7 @@ async def _contacts_impl(
         )
     except Exception as e:
         logger.error("contacts failed: %s", e, exc_info=True)
-        return f"Contact management failed: {e}"
+        return f"Contact management failed: {_err_text(e)}"
 
 
 async def _network_impl(
@@ -4451,7 +4464,7 @@ async def _network_impl(
         )
     except Exception as e:
         logger.error("network failed: %s", e, exc_info=True)
-        return f"Network intelligence failed: {e}"
+        return f"Network intelligence failed: {_err_text(e)}"
 
 
 async def _inbox_impl(
@@ -4498,7 +4511,7 @@ async def _inbox_impl(
         )
     except Exception as e:
         logger.error("inbox failed: %s", e, exc_info=True)
-        return f"Inbox failed: {e}"
+        return f"Inbox failed: {_err_text(e)}"
 
 
 @mcp.tool(annotations=_acts("Process unreplied LinkedIn inbox messages"))
@@ -4533,7 +4546,7 @@ async def backfill_inbox(
         )
     except Exception as e:
         logger.error("backfill_inbox failed: %s", e, exc_info=True)
-        return f"Backfill failed: {e}"
+        return f"Backfill failed: {_err_text(e)}"
 
 
 # ──────────────────────────────────────────────
