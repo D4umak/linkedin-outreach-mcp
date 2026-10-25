@@ -33,6 +33,14 @@ from .ops_log import run_traced
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.472 (2026-10-25)
+- Fix: compute relative day label from UTC calendar dates
+- #4123 round-1 classing for case-designer (F1 caught-ignored, F2 missed)
+- Fix: keep main's readiness on live issues, refuse at write time (heylead-api#3843)
+- New: proof checks, the owed-proofs runner and the night report run seven days a week (heylead-api#4142)
+- Fix: mirror marker logic from heylead-api (#3843)
+- New: implement review marker script and validation #3843
+
 ## v0.10.471 (2026-10-25)
 - Fix: a Gemini answer is every non-thought text part (heylead-api#4118)
 - a public badge's reason is checked against the board beside it (#4122)

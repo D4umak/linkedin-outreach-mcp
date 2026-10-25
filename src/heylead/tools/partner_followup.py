@@ -47,24 +47,18 @@ def _ts_to_relative(ts: int | None, *, now: int | None = None) -> str:
     if not ts:
         return "—"
     ref = _now() if now is None else int(now)
-    diff = ts - ref
-    # Add 30s grace so a 1-second tick across a DB commit (or between fast
-    # tool calls) doesn't truncate the day label (heylead-api#3745).
-    days = (abs(diff) + 30) // 86400
-    if diff > 0:
-        if days == 0:
-            return "today"
-        elif days == 1:
-            return "tomorrow"
-        else:
-            return f"in {days} days"
-    else:
-        if days == 0:
-            return "today"
-        elif days == 1:
-            return "yesterday"
-        else:
-            return f"{days} days ago"
+    target_date = datetime.fromtimestamp(int(ts), tz=timezone.utc).date()
+    ref_date = datetime.fromtimestamp(ref, tz=timezone.utc).date()
+    day_diff = (target_date - ref_date).days
+    if day_diff == 0:
+        return "today"
+    if day_diff == 1:
+        return "tomorrow"
+    if day_diff > 1:
+        return f"in {day_diff} days"
+    if day_diff == -1:
+        return "yesterday"
+    return f"{abs(day_diff)} days ago"
 
 
 def _parse_date(date_str: str) -> int:
