@@ -140,6 +140,7 @@ def build_campaign_config(
     caller validates it.
     """
     from .. import goals as _goals
+    from ..services.competitors import initial_competitor_config
 
     goal_key = (
         _goals.normalize_goal(goal) if goal
@@ -176,7 +177,7 @@ def build_campaign_config(
         # (a customer, 11 Sep 2026). Default ON. An empty list excludes nobody
         # until research or the operator names the companies.
         "exclude_competitors": True,
-        "competitor_companies": competitor_companies,
+        **initial_competitor_config(competitor_companies),
         # The goal, and the two keys every older reader understands:
         # campaign_type (prompt family: outbound or job_search) and
         # campaign_intent (sell, buy, partner, recruit, research). #1153.

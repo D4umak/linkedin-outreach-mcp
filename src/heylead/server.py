@@ -37,6 +37,29 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.474 (2026-10-26)
+- Fix: semgrep guard for silent empty competitor defaults (#3400)
+- Fix: repos from repos.BUILT, the queue's live line as a decorator so tick keeps its passes (api #4174)
+- wip(live): five more live-write tests and the live-sender semgrep guard draft (api #4174)
+- wip(live): agreement sampler and its tests, VM units (api #4174; unfinished, saved on the token wind-down)
+- New: every background worker says what it runs now (api #4174, WIP)
+- wip(kira): competitor defaults never stored as a silent empty (api #3400; Codex WIP, unfinished)
+- Fix: judge the dashboard live from Vercel's commit status, not /deployments (#4175)
+- Merge queue quiet hours end at 07:30 London, as the api's (api #4211)
+- Fix: a deploy-blocked alarm is born with its class label (#4169)
+- Fix: move test annotations to their own lines
+- Fix: synchronize hooks and revert heading regression
+- Fix: only pass repo to GitHub.call when not None (#4066)
+- Fix: harden PR, outcome, and WIP gates against bypasses
+- New: lift needs-review cross-repo from heylead-api outcomes
+- Fix: hold PRs that edit approved public copy text (#4054)
+- Fix: transcript-verified approval for needs-denys removal
+- Fix: transcript-verified approval for needs-denys removal (#4040)
+- Fix: follow every merged PR naming an outcome to live, backfill history; status.py proof floor is the last merge (heylead-api#4175)
+- Fix: resolve semgrep failures and revert unrelated changes (#4035)
+- Fix: address review feedback, restore VM config, and fix regression test (heylead-api#4035)
+- Fix: remove duplicates and restore permissions in scripts/devflow/ (heylead-api#4035)
+
 ## v0.10.473 (2026-10-25)
 - #4034 is the same shape as #3524 (heylead-api#4149)
 - Fix: re-run PR gates on edited and ready_for_review (heylead-api#3840)

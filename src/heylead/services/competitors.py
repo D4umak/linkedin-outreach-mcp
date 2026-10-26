@@ -97,6 +97,16 @@ def competitor_list_is_set(config: dict[str, Any] | None) -> bool:
     return isinstance(config, dict) and config.get(COMPETITOR_COMPANIES_KEY) is not None
 
 
+def initial_competitor_config(names: Any) -> dict[str, str]:
+    """Automatic creation has no list choice when research found no names.
+
+    Explicit settings updates must not use this helper: an empty manual
+    value is authoritative and must remain present.
+    """
+    parsed = parse_competitor_names(names)
+    return {COMPETITOR_COMPANIES_KEY: format_competitor_companies(parsed)} if parsed else {}
+
+
 def competitor_names_from(
     config: dict[str, Any] | None,
     icp: dict[str, Any] | None = None,
