@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FollowUpDecisions(BaseModel):
@@ -24,6 +24,7 @@ class FollowUpDecisions(BaseModel):
     link-gating, bullets policy, CTA rotation, length style, pain-first pattern,
     fresh opener selection, and anti-repetition controls.
     """
+    model_config = ConfigDict(extra="forbid")
 
     structure_change: str = Field(
         description="What structure will change vs last SDR message"
@@ -91,6 +92,7 @@ class MessageSkeleton(BaseModel):
     Provides a pre-planned sentence-level structure that the
     generation stage fills in with natural language.
     """
+    model_config = ConfigDict(extra="forbid")
 
     opening: str = Field(
         description="One sentence opening based on fresh_hook"
@@ -116,6 +118,7 @@ class FollowUpReasoning(BaseModel):
     Contains both strategic decisions and a message skeleton
     that Stage 2 uses to generate the final message text.
     """
+    model_config = ConfigDict(extra="forbid")
 
     decisions: FollowUpDecisions
     message_skeleton: MessageSkeleton

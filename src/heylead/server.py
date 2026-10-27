@@ -37,6 +37,26 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.475 (2026-10-27)
+- Fix: normalize schemas for OpenAI; enforce strictness in heylead client (#4125)
+- #4174 UI QA round 1 missed findings F1-F3
+- Fix: a refused token in CI still says GitHub authentication failed and names GH_TOKEN (api #4281)
+- Fix: update semgrep pattern and paths for ledger prune (#4101)
+- Fix: a PR opened with -R for another repo is judged on that repo's PR (api #4062)
+- Fix: a gate step that cannot read GitHub retries, says why, and heylead-ci runs it once more (api #4281)
+- shepherd: name a green PR nobody will label (no Shepherd: auto) after 2 h (api #4289)
+- #4254 UI QA round 1 missed P2s (F1, F2 designer; F3 pm)
+- Fix: only worker jobs get the real office live folder (api #4174)
+- Fix: implement idempotent ledger repair with id pinning (#4101)
+- Fix: the design backfill trusts heylead-ci[bot] like heylead-api does, so it never redraws its own design (api #4256)
+- Fix: test runs never write the real live folder (api #4174)
+- Fix: the design backfill runs case-designer from the repo and stops on an agent error (api #4256)
+- review lessons: #4227 F1, the walks after the replay were its backlog (designer, caught-ignored)
+- ui-qa: the click gate allows the office replay's 'Skip to now' on heylead.dev/office only (api #4227 QA round 1, C4)
+- New: a prototype:html design review carries its html; design backfill (api #4256)
+- proofs: live read accepts the shepherd's backticked sha (api #4225)
+- proofs: the hands-off week's check, with a floor and idle hours (api #4225)
+
 ## v0.10.474 (2026-10-26)
 - Fix: semgrep guard for silent empty competitor defaults (#3400)
 - Fix: repos from repos.BUILT, the queue's live line as a decorator so tick keeps its passes (api #4174)

@@ -70,6 +70,73 @@ def _output_budget(max_tokens: int) -> int:
     return max(int(max_tokens), 1) + _THINKING_HEADROOM_TOKENS
 
 
+_OPENAI_STRIP_SCHEMA_KEYS = frozenset({
+    "additionalProperties", "propertyOrdering", "maxLength", "minLength",
+    "minimum", "maximum", "minItems", "maxItems", "pattern", "default",
+})
+_OPENAI_NON_STRICT_KEYS = frozenset({
+    "maxLength", "minLength", "minimum", "maximum", "minItems", "maxItems", "pattern",
+})
+
+
+def to_openai_schema(schema: dict[str, Any] | None) -> dict[str, Any]:
+    """JSON Schema → OpenAI json_schema. Recursively copies and normalizes."""
+    if not schema or not isinstance(schema, dict):
+        return {}
+    out: dict[str, Any] = {}
+    for k, v in schema.items():
+        if k in _OPENAI_STRIP_SCHEMA_KEYS:
+            continue
+        if k == "type":
+            out[k] = str(v).lower()
+        elif k == "enum" or k == "required":
+            out[k] = list(v)
+        elif k == "properties" and isinstance(v, dict):
+            out[k] = {pk: to_openai_schema(pv) if isinstance(pv, dict) else pv for pk, pv in v.items()}
+        elif k == "items" and isinstance(v, dict):
+            out[k] = to_openai_schema(v)
+        else:
+            out[k] = v
+
+    if isinstance(out.get("properties"), dict) and out["properties"]:
+        out["additionalProperties"] = False
+    return out
+
+
+def _is_openai_strict(schema: dict[str, Any] | None) -> bool:
+    """True iff schema can use OpenAI strict mode (no optional props or bounds)."""
+    if not schema or not isinstance(schema, dict):
+        return False
+    if any(k in schema for k in _OPENAI_NON_STRICT_KEYS):
+        return False
+    props = schema.get("properties")
+    if isinstance(props, dict):
+        if set(schema.get("required") or ()) != set(props):
+            return False
+        for v in props.values():
+            if isinstance(v, dict) and not _is_openai_strict(v):
+                return False
+    items = schema.get("items")
+    if isinstance(items, dict) and not _is_openai_strict(items):
+        return False
+    return True
+
+
+def openai_response_format(schema: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not schema or not isinstance(schema, dict):
+        return None
+    if not isinstance(schema.get("properties"), dict) or not schema["properties"]:
+        return {"type": "json_object"}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "response",
+            "schema": to_openai_schema(schema),
+            "strict": _is_openai_strict(schema),
+        },
+    }
+
+
 class LLMError(Exception):
     """Raised when all LLM providers fail."""
 
@@ -469,11 +536,9 @@ class LLMClient:
             "messages": messages,
             "max_completion_tokens": _output_budget(max_tokens),
         }
-        if schema:
-            body["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {"name": "response", "schema": schema, "strict": True},
-            }
+        response_format = openai_response_format(schema)
+        if response_format:
+            body["response_format"] = response_format
 
         async with self._http() as client:
             resp = await client.post(

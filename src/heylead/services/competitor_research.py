@@ -160,6 +160,7 @@ async def research_competitors(
                     },
                 },
                 "required": ["competitors"],
+                "additionalProperties": False,
             },
             system=_EXTRACT_SYSTEM,
             temperature=0.1,
