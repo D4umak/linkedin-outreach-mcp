@@ -3508,6 +3508,7 @@ class UnipileClient:
         account_id: str,
         sender_id: str,
         limit: int = 20,
+        strict: bool = False,
     ) -> list[dict[str, Any]]:
         """Fetch messages from a specific person.
 
@@ -3520,6 +3521,9 @@ class UnipileClient:
             account_id: The Unipile account ID.
             sender_id: The attendee's provider_id or public_id.
             limit: Max messages to return.
+            strict: Raise UnipileError on a failed call instead of returning
+                [], so a caller that remembers "no messages" can tell an
+                empty answer (404 or no items) from an error (api #4374).
 
         Returns:
             List of message dicts with sender_id, sender_name, text,
@@ -3574,6 +3578,8 @@ class UnipileClient:
             raise
         except Exception as e:
             logger.warning("Failed to get messages by sender %s: %s", sender_id, e)
+            if strict:
+                raise UnipileError(str(e)) from e
             return []
 
     async def add_message_reaction(

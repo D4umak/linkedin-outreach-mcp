@@ -37,6 +37,17 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.479 (2026-10-27)
+- Fix: remember no messages for invited and connected rows only (api #4374 review r1)
+- P0 posts at 07:30 and is switched by the funnel_watch_mode key (api #4482)
+- P0 runs on the api tick, Denys's decision (#4458)
+- designer checks an email at 375 px (api #4463)
+- #4307 UI QA F1/F2, a held reply hidden by the screens its email links to
+- Fix: the local reply sweep remembers a person with no messages (api #4374)
+- shepherd+devflow: every hold names an owner and a deadline, and goes up a level when it passes (api #3954)
+- Fix: align budget watchdog tests with resume and price scaling behavior (#4102)
+- Scale --max-budget-usd for Flash list prices and enforce outcome cap (#4102)
+
 ## v0.10.478 (2026-10-27)
 - Fix: keep a bytecode cache when the host forbids __pycache__ (api #4472)
 - funnel report in its own DM, Denys's decision (#4458)

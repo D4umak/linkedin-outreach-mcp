@@ -3154,6 +3154,7 @@ class BackendClient:
         account_id: str,
         sender_id: str,
         limit: int = 20,
+        strict: bool = False,
     ) -> list[dict[str, Any]]:
         """Fetch messages from a specific person via the backend proxy.
 
@@ -3163,6 +3164,9 @@ class BackendClient:
             account_id: The Unipile account ID (unused, taken from backend JWT).
             sender_id: The attendee's provider_id or public_id.
             limit: Max messages to return.
+            strict: Raise UnipileError on a failed call instead of returning
+                [], so a caller that remembers "no messages" can tell an
+                empty answer (404 or no items) from an error (api #4374).
 
         Returns:
             List of message dicts with sender_id, sender_name, text,
@@ -3173,7 +3177,13 @@ class BackendClient:
             resp = await self._client.get(url, headers=self._headers())
             if resp.status_code in (401, 403):
                 raise UnipileAuthError()
+            if resp.status_code in (404, 400):
+                return []
             if resp.status_code != 200:
+                if strict:
+                    raise UnipileError(
+                        f"chat_attendees messages answered {resp.status_code}"
+                    )
                 return []
             data = resp.json()
 
@@ -3219,6 +3229,8 @@ class BackendClient:
             raise
         except Exception as e:
             logger.warning("Failed to get messages by sender via backend: %s", e)
+            if strict:
+                raise UnipileError(str(e)) from e
             return []
 
     async def add_message_reaction(

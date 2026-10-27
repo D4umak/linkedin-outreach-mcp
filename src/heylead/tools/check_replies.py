@@ -69,11 +69,94 @@ _REVISIT_STATUSES = ("invited", "connected", "messaged", "replied")
 _REVISIT_CURSOR_KEY = "check_replies_revisit_cursor"
 
 
+# How long the rotation trusts "this person has no messages with the seat".
+# A pending invitation or an unanswered connection answers empty until
+# someone writes, and nothing remembered it: the rotation asked again every
+# time it came round. Same TTL and rules as the cloud sweep's
+# ATTENDEE_NO_CHAT_TTL_SECONDS (D4umak/heylead-api#4163; client twin #4374).
+# A thread that does start is the newest on the seat, so the recent page reads
+# it on the next sweep; this lookup is only the net for one that scrolled off.
+# A status change (invited → connected → messaged) asks at once.
+ATTENDEE_NO_CHAT_TTL_SECONDS = 72 * 3600
+# Only these statuses are remembered, and only these are read back. Until
+# D4umak/heylead-api#4506 the api proxy answered an upstream 429 or 5xx as
+# 200 {"items": []}, so an empty answer could be a failure in disguise; an
+# older api, or a self-hosted one, may still. A messaged or replied row is a
+# live conversation, and remembering a disguised failure there would hide a
+# reply for 72 h; those rows are asked every time they come round.
+_NO_CHAT_STATUSES = ("invited", "connected")
+
+
+def _no_chat_key(account_id: str) -> str:
+    return f"attendee_no_chat:{account_id}"
+
+
+async def _load_no_chat(account_id: str) -> tuple[dict[str, list[Any]], bool]:
+    """provider id → [checked at, outreach status] for this seat, unexpired and
+    for a remembered status only, and whether anything stored was dropped (so
+    the save drops it too)."""
+    try:
+        raw = await run_db(get_setting, _no_chat_key(account_id), {})
+    except Exception:
+        return {}, False
+    if not isinstance(raw, dict):
+        return {}, False
+    oldest = int(time.time()) - ATTENDEE_NO_CHAT_TTL_SECONDS
+    kept = {
+        pid: v for pid, v in raw.items()
+        if isinstance(v, list) and len(v) == 2
+        and isinstance(v[0], (int, float)) and v[0] > oldest
+        and v[1] in _NO_CHAT_STATUSES
+    }
+    return kept, len(kept) != len(raw)
+
+
+async def _save_no_chat(account_id: str, no_chat: dict[str, list[Any]]) -> None:
+    try:
+        await run_db(save_setting, _no_chat_key(account_id), no_chat)
+    except Exception:
+        logger.debug("no-chat memory not saved", exc_info=True)
+
+
+async def _attendee_messages_for_sweep(
+    client: Any, account_id: str, pid: str, status: str,
+    no_chat: dict[str, list[Any]],
+) -> list[dict[str, Any]] | None:
+    """This seat's newest messages with ``pid``; [] when there are none, None
+    when the lookup failed and cannot tell.
+
+    A recent "no messages" for the same outreach status is the answer and
+    Unipile is not asked. An empty answer is remembered for an invited or
+    connected row only (_NO_CHAT_STATUSES); an error is not an answer and is
+    asked again. Circuit-breaker and timeout errors propagate:
+    they stop the sweep.
+    """
+    seen = no_chat.get(pid)
+    if seen and seen[1] == status:
+        return []
+    try:
+        msgs = await _cb.call(
+            client.get_messages_by_sender(account_id, pid, limit=5, strict=True),
+            label="get_messages_by_sender",
+        )
+    except (CircuitBreakerOpen, asyncio.TimeoutError):
+        raise
+    except Exception as e:
+        logger.warning("Reply revisit: attendee lookup failed for %s: %s", pid[:12], e)
+        return None
+    msgs = list(msgs or [])
+    if msgs or status not in _NO_CHAT_STATUSES:
+        no_chat.pop(pid, None)
+    else:
+        no_chat[pid] = [int(time.time()), status]
+    return msgs
+
+
 def _revisit_candidates(
     outreach_contacts: list, seen_provider_ids: set[str],
-) -> list[tuple[str, str]]:
-    """(outreach_id, provider_id) for open rows whose person was not on the page."""
-    out: list[tuple[str, str]] = []
+) -> list[tuple[str, str, str]]:
+    """(outreach_id, provider_id, status) for open rows whose person was not on the page."""
+    out: list[tuple[str, str, str]] = []
     for row in outreach_contacts:
         r = dict(row)
         if r.get("status") not in _REVISIT_STATUSES:
@@ -86,7 +169,7 @@ def _revisit_candidates(
         pid = contact_provider_id(r)
         if not pid or pid in seen_provider_ids:
             continue
-        out.append((str(r.get("outreach_id") or ""), pid))
+        out.append((str(r.get("outreach_id") or ""), pid, str(r.get("status") or "")))
     out.sort()
     return out
 
@@ -111,19 +194,24 @@ async def _revisit_off_page_threads(
     ordered = candidates[start:] + candidates[:start]
     batch = ordered[:REVISIT_THREADS_PER_SWEEP]
 
+    no_chat, pruned = await _load_no_chat(account_id)
+    no_chat_before = dict(no_chat)
     found: list[dict[str, Any]] = []
     asked = 0
-    for _oid, pid in batch:
+    remembered = 0
+    for _oid, pid, status in batch:
+        if (no_chat.get(pid) or [None, None])[1] == status:
+            # Unipile said "no messages" for this status within the TTL.
+            remembered += 1
+            continue
         try:
-            msgs = await _cb.call(
-                client.get_messages_by_sender(account_id, pid, limit=5),
-                label="get_messages_by_sender",
+            msgs = await _attendee_messages_for_sweep(
+                client, account_id, pid, status, no_chat,
             )
         except (CircuitBreakerOpen, asyncio.TimeoutError) as e:
             logger.info("Reply revisit stopped early (%s) after %d thread(s)", e, asked)
             break
-        except Exception as e:
-            logger.debug("Reply revisit: attendee lookup failed for %s: %s", pid[:12], e)
+        if msgs is None:
             continue
         asked += 1
         newest = None
@@ -144,13 +232,19 @@ async def _revisit_off_page_threads(
                 "timestamp": newest.get("timestamp"),
                 "_revisit": True,
             })
-    if asked:
+    # A remembered row is passed over like an asked one, so the cursor moves
+    # past it instead of parking the rotation in front of it.
+    if asked + remembered:
         await run_db(
-            save_setting, _REVISIT_CURSOR_KEY, (start + asked) % len(candidates),
+            save_setting, _REVISIT_CURSOR_KEY,
+            (start + asked + remembered) % len(candidates),
         )
+    if pruned or no_chat != no_chat_before:
+        await _save_no_chat(account_id, no_chat)
     logger.info(
-        "Reply revisit: %d of %d off-page thread(s) checked, %d with a prospect message",
-        asked, len(candidates), len(found),
+        "Reply revisit: %d of %d off-page thread(s) checked, %d skipped as known "
+        "to have no messages, %d with a prospect message",
+        asked, len(candidates), remembered, len(found),
     )
     return found
 
