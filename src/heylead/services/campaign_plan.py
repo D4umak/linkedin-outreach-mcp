@@ -341,8 +341,8 @@ def campaign_plan(
     ``tier``, ``send_approval_mode``, ``working_hours``,
     ``working_hours_source`` and ``timezone``; an unknown approval mode reads
     as require_approval, as in the api. ``seat`` carries
-    ``daily_invite_cap`` and ``weekly_cap`` (the names the api's
-    ``invite_caps_payload`` uses); None reads as a free LinkedIn account.
+    ``daily_invite_cap``, ``weekly_cap`` and ``invite_ramp`` (the names the
+    api's ``invite_caps_payload`` uses); None reads as a free LinkedIn account.
     ``now`` is for tests.
     """
     cfg = _json_dict((campaign or {}).get("config_json"))
@@ -355,6 +355,7 @@ def campaign_plan(
     job_search = _is_job_search(cfg, context)
     booking_link = offered_link(cfg)
     daily, weekly = _seat_caps(seat)
+    ramp = (seat or {}).get("invite_ramp") or None  # a new seat's first weeks (heylead-api#4315)
     status = plan_status(campaign)
     stopped = not_running_step(status)
     restart = RESTART_CONTROL.get(status, "restart").lower()
@@ -389,7 +390,7 @@ def campaign_plan(
         steps.append(PlanStep(
             "invite", "Invite",
             # The week is the pace and the day a ceiling (heylead-api#1782).
-            f"{send_when}: {pace_clause(daily, weekly, len(hours.get('days') or ALL_DAYS))}, {window}, "
+            f"{send_when}: {pace_clause(daily, weekly, len(hours.get('days') or ALL_DAYS), ramp)}, {window}, "
             f"{_minutes(c.INVITE_DELAY_MIN)} to {_minutes(c.INVITE_DELAY_MAX)} minutes apart, "
             # The quoted sentence ends with its own full stop; a "." after the
             # clause read 'assistant.".' (UI QA of #1561, F1).

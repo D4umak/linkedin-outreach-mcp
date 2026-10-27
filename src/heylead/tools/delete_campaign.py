@@ -112,7 +112,7 @@ async def run_delete_campaign(campaign_id: str = "", confirm: bool = False) -> s
             )
 
     # Mark pending outreaches as skipped before deletion
-    await run_db(skip_pending_outreaches, campaign_id)
+    await run_db(skip_pending_outreaches, campaign_id, reason="campaign_deleted")
 
     # ── Delete in correct order (foreign key constraints) ──
     def _delete_campaign_data():

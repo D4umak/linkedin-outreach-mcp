@@ -18,7 +18,7 @@ This plugin connects the hosted HeyLead server at `https://heylead.dev/mcp`. The
 
 ## What to tell the user about sending
 
-HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
+HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator: a newly connected paid account starts at 20 a day and doubles each week up to its limit), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
 
 - It runs in the cloud, so the user's laptop can be closed.
 - A campaign is a draft until the user launches it.

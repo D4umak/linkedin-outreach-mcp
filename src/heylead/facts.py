@@ -132,7 +132,9 @@ PACE_SENTENCE = (
     "HeyLead sends from your own LinkedIn account at a human pace: at most "
     f"{_c.HOSTED_DAILY_INVITE_CAP_FREE} invitations a day and "
     f"{_c.HOSTED_WEEKLY_INVITE_CAP} a week on a free LinkedIn account (more on "
-    f"Premium or Sales Navigator), {SENDING_WINDOW}, minutes apart. It backs "
+    "Premium or Sales Navigator: a newly connected paid account starts at "
+    f"{_c.HOSTED_DAILY_INVITE_CAP_FREE} a day and doubles each week up to its limit), "
+    f"{SENDING_WINDOW}, minutes apart. It backs "
     "off when LinkedIn pushes back and resumes on its own. You can pause any "
     "campaign at any time."
 )

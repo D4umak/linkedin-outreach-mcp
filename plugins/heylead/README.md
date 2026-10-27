@@ -22,7 +22,7 @@ Use only one HeyLead connection, not both. If you also added HeyLead as a connec
 
 ## How sending works
 
-HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
+HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator: a newly connected paid account starts at 20 a day and doubles each week up to its limit), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
 
 A campaign is a draft until you launch it. Opening messages and follow-ups wait for your approval until you switch to autopilot.
 

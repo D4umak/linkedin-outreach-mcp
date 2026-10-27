@@ -110,7 +110,7 @@ You'll get a LinkedIn authentication link. Open it, connect LinkedIn, then say
 
 **Sending model:** campaigns are created as drafts and only start when you
 explicitly launch them. Every send passes rate limits, working-hours checks,
-and a 1st-degree connection guard before it goes out. HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time. Launching is also what
+and a 1st-degree connection guard before it goes out. HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator: a newly connected paid account starts at 20 a day and doubles each week up to its limit), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time. Launching is also what
 commissions cloud sending — in `observe` mode nothing is commissioned and
 nothing is sent, from either machine.
 
@@ -205,7 +205,7 @@ HeyLead gives your AI 22 tools:
 
 **Engagement Warm-ups** — Automatically engages with prospect posts before sending connection requests, building familiarity.
 
-**Pace** — HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
+**Pace** — HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator: a newly connected paid account starts at 20 a day and doubles each week up to its limit), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
 
 **Outcome Tracking** — Mark deals as won/lost, track conversion rates, identify stale leads, measure engagement ROI.
 

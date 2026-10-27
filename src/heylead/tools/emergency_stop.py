@@ -71,7 +71,7 @@ async def run_emergency_stop() -> str:
     now_ts = int(time.time())
     for campaign in active_campaigns:
         cid = campaign["id"]
-        skipped = await run_db(skip_pending_outreaches, cid)
+        skipped = await run_db(skip_pending_outreaches, cid, reason="emergency_stop")
         total_skipped += skipped
         # Warm-up jobs (engage, follow, endorse, profile_view) sit in
         # scheduler_jobs, not in outreaches, and nothing on their execution path

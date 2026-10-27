@@ -113,7 +113,7 @@ async def run_archive_campaign(campaign_id: str = "", force: bool = False) -> st
             )
 
     # Archive it and skip pending outreaches
-    skipped = await run_db(skip_pending_outreaches, campaign_id)
+    skipped = await run_db(skip_pending_outreaches, campaign_id, reason="campaign_archived")
     await run_db(update_campaign, campaign_id, status="completed")
 
     log_details: dict = {

@@ -37,6 +37,12 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.476 (2026-10-27)
+- Fix: the queue skip of stop, archive and delete records its reason (api #4311)
+- Fix: "business hours off" no longer promises weekend sends (#4316)
+- Fix: add --final to claude_spend.py and update docs (#4085)
+- New: add --final flag to claude_spend.py (#4085)
+
 ## v0.10.475 (2026-10-27)
 - Fix: normalize schemas for OpenAI; enforce strictness in heylead client (#4125)
 - #4174 UI QA round 1 missed findings F1-F3

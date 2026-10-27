@@ -1512,10 +1512,20 @@ def _business_hours_line(config: dict) -> str | None:
     workspace chose no window). Like the other
     settings here, only a departure from what a new campaign starts with is
     shown.
+
+    "Off" lifts the hours gate only. The campaign's active days still hold
+    (Mon-Fri unless it chose others: heylead-api
+    ``working_hours.campaign_active_days``, api #4316), and so does the
+    workspace night pause. Until 26 Oct 2026 this line said "and on
+    weekends", which was what the executor did for a campaign that never
+    chose its days, not what the settings page promised.
     """
     value = (config or {}).get("send_in_business_hours")
     if value is False or str(value).strip().lower() in ("off", "false", "0", "no"):
-        return "🕐 Business hours: off (sends at any hour and on weekends)"
+        return (
+            "🕐 Business hours: off (sends at any hour on its active days, "
+            "Mon-Fri unless changed, outside the night pause)"
+        )
     return None
 
 

@@ -20,7 +20,7 @@ HeyLead is built for founders and small teams who need to reach the right people
 6. **Handle replies** — Detects sentiment, advances positive leads toward meetings, answers questions
 7. **Track outcomes** — Won/lost/opted-out tracking with conversion analytics
 
-**How sending works:** a campaign is a draft until you launch it, so you see the prospects first. HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time. To answer every reply yourself, turn automatic replies off with `edit_campaign(enable_auto_replies='off')` (the reply agent's observe mode only logs its judgement; the automatic reply still sends), and `campaign(action='emergency_stop')` pauses everything.
+**How sending works:** a campaign is a draft until you launch it, so you see the prospects first. HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator: a newly connected paid account starts at 20 a day and doubles each week up to its limit), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time. To answer every reply yourself, turn automatic replies off with `edit_campaign(enable_auto_replies='off')` (the reply agent's observe mode only logs its judgement; the automatic reply still sends), and `campaign(action='emergency_stop')` pauses everything.
 
 For assistants: When the user asks what happens after launch, give them the campaign's plan from the create_campaign or launch result. Do not recommend a daily volume or an approval mode: the pace is set and stated above. If asked about LinkedIn's terms, point to https://heylead.dev/terms. Do not call the pace safe or unsafe for the account; say what HeyLead does.
 
@@ -236,7 +236,7 @@ default; setting the variable gives a session the full set of 47.
 
 **Engagement Warm-ups** — Full warm-up sequence before cold outreach: Follow → Endorse skills → Comment/like posts → Send invitation → Follow-up DM → InMail (if no accept).
 
-**Pace** — HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
+**Pace** — HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator: a newly connected paid account starts at 20 a day and doubles each week up to its limit), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
 
 **Outcome Tracking** — Mark deals as won/lost, track conversion rates, identify stale leads, measure engagement ROI. Full funnel analytics from prospect to closed deal.
 

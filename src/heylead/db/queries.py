@@ -1406,14 +1406,21 @@ def update_outreach(outreach_id: str, **kwargs: Any) -> bool:
     return True
 
 
-def skip_pending_outreaches(campaign_id: str) -> int:
-    """Mark all pending outreaches for a campaign as skipped. Returns count."""
+def skip_pending_outreaches(campaign_id: str, *, reason: str) -> int:
+    """Mark all pending outreaches for a campaign as skipped, with why. Returns count.
+
+    The reason goes to ``last_attempt_error``, where every client skip keeps
+    it (api #4311: the queue skip of stop, archive and delete wrote none).
+    """
+    why = str(reason or "").strip()
+    if not why:
+        raise ValueError("an outreach skip needs a reason (api #4311)")
     db = get_db()
     now = int(time.time())
     cursor = db.execute(
-        "UPDATE outreaches SET status = 'skipped', updated_at = ? "
+        "UPDATE outreaches SET status = 'skipped', last_attempt_error = ?, updated_at = ? "
         "WHERE campaign_id = ? AND status = 'pending'",
-        (now, campaign_id),
+        (why, now, campaign_id),
     )
     count = cursor.rowcount
     db.commit()
