@@ -64,6 +64,10 @@ def main() -> None:
     if not args or args[0].startswith("--"):
         # Default: start MCP server (with optional --transport/--host/--port)
         serve_args = _parse_serve_args(args)
+        # Before the heavy imports: under the desktop app's
+        # PYTHONDONTWRITEBYTECODE every start recompiled them (api #4472).
+        from . import bytecode_cache
+        bytecode_cache.keep_bytecode()
         from .server import main as serve
         serve(**serve_args)
         return

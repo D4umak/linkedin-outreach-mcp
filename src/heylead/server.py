@@ -37,6 +37,18 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.478 (2026-10-27)
+- Fix: keep a bytecode cache when the host forbids __pycache__ (api #4472)
+- funnel report in its own DM, Denys's decision (#4458)
+- funnel P1 first stage S4, Denys's decision (#4458)
+- funnel north-star target, Denys's decision (#4458)
+- funnel agent lives on heylead-ci, Denys's decision (#4458)
+- funnel agent plan, P0 missed-run fixtures per PM decision (#4458)
+- funnel agent plan, §4.1 matches the stall table (#4458)
+- funnel agent plan, round-two fixes (#4458)
+- funnel agent plan, round-one review fixes (#4458)
+- existing-user funnel agent, a daily review that keeps every connected account bringing leads
+
 ## v0.10.477 (2026-10-27)
 - Fix: the merge queue's batch PR passes the PR gates and holds no WIP slot (api #4411)
 - the draft result's launch sentence (api #4301)
