@@ -1379,14 +1379,25 @@ async def run_create_campaign(
     # otherwise), never hand-written: the block it replaced quoted warm-up
     # gaps and follow-up days no scheduler used (Outcome api#1138).
     from ..services.campaign_plan import plan_text_for
+    from ..services.project_brief import is_real_project_brief
 
     plan_text = await plan_text_for(campaign_id)
     output_lines.extend([
         "",
         "📝 **Nothing has been sent yet.** The campaign is saved as a draft.",
-        "",
-        "Review the prospects above, then start outreach with:",
-        f"   campaign(action='launch', campaign_id='{campaign_id}')",
+    ])
+    # The person's sentence stands beside a launchable draft only (api #4301):
+    # launch refuses a draft without a real project_brief, so naming "say:
+    # launch" beside the ⚠️ warning below sent their first answer into that
+    # refusal. The warning says what to add; the sentence waits for the brief.
+    if is_real_project_brief(context.get("project_brief", "")):
+        output_lines.extend([
+            "",
+            f'Show the user this, as written: "Your campaign {final_name} is saved as a draft '
+            f'and nothing is sent. To start it, say: launch {final_name}." When they say so, run:',
+            f"   campaign(action='launch', campaign_id='{campaign_id}')",
+        ])
+    output_lines.extend([
         "",
         plan_text,
         "",

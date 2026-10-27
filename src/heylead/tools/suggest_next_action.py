@@ -264,11 +264,25 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
             # "create one first" sent a draft-only user to make a second one.
             drafts = await run_db(list_campaigns, status="draft")
             if drafts:
+                from ..services.project_brief import campaign_has_project_brief
+
                 d = drafts[0]
                 name = cut_at_word(d.get("name", "Unnamed"), 40)
+                first = f'Your draft "{name}" is saved and nothing has been sent.'
+                # The sentence the person says, beside the call the assistant
+                # runs when they say it (api #4301). Launch refuses a draft
+                # without a real brief, so that draft's next step is the brief.
+                if not campaign_has_project_brief(d):
+                    return (
+                        f"{first}\n\n"
+                        "Before launching, add what you offer and who it is for: "
+                        "edit_campaign(project_brief='…'), a sentence or two, "
+                        "80 characters or more."
+                    )
                 return (
-                    f'Your draft "{name}" is ready to launch. It is saved and nothing has been sent.\n\n'
-                    "Review who it targets and its first message, then launch it when it looks right:\n"
+                    f"{first}\n\n"
+                    f'Show the user this, as written: "Your campaign {name} is saved as a draft '
+                    f'and nothing is sent. To start it, say: launch {name}." When they say so, run:\n'
                     f"  campaign(action='launch', campaign_id='{d['id'][:8]}...')"
                 )
             return (

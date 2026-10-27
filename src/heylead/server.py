@@ -37,6 +37,11 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.477 (2026-10-27)
+- Fix: the merge queue's batch PR passes the PR gates and holds no WIP slot (api #4411)
+- the draft result's launch sentence (api #4301)
+- New: a draft's result names the sentence the person says to launch
+
 ## v0.10.476 (2026-10-27)
 - Fix: the queue skip of stop, archive and delete records its reason (api #4311)
 - Fix: "business hours off" no longer promises weekend sends (#4316)
@@ -64,6 +69,7 @@ _CHANGELOG = """\
 - proofs: the hands-off week's check, with a floor and idle hours (api #4225)
 
 ## v0.10.474 (2026-10-26)
+- Feat: a chat draft's result names the sentence the person says to launch, per draft state; no launch sentence beside a no-brief or 0-prospect draft (api #4301)
 - Fix: semgrep guard for silent empty competitor defaults (#3400)
 - Fix: repos from repos.BUILT, the queue's live line as a decorator so tick keeps its passes (api #4174)
 - wip(live): five more live-write tests and the live-sender semgrep guard draft (api #4174)

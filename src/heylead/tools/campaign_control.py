@@ -763,10 +763,14 @@ async def run_monitor_campaign(campaign_id: str = "") -> str:
             return f"Campaign not found: {campaign_id}"
         status = str(campaign.get("status") or "")
         if status == STATUS_DRAFT:
+            name = campaign["name"]
+            # The person's sentence beside the assistant's call (api #4301).
             lines.append(
-                f"Campaign '{campaign['name']}' is a draft: nothing has been sent. "
+                f"Campaign '{name}' is a draft: nothing has been sent. "
+                f'Show the user this, as written: "Your campaign {name} is saved as a draft '
+                f'and nothing is sent. To start it, say: launch {name}." '
                 f"campaign(action='launch', campaign_id='{campaign_id}') starts it "
-                "(in observe mode it only collects)."
+                "when they say so (in observe mode it only collects)."
             )
         elif status == "paused":
             lines.append(
@@ -777,8 +781,9 @@ async def run_monitor_campaign(campaign_id: str = "") -> str:
         drafts = await run_db(list_campaigns, status=STATUS_DRAFT)
         if drafts:
             lines.append(
-                f"{len(drafts)} draft campaign(s) have sent nothing yet; "
-                "campaign(action='launch', campaign_id='...') starts one."
+                f"{len(drafts)} draft campaign(s) have sent nothing yet. "
+                "To start one, the user says: launch <its name>; "
+                "campaign(action='launch', campaign_id='...') runs it when they say so."
             )
     body = await run_show_status(campaign_id)
     if lines:
