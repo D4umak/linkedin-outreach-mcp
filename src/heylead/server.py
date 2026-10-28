@@ -37,6 +37,13 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.481 (2026-10-28)
+- Fix: a bare /check-runs is the create endpoint, not a list read (#4234)
+- Fix: rate-limit throttling and subprocess unification (#4234)
+- Fix: an optional schema field keeps OpenAI strict mode, as nullable
+- Fix: bound heylead-ci poll steps, log waits, decouple 20s cron tick (#4234)
+- Fix: scrub GITHUB_* from PR gate test fixtures (api #4213)
+
 ## v0.10.480 (2026-10-28)
 - Fix: every comment and close checks the number is an issue first (api #4484, #4552)
 - the client closer acted by default and swallowed the reply (api #4564)

@@ -100,7 +100,37 @@ def to_openai_schema(schema: dict[str, Any] | None) -> dict[str, Any]:
 
     if isinstance(out.get("properties"), dict) and out["properties"]:
         out["additionalProperties"] = False
+        # Strict mode needs every property required: an optional one is required
+        # and may be null, and drop_optional_nulls takes the nulls back out.
+        # Until api #3390 one optional field turned strict off, the model left
+        # out required keys, and generate_json refused the answer.
+        required = set(out.get("required") or ())
+        for name, sub in out["properties"].items():
+            if name not in required and isinstance(sub, dict) and isinstance(sub.get("type"), str):
+                sub["type"] = [sub["type"], "null"]
+                if isinstance(sub.get("enum"), list) and None not in sub["enum"]:
+                    sub["enum"].append(None)
+        if all(isinstance(s, dict) and isinstance(s.get("type"), (str, list))
+               for s in out["properties"].values()):
+            out["required"] = list(out["properties"])
     return out
+
+
+def drop_optional_nulls(answer: Any, schema: dict[str, Any] | None) -> Any:
+    """Remove the nulls a strict answer gives for keys ``schema`` does not require."""
+    if not isinstance(schema, dict):
+        return answer
+    props = schema.get("properties")
+    if isinstance(answer, dict) and isinstance(props, dict):
+        required = set(schema.get("required") or ())
+        return {
+            k: drop_optional_nulls(v, props.get(k))
+            for k, v in answer.items()
+            if not (v is None and k in props and k not in required)
+        }
+    if isinstance(answer, list) and isinstance(schema.get("items"), dict):
+        return [drop_optional_nulls(v, schema["items"]) for v in answer]
+    return answer
 
 
 def _is_openai_strict(schema: dict[str, Any] | None) -> bool:
@@ -109,6 +139,9 @@ def _is_openai_strict(schema: dict[str, Any] | None) -> bool:
         return False
     if any(k in schema for k in _OPENAI_NON_STRICT_KEYS):
         return False
+    kinds = schema.get("type") if isinstance(schema.get("type"), list) else [schema.get("type")]
+    if "object" in kinds and not schema.get("properties"):
+        return False    # a free-form object: strict mode refuses the whole schema
     props = schema.get("properties")
     if isinstance(props, dict):
         if set(schema.get("required") or ()) != set(props):
@@ -127,12 +160,14 @@ def openai_response_format(schema: dict[str, Any] | None) -> dict[str, Any] | No
         return None
     if not isinstance(schema.get("properties"), dict) or not schema["properties"]:
         return {"type": "json_object"}
+    converted = to_openai_schema(schema)
     return {
         "type": "json_schema",
         "json_schema": {
             "name": "response",
-            "schema": to_openai_schema(schema),
-            "strict": _is_openai_strict(schema),
+            "schema": converted,
+            # Judged on what is sent: the bounds are stripped and optionals made nullable.
+            "strict": _is_openai_strict(converted),
         },
     }
 
@@ -562,4 +597,9 @@ class LLMClient:
             raise LLMError(
                 f"OpenAI returned empty text (finish_reason={finish or 'unknown'})"
             )
+        if response_format and response_format.get("type") == "json_schema":
+            try:
+                text = json.dumps(drop_optional_nulls(json.loads(text), schema))
+            except ValueError:
+                pass    # generate_json refuses it, as before
         return text
