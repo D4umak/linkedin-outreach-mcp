@@ -37,6 +37,18 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.480 (2026-10-28)
+- Fix: every comment and close checks the number is an issue first (api #4484, #4552)
+- the client closer acted by default and swallowed the reply (api #4564)
+- guard(closer): semgrep rules: no book_meeting in the client closer; unset mode never reads act (api #4564)
+- New: inspect and help say the closer defaults to observe and never sends an invite (api #4564)
+- wip(closer): client closer never books; observe default; their-words grounding; code-written lines (api #4564)
+- Fix: delivery tests answer with GitHub payloads recorded from production (api #4485)
+- Fix: every write on a GitHub number checks its kind first (api #4484)
+- Fix: an unreadable API read or /moved call is a logged line, not a crash (api #4552)
+- New: Enzo's VM filer files each product stall once and proves it moved in code (api #4552)
+- Fix: ETag sweep never deletes the answer it just kept under a clock that runs ahead (api #4431)
+
 ## v0.10.479 (2026-10-27)
 - Fix: remember no messages for invited and connected rows only (api #4374 review r1)
 - P0 posts at 07:30 and is switched by the funnel_watch_mode key (api #4482)
@@ -2334,7 +2346,9 @@ mcp = FastMCP(
         "    was skipped, call inspect() first — it never writes. A hold →\n"
         "    prospect(action='conversation') then send_message(action='reply').\n"
         "    Never paste model-authored text as the LinkedIn message; the send\n"
-        "    tools generate it. Agents default to act. Use\n"
+        "    tools generate it. Agents default to act; the hot-lead closer\n"
+        "    defaults to observe and never sends a calendar invite from this\n"
+        "    computer. Use\n"
         "    edit_campaign(enable_reply_agent='observe'),\n"
         "    edit_campaign(enable_strategist_replan_agent='observe'),\n"
         "    edit_campaign(enable_hot_lead_closer='observe'), or\n"
@@ -3510,7 +3524,9 @@ async def edit_campaign(
         enable_strategist_replan_agent: Strategist replan: "on", "off", or
             "observe". Empty keeps the current value.
         enable_hot_lead_closer: Hot-lead closer: "on", "off", or "observe".
-            Empty keeps the current value.
+            Empty keeps the current value. Unset defaults to observe. It
+            never sends a calendar invite from this computer: "on" notes a
+            call that is ready for you to book.
         enable_coordinator_agent: Coordinator digest/hold: "on", "off", or
             "observe". Empty keeps the current value.
         engagement_mode: Engagement style: "auto" (30% react / 70% comment),

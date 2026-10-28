@@ -17,7 +17,6 @@ from . import model_failure
 from ..ai.hot_lead_closer import CLOSER_AGENT_SYSTEM, build_closer_context
 from ..ai.schemas import CLOSER_AGENT_STEP
 from ..constants import (
-    HOT_LEAD_CLOSER_MAX_BOOKS_PER_DAY,
     HOT_LEAD_CLOSER_MAX_STEPS,
     HOT_LEAD_CLOSER_MAX_TOKENS,
     HOT_LEAD_CLOSER_RESULT_CHARS,
@@ -26,7 +25,6 @@ from ..constants import (
 )
 from ..db.async_bridge import run_db
 from ..db.queries import get_messages_for_outreach, get_outreach_with_contact, log_action
-from ..db.schema import get_db
 from ..flags import flag_enabled
 from . import agent_decisions
 from .agent_commons import async_commons_tools
@@ -43,7 +41,7 @@ _AFFIRM = re.compile(
     r"go ahead)\b",
     re.I,
 )
-CloserKind = Literal["continue", "hold", "not_yet", "booked"]
+CloserKind = Literal["continue", "hold", "not_yet"]
 
 # The kernel words that mean "I could not finish my step this turn".
 _KERNEL_NOT_YET = frozenset({"hold", "none"})
@@ -71,6 +69,12 @@ class HotLeadCloserOutcome:
 
 
 def hot_lead_closer_mode(config: dict[str, Any] | None) -> Literal["off", "observe", "act"]:
+    """Campaign config → off | observe | act. Unset defaults to observe.
+
+    Same order as the hosted closer: the explicit mode, then the legacy
+    flag, then observe. Until 27 Oct 2026 an unset mode read act here while
+    the API read observe (api #4564).
+    """
     cfg = config or {}
     raw_mode = cfg.get("hot_lead_closer_mode")
     if isinstance(raw_mode, str) and raw_mode.strip():
@@ -83,7 +87,7 @@ def hot_lead_closer_mode(config: dict[str, Any] | None) -> Literal["off", "obser
             return "off"
     if "enable_hot_lead_closer" in cfg and cfg.get("enable_hot_lead_closer") not in (None, ""):
         return "act" if flag_enabled(cfg, "enable_hot_lead_closer", default=False) else "off"
-    return "act"
+    return "observe"
 
 
 def booking_is_grounded(
@@ -143,12 +147,88 @@ def _iso_grounded_in_prospect(
     return bool(reply_text and _AFFIRM.search(reply_text))
 
 
-def _parse_duration(raw: str) -> int:
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+
+# Why a run readied no call, in the user's words (api #4564, designer round 1).
+WHY_ADDRESS = "their email address isn't in their own messages or their contact record"
+WHY_TIME = "they haven't named a time themselves, and HeyLead can't see your calendar"
+WHY_UNSETTLED = "they haven't settled on a call yet"
+WHY_UNFINISHED = "the meeting check didn't finish"
+COORDINATOR_HELD = "Held for operator — this campaign is paused for your review. Nothing was sent to them."
+
+
+def _prospect_lines(messages: list[dict[str, Any]] | None, reply_text: str = "") -> str:
+    """Their words only: the reply and every prospect line, never ours."""
+    lines = [str(m.get("text") or "") for m in messages or [] if (m.get("role") or "").lower() == "prospect"]
+    return "\n".join([reply_text or "", *lines])
+
+
+def address_source(email: str, prospect_text: str, known_email: str = "") -> str:
+    """Where the address came from: "contact record", "their message", or "" when not from them.
+
+    A whole address only: one that is merely part of an address they wrote
+    is not theirs. Our own lines never count (api #4564, hosted #3388 P4).
+    """
+    addr = (email or "").strip().lower()
+    if not addr or "@" not in addr:
+        return ""
+    if addr == (known_email or "").strip().lower():
+        return "contact record"
+    found = {m.group(0).lower().rstrip(".") for m in _EMAIL.finditer(prospect_text or "")}
+    return "their message" if addr in found else ""
+
+
+def start_in_prospect_line(start: str, messages: list[dict[str, Any]] | None, reply_text: str = "") -> bool:
+    """The ISO start is in the prospect's own words, not only a yes to ours (hosted G-1).
+
+    The client never reads the owner's free time, so a time only we
+    proposed was never checked against the calendar.
+    """
+    match = _ISO.search((start or "").strip())
+    if not match:
+        return False
+    token = match.group(0)
+    text = _prospect_lines(messages, reply_text)
+    return token in text or token[:16] in text
+
+
+def _when(start: str) -> str:
+    """'Tue 3 Nov, 10:00 (Europe/London)' in the user's own time zone."""
+    from ..config import get_timezone
+
     try:
-        minutes = int(str(raw).strip() or "30")
-    except (TypeError, ValueError):
-        minutes = 30
-    return max(15, min(minutes, 120))
+        at = datetime.fromisoformat(str(start or "").strip().replace("Z", "+00:00"))
+    except ValueError:
+        return str(start or "").strip()
+    zone = get_timezone()
+    try:
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo(zone)
+    except Exception:
+        tz, zone = timezone.utc, "UTC"
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=tz)
+    return at.astimezone(tz).strftime(f"%a %-d %b, %H:%M ({zone})")
+
+
+def closer_line(mode: str, ready: bool, why: str = "", start: str = "") -> str:
+    """The line a closer run leaves, written by code (api #4564).
+
+    The client never sends a calendar invite (Denys, 27 Oct 2026: "Reply
+    goes on"), so every line says none was sent and that the reply goes on.
+    """
+    if ready:
+        when = _when(start)
+        if mode == "act":
+            return (f"Ready to book: they agreed to a call on {when}. HeyLead can't put it on your "
+                    "Google Calendar from this computer, so no calendar invite was sent. Book it from "
+                    "your calendar; the reply goes on as usual.")
+        return (f"Would have marked a call on {when} as ready for you to book. No calendar invite was "
+                "sent; the conversation goes on as usual.")
+    if mode == "act":
+        return f"No calendar invite yet — {why}. The reply goes on as usual."
+    return f"Would have waited: {why}. No calendar invite was sent; the conversation goes on as usual."
 
 
 async def maybe_run_hot_lead_closer(
@@ -161,25 +241,21 @@ async def maybe_run_hot_lead_closer(
     last_message_ts: int = 0,
     last_message_id: str = "",
     call_llm_fn: Any = None,
-    book_fn: Any = None,
 ) -> HotLeadCloserOutcome:
-    """Place a meeting or hold. Failure → hold. Off → continue into the reply pipeline."""
+    """Note the call a hot lead is ready for. Never sends a calendar invite.
+
+    On this computer the closer cannot book: the local engine runs only on
+    an install with no backend sign-in, and book_meeting needs one. Until
+    27 Oct 2026 act called it anyway, book_meeting answered "Not connected
+    to the HeyLead backend", that answer was logged as booked and the reply
+    the prospect was owed never went out (api #4564). Denys chose that the
+    reply goes on, so every run that sends no invite returns ``continue``;
+    the only exception is a coordinator hold in act, which stops the reply.
+    """
     try:
         mode = hot_lead_closer_mode(campaign_config)
         if mode == "off":
             return HotLeadCloserOutcome(kind="continue", reason="agent off")
-
-        if mode == "act":
-            if await run_db(_has_closer_today, outreach_id):
-                return await _not_yet(
-                    outreach_id, "already ran today", last_message_ts, last_message_id,
-                    prospect_calendar_url,
-                )
-            if await run_db(_books_today) >= HOT_LEAD_CLOSER_MAX_BOOKS_PER_DAY:
-                return await _not_yet(
-                    outreach_id, "daily book cap reached", last_message_ts, last_message_id,
-                    prospect_calendar_url,
-                )
 
         contact = await run_db(get_outreach_with_contact, outreach_id) or {}
         campaign_id = str(contact.get("campaign_id") or "")
@@ -187,10 +263,7 @@ async def maybe_run_hot_lead_closer(
         if campaign_id and await run_db(coordinator_blocks_send, campaign_id):
             if mode == "observe":
                 return HotLeadCloserOutcome(kind="continue", reason="coordinator hold")
-            return await _not_yet(
-                outreach_id, "coordinator hold", last_message_ts, last_message_id,
-                prospect_calendar_url,
-            )
+            return HotLeadCloserOutcome(kind="not_yet", reason="coordinator hold", message=COORDINATOR_HELD)
         known_email = extract_profile_email(contact, contact.get("profile_json") or "")
         numbers = await numbers_for(campaign_id, actor="closer")
         context = build_closer_context(
@@ -236,10 +309,8 @@ async def maybe_run_hot_lead_closer(
             # stands aside and the reply lane, which reads its own failure, keeps the thread.
             await model_failure.loop_failed(actor="closer", failure=result.failure, outreach_id=outreach_id,
                                             campaign_id=campaign_id, detail=result.error)
-            if mode == "observe":
-                return HotLeadCloserOutcome(kind="continue", reason=LOOP_FAILED_REASON)
-            return await _not_yet(
-                outreach_id, "my check didn't finish", last_message_ts, last_message_id, prospect_calendar_url,
+            return HotLeadCloserOutcome(
+                kind="continue", reason=LOOP_FAILED_REASON, message=closer_line(mode, False, WHY_UNFINISHED),
             )
         await after_sibling_loop(
             agent="closer",
@@ -250,159 +321,53 @@ async def maybe_run_hot_lead_closer(
         )
 
         messages = (await run_db(get_messages_for_outreach, outreach_id) or [])[-12:]
-        thread = await run_db(_format_thread, outreach_id)
-        evidence = f"{reply_text or ''}\n{thread}"
         email = (result.extras.get("attendee_email") or known_email or "").strip()
         start = (result.extras.get("start_iso") or "").strip()
-        duration = _parse_duration(result.extras.get("duration_minutes") or "30")
         decision = result.decision if result.decision in {"book", "hold"} else "hold"
-        reason = result.reason or decision
 
         for step in result.steps:
             await run_db(
                 log_action, "hot_lead_closer_step",
                 outreach_id=outreach_id,
                 result=str(step.get("action") or ""),
-                details=step,
+                details={k: v for k, v in step.items() if k != "attendee_email"},
             )
 
-        grounded = booking_is_grounded(
-            email, start, evidence,
-            known_emails=[known_email] if known_email else [],
-            messages=messages,
-            reply_text=reply_text or "",
-        )
-        if decision == "book" and not grounded:
-            decision = "hold"
-            reason = "email or ISO start not in evidence"
-        decision_id = await run_db(
+        # Their words only: an address or a time WE wrote is not theirs
+        # (api #4564, hosted #3388 P4 and G-1; the client reads no free time).
+        source = address_source(email, _prospect_lines(messages, reply_text), known_email)
+        why = WHY_UNSETTLED
+        if decision == "book" and not source:
+            decision, why = "hold", WHY_ADDRESS
+        elif decision == "book" and not start_in_prospect_line(start, messages, reply_text):
+            decision, why = "hold", WHY_TIME
+        line = closer_line(mode, decision == "book", why, start)
+        # Recorded unapplied: nothing is sent from here (api #4564).
+        await run_db(
             agent_decisions.record_decision, actor="closer", kind=decision, campaign_id=campaign_id,
-            outreach_ids=[outreach_id], applied=decision == "book" and mode == "act", numbers=numbers,
+            outreach_ids=[outreach_id], applied=False, numbers=numbers,
         )
-
-        if decision == "book" and mode == "act":
-            booked = await _place_booking(
-                email, start, duration, contact.get("name") or "", book_fn,
-            )
-            if _booking_failed(booked):
-                await run_db(
-                    log_action, "hot_lead_closer_decision",
-                    outreach_id=outreach_id,
-                    result="hold",
-                    details={
-                        "reason": booked[:240],
-                        "email": email,
-                        "start": start,
-                        "mode": mode,
-                    },
-                )
-                return await _not_yet(
-                    outreach_id, booked[:240], last_message_ts, last_message_id,
-                    prospect_calendar_url,
-                )
-            await run_db(agent_decisions.stamp_rows, [outreach_id], decision_id)
-            await run_db(
-                log_action, "hot_lead_closer_decision",
-                outreach_id=outreach_id,
-                result="booked",
-                details={"reason": reason, "email": email, "start": start, "mode": mode},
-            )
-            return HotLeadCloserOutcome(
-                kind="booked",
-                reason=reason,
-                message=booked,
-                applied=True,
-            )
-
         await run_db(
             log_action, "hot_lead_closer_decision",
             outreach_id=outreach_id,
             result=decision,
             details={
-                "reason": reason,
+                "reason": line,
+                "notes": result.reason or "",
                 "mode": mode,
-                "email": email,
+                "address_source": source,
                 "start": start,
                 "observe": mode == "observe",
             },
         )
-        if mode == "observe":
-            return HotLeadCloserOutcome(
-                kind="continue",
-                reason=f"observe — {reason}",
-                message=f"observe — {reason}",
-            )
-        return await _not_yet(
-            outreach_id, reason, last_message_ts, last_message_id, prospect_calendar_url,
-        )
+        return HotLeadCloserOutcome(kind="continue", reason=line, message=line)
     except Exception as e:
         logger.warning("Hot-lead closer failed: %s", e)
-        if hot_lead_closer_mode(campaign_config) == "observe":
-            return HotLeadCloserOutcome(
-                kind="continue",
-                reason=LOOP_FAILED_REASON,
-                message="observe — the closer could not run",
-            )
-        try:
-            return await _not_yet(
-                outreach_id, "the closer could not run", last_message_ts, last_message_id,
-                prospect_calendar_url,
-            )
-        except Exception:
-            return HotLeadCloserOutcome(
-                kind="not_yet",
-                reason=LOOP_FAILED_REASON,
-                message="No booking yet — the closer could not run. The conversation continues.",
-            )
-
-
-async def _place_booking(
-    email: str,
-    start: str,
-    duration: int,
-    name: str,
-    book_fn: Any,
-) -> str:
-    if book_fn is None:
-        from ..tools.book_meeting import run_book_meeting
-        book_fn = run_book_meeting
-    result = book_fn(
-        attendee_email=email,
-        start=start,
-        duration_minutes=duration,
-        summary=f"Intro call with {name}" if name else "",
-    )
-    if hasattr(result, "__await__"):
-        result = await result
-    return str(result)
-
-
-def _booking_failed(result: str) -> bool:
-    text = (result or "").strip().lower()
-    return text.startswith("could not") or text.startswith("error:")
-
-
-async def _not_yet(
-    outreach_id: str,
-    reason: str,
-    message_ts: int,
-    message_id: str,
-    prospect_calendar_url: str,
-) -> HotLeadCloserOutcome:
-    """"I could not finish MY step this turn" — which is not a hold.
-
-    Until 22 Sep 2026 every one of these wrote ``hold_for_operator`` on the
-    row, and reply_to_prospect reads that field before anything else: the
-    closer needs a time to book, and the reply that would have ASKED for one
-    was the thing the hold silenced. The closer owns the booking step only, so
-    it now stands aside and the reply lane keeps the conversation. The field
-    is left to work only a person can do (reply_agent).
-    """
-    return HotLeadCloserOutcome(
-        kind="not_yet",
-        reason=reason,
-        message=f"No booking yet — {reason}. The conversation continues.",
-    )
+        return HotLeadCloserOutcome(
+            kind="continue",
+            reason=LOOP_FAILED_REASON,
+            message=closer_line(hot_lead_closer_mode(campaign_config), False, WHY_UNFINISHED),
+        )
 
 
 def _format_thread(outreach_id: str) -> str:
@@ -413,36 +378,3 @@ def _format_thread(outreach_id: str) -> str:
         text = cut_at_word(message.get("text") or "", 280)
         lines.append(f"{role}: {text}")
     return "\n".join(lines) or "(no messages)"
-
-
-def _day_start() -> int:
-    now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    return int(now.timestamp())
-
-
-def _has_closer_today(outreach_id: str) -> bool:
-    db = get_db()
-    row = db.execute(
-        """SELECT 1 FROM actions_log
-           WHERE action_type = 'hot_lead_closer_decision'
-             AND result = 'booked'
-             AND outreach_id = ?
-             AND timestamp >= ?
-           LIMIT 1""",
-        (outreach_id, _day_start()),
-    ).fetchone()
-    db.close()
-    return row is not None
-
-
-def _books_today() -> int:
-    db = get_db()
-    row = db.execute(
-        """SELECT COUNT(*) AS c FROM actions_log
-           WHERE action_type = 'hot_lead_closer_decision'
-             AND result = 'booked'
-             AND timestamp >= ?""",
-        (_day_start(),),
-    ).fetchone()
-    db.close()
-    return int(row["c"] if row else 0)

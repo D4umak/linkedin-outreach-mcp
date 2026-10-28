@@ -610,6 +610,9 @@ def _format_replans(rows: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+_CLOSER_MODE_WORDS = {"act": "on", "observe": "watching only", "off": "off"}
+
+
 def _format_closer(rows: list[dict[str, Any]]) -> list[str]:
     if not rows:
         return ["No hot-lead closer decisions today."]
@@ -618,15 +621,12 @@ def _format_closer(rows: list[dict[str, Any]]) -> list[str]:
         details = _details(row.get("details_json"))
         result = (row.get("result") or "hold").strip()
         reason = (details.get("reason") or "").strip()
-        email = (details.get("email") or "").strip()
-        start = (details.get("start") or "").strip()
-        mode = str(details.get("mode") or "")
+        mode = _CLOSER_MODE_WORDS.get(str(details.get("mode") or ""), "")
         campaign = _campaign_of(row)
         camp = f" · {campaign}" if campaign else ""
-        suffix = f" — {reason}" if reason else ""
-        lines.append(f"• **{_name_of(row)}** — {result}{suffix}")
-        grounded = " · ".join(x for x in (email, start, mode) if x)
-        lines.append(f"  outreach `{_short_id(row)}`{camp}" + (f" · {grounded}" if grounded else ""))
+        # The line code wrote, never an address (api #4564).
+        lines.append(f"• **{_name_of(row)}** — {reason or result}")
+        lines.append(f"  outreach `{_short_id(row)}`{camp}" + (f" · closer {mode}" if mode else ""))
         lines.append("")
     return lines
 

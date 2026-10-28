@@ -177,7 +177,9 @@ async def run_edit_campaign(
         enable_strategist_replan_agent: Strategist replan agent: "on", "off",
             or "observe". Empty keeps the current value.
         enable_hot_lead_closer: Hot-lead closer: "on", "off", or "observe".
-            Empty keeps the current value.
+            Empty keeps the current value. Unset defaults to observe. It
+            never sends a calendar invite from this computer: "on" notes a
+            call that is ready for you to book.
         enable_coordinator_agent: Coordinator digest/hold: "on", "off", or
             "observe". Empty keeps the current value.
         message_language: The language every message to a prospect is
@@ -282,7 +284,8 @@ async def run_edit_campaign(
             "  In-process agents (default act):\n"
             "  enable_reply_agent: on, off, or observe\n"
             "  enable_strategist_replan_agent: on, off, or observe\n"
-            "  enable_hot_lead_closer: on, off, or observe\n"
+            "  enable_hot_lead_closer: on, off, or observe (default observe;\n"
+            "    never sends a calendar invite from this computer)\n"
             "  enable_coordinator_agent: on, off, or observe\n"
             "\n"
             "  Engagement:\n"
