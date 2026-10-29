@@ -145,13 +145,44 @@ def build_record(
     }
 
 
+def _enqueue_workspace() -> str:
+    """Workspace selected when the call was queued. Not sent on the record."""
+    from . import config
+
+    try:
+        return config.get_active_org_id()
+    except Exception:
+        return ""
+
+
+def _identity_stamp() -> str:
+    """Hash of the signed-in backend, so a flush cannot send another person's queue.
+
+    The token itself is not stored on the record and is not logged.
+    """
+    import hashlib
+
+    from . import config
+
+    try:
+        url, token = config.get_backend_config()
+    except Exception:
+        return ""
+    if not url or not token:
+        return ""
+    return hashlib.sha256(f"{url}\n{token}".encode()).hexdigest()
+
+
 def enqueue(record: dict[str, Any]) -> None:
     """Buffer one record; flush at 50, or FLUSH_AFTER_SECONDS after the first."""
     global _timer
     if not _enabled():
         return
+    stamped = dict(record)
+    stamped["_enqueue_identity"] = _identity_stamp()
+    stamped["_enqueue_workspace"] = _enqueue_workspace()
     with _lock:
-        _pending.append(record)
+        _pending.append(stamped)
         size = len(_pending)
     try:
         loop = asyncio.get_running_loop()
@@ -228,10 +259,26 @@ async def flush() -> int:
             return posted
         if not _enabled():
             continue
+        current = _identity_stamp()
+        workspace = _enqueue_workspace()
+        hidden = {"_enqueue_identity", "_enqueue_workspace"}
+        owned = []
+        for row in batch:
+            if not row.get("_enqueue_identity") or row.get("_enqueue_identity") != current:
+                continue
+            if row.get("_enqueue_workspace") != workspace:
+                continue
+            owned.append({key: value for key, value in row.items() if key not in hidden})
+        if not owned:
+            logger.info(
+                "tool-call telemetry dropped: %d record(s) from another sign-in or workspace",
+                len(batch),
+            )
+            continue
         try:
-            status = await _backend().post_tool_calls(batch)
+            status = await _backend().post_tool_calls(owned)
             if status < 400:
-                posted += len(batch)
+                posted += len(owned)
             else:
                 logger.info("tool-call telemetry refused: HTTP %s, %d record(s) dropped",
                             status, len(batch))

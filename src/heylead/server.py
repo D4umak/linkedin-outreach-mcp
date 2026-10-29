@@ -37,6 +37,13 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.482 (2026-10-28)
+- Remove unused verdict set that resembles a label declaration
+- Use explicit passing results throughout development proof reporting
+- Fix: name the autonomy renderer so it is not the inbox helper
+- New: inspect effective agent autonomy (#4626)
+- #4568 UI QA missed P2s (F1, F4 qa; F5 designer)
+
 ## v0.10.481 (2026-10-28)
 - Fix: a bare /check-runs is the create endpoint, not a list read (#4234)
 - Fix: rate-limit throttling and subprocess unification (#4234)
@@ -3775,6 +3782,7 @@ async def inspect(
             "commons" — digest, beats (including product), live notes, coordinator hold, stale liveness
             "journal" — hosted agent diary (cloud workers). Self-hosted: use the other actions.
             "waiting" — who is waiting on you (Needs attention's people), then messages held for your approval (hosted)
+            "autonomy" — effective agent settings and independent sending/approval gates; grants no authority
         campaign_id: Optional campaign filter (full id or prefix).
         outreach_id: Optional outreach filter (full id or prefix).
         limit: Max rows per slice, 1-100 (default 20).

@@ -58,25 +58,28 @@ _REGIONS: dict[str, list[tuple[tuple[str, ...], str]]] = {
         (("anchorage", "alaska"), "America/Anchorage"),
         (("washington dc", "washington d.c.", "district of columbia", "dc"), "America/New_York"),
         (("phoenix", "tucson", "scottsdale", "arizona"), "America/Phoenix"),
-        (("indianapolis", "indiana"), "America/Indiana/Indianapolis"),
+        (("indianapolis", "indiana", "terre haute"), "America/Indiana/Indianapolis"),
         (("detroit", "michigan"), "America/Detroit"),
         (("boise", "idaho"), "America/Boise"),
-        (("san francisco", "bay area", "los angeles", "seattle", "portland", "las vegas",
+        (("san francisco", "san francisco bay", "los angeles", "seattle", "portland", "las vegas",
           "sacramento", "san diego", "san jose", "silicon valley", "california", "oregon",
-          "washington", "nevada"), "America/Los_Angeles"),
-        (("denver", "salt lake city", "albuquerque", "colorado", "utah", "new mexico", "montana",
-          "wyoming"), "America/Denver"),
+          "washington", "nevada", "bend"), "America/Los_Angeles"),
+        (("denver", "salt lake city", "albuquerque", "santa fe", "colorado", "utah", "new mexico",
+          "montana", "wyoming"), "America/Denver"),
+        (("knoxville", "chattanooga"), "America/New_York"),
         (("chicago", "dallas", "houston", "austin", "san antonio", "minneapolis", "nashville",
           "kansas city", "milwaukee", "st. louis", "saint louis", "new orleans", "birmingham",
-          "memphis", "oklahoma city", "omaha", "texas", "illinois", "wisconsin", "minnesota", "iowa",
-          "missouri", "louisiana", "tennessee", "arkansas", "nebraska", "oklahoma", "kansas",
-          "alabama", "mississippi", "north dakota", "south dakota"), "America/Chicago"),
+          "memphis", "oklahoma city", "omaha", "little rock", "sioux falls", "waco", "texas",
+          "illinois", "wisconsin", "minnesota", "iowa", "missouri", "louisiana", "tennessee",
+          "arkansas", "nebraska", "oklahoma", "kansas", "alabama", "mississippi", "north dakota",
+          "south dakota"), "America/Chicago"),
         (("new york", "new york city", "nyc", "boston", "miami", "atlanta", "philadelphia",
-          "charlotte", "pittsburgh", "raleigh", "baltimore", "orlando", "tampa", "cleveland",
-          "columbus", "cincinnati", "florida", "georgia", "ohio", "virginia", "west virginia",
-          "north carolina", "south carolina", "maryland", "massachusetts", "connecticut",
-          "new jersey", "pennsylvania", "delaware", "rhode island", "vermont", "new hampshire",
-          "maine", "kentucky"), "America/New_York"),
+          "charlotte", "pittsburgh", "raleigh", "durham", "chapel hill", "baltimore", "orlando",
+          "tampa", "tampa bay", "lynchburg", "gainesville", "cleveland", "columbus", "cincinnati",
+          "erie", "augusta", "charleston", "asheville", "homosassa springs", "florida", "georgia",
+          "ohio", "virginia", "west virginia", "north carolina", "south carolina", "maryland",
+          "massachusetts", "connecticut", "new jersey", "pennsylvania", "delaware", "rhode island",
+          "vermont", "new hampshire", "maine", "kentucky"), "America/New_York"),
     ],
     "CA": [
         (("vancouver", "victoria", "british columbia"), "America/Vancouver"),
@@ -118,10 +121,11 @@ _REGIONS: dict[str, list[tuple[tuple[str, ...], str]]] = {
         (("kaliningrad",), "Europe/Kaliningrad"),
     ],
     "ID": [
-        (("bali", "sulawesi", "makassar", "denpasar"), "Asia/Makassar"),
+        (("bali", "sulawesi", "makassar", "denpasar", "west nusa tenggara", "lombok"),
+         "Asia/Makassar"),
         (("papua", "jayapura", "maluku"), "Asia/Jayapura"),
-        (("jakarta", "java", "bandung", "surabaya", "yogyakarta", "sumatra", "medan"),
-         "Asia/Jakarta"),
+        (("jakarta", "java", "bandung", "surabaya", "yogyakarta", "sumatra", "medan", "banten",
+          "tangerang"), "Asia/Jakarta"),
     ],
     "ES": [(("canary islands", "tenerife", "las palmas", "gran canaria"), "Atlantic/Canary")],
     "PT": [(("azores",), "Atlantic/Azores")],
@@ -150,6 +154,25 @@ for _country, _rows in _REGIONS.items():
             ):
                 _REGION_COUNTRY.setdefault(_name, _country)
 
+_US_STATE_CODES: dict[str, str] = {
+    "al": "alabama", "ak": "alaska", "az": "arizona", "ar": "arkansas", "ca": "california",
+    "co": "colorado", "ct": "connecticut", "de": "delaware", "fl": "florida", "ga": "georgia",
+    "hi": "hawaii", "id": "idaho", "il": "illinois", "in": "indiana", "ia": "iowa",
+    "ks": "kansas", "ky": "kentucky", "la": "louisiana", "me": "maine", "md": "maryland",
+    "ma": "massachusetts", "mi": "michigan", "mn": "minnesota", "ms": "mississippi",
+    "mo": "missouri", "mt": "montana", "ne": "nebraska", "nv": "nevada", "nh": "new hampshire",
+    "nj": "new jersey", "nm": "new mexico", "ny": "new york", "nc": "north carolina",
+    "nd": "north dakota", "oh": "ohio", "ok": "oklahoma", "or": "oregon", "pa": "pennsylvania",
+    "ri": "rhode island", "sc": "south carolina", "sd": "south dakota", "tn": "tennessee",
+    "tx": "texas", "ut": "utah", "vt": "vermont", "va": "virginia", "wa": "washington",
+    "wv": "west virginia", "wi": "wisconsin", "wy": "wyoming", "dc": "district of columbia",
+}
+_CA_PROVINCE_CODES: dict[str, str] = {
+    "ab": "alberta", "bc": "british columbia", "mb": "manitoba", "nb": "new brunswick",
+    "nl": "newfoundland and labrador", "ns": "nova scotia", "on": "ontario",
+    "pe": "prince edward island", "qc": "quebec", "sk": "saskatchewan",
+}
+
 # Names LinkedIn and people write that the IANA table spells otherwise.
 _COUNTRY_ALIASES: dict[str, str] = {
     "uk": "GB", "u.k.": "GB", "united kingdom": "GB", "great britain": "GB", "britain": "GB",
@@ -167,45 +190,76 @@ _COUNTRY_ALIASES: dict[str, str] = {
     "people's republic of china": "CN", "taiwan, province of china": "TW", "kyrgyz republic": "KG",
     "lao pdr": "LA", "brunei darussalam": "BN", "saint kitts and nevis": "KN",
     "saint vincent and the grenadines": "VC", "saint lucia": "LC", "sao tome and principe": "ST",
-    "the bahamas": "BS", "the gambia": "GM", "micronesia": "FM",
+    "the bahamas": "BS", "the gambia": "GM", "micronesia": "FM", "kosovo": "RS",
 }
+
+_UK_METRO_TOWNS: tuple[str, ...] = (
+    "cambridge", "oxford", "reading", "portsmouth", "chester", "brighton", "preston", "leicester",
+    "belfast", "salisbury", "newport", "aberdeen",
+)
 
 # Cities read when no part names a country, whole words only. A city here is
 # unambiguous enough to stand alone; "Birmingham" and "Cambridge" are not
 # (England or Alabama, England or Massachusetts) and wait for a country.
 _CITIES: list[tuple[tuple[str, ...], str]] = [
-    (("london", "manchester", "edinburgh", "glasgow", "leeds", "liverpool", "bristol"),
-     "Europe/London"),
+    (("london", "manchester", "edinburgh", "glasgow", "leeds", "liverpool", "bristol",
+      "bournemouth", "cardiff", "sheffield", "colchester", "tyneside", "coventry", "plymouth",
+      "derby", "nottingham", "ipswich", "southampton", "stoke-on-trent", "cheltenham", "hove",
+      "harrow", "sidcup", "brentwood", "welwyn garden city", "stansted mountfitchet", "harlow",
+      "bradford", "slough", "southwark", "tonbridge", "lichfield", "claygate", "kingsley",
+      "buckhurst hill"), "Europe/London"),
     (("dublin",), "Europe/Dublin"),
-    (("zurich", "zuerich", "geneva", "basel"), "Europe/Zurich"),
-    (("berlin", "munich", "frankfurt", "hamburg"), "Europe/Berlin"),
-    (("paris",), "Europe/Paris"), (("amsterdam",), "Europe/Amsterdam"),
-    (("brussels",), "Europe/Brussels"), (("madrid", "barcelona"), "Europe/Madrid"),
+    (("zurich", "zuerich", "geneva", "basel", "bern"), "Europe/Zurich"),
+    (("berlin", "munich", "frankfurt", "hamburg", "stuttgart", "rhein-neckar", "kiel", "ruhr"),
+     "Europe/Berlin"),
+    (("paris", "rennes", "bordeaux", "lille", "strasbourg", "amiens", "angers", "lyon"),
+     "Europe/Paris"),
+    (("amsterdam",), "Europe/Amsterdam"),
+    (("brussels", "ghent"), "Europe/Brussels"),
+    (("madrid", "barcelona", "valladolid", "pamplona", "algeciras", "torrevieja", "malaga"),
+     "Europe/Madrid"),
     (("milan", "rome"), "Europe/Rome"), (("vienna",), "Europe/Vienna"),
-    (("stockholm",), "Europe/Stockholm"), (("copenhagen",), "Europe/Copenhagen"),
+    (("stockholm", "gothenburg", "uppsala", "malmo"), "Europe/Stockholm"),
+    (("copenhagen",), "Europe/Copenhagen"),
     (("oslo",), "Europe/Oslo"), (("helsinki",), "Europe/Helsinki"),
-    (("lisbon",), "Europe/Lisbon"), (("warsaw",), "Europe/Warsaw"),
-    (("prague",), "Europe/Prague"), (("budapest",), "Europe/Budapest"),
-    (("athens",), "Europe/Athens"), (("kyiv", "kiev"), "Europe/Kyiv"),
+    (("tallinn",), "Europe/Tallinn"), (("lisbon", "porto", "braga"), "Europe/Lisbon"),
+    (("warsaw", "wroclaw", "poznan", "cracow", "krakow"), "Europe/Warsaw"),
+    (("prague",), "Europe/Prague"), (("bratislava",), "Europe/Bratislava"),
+    (("budapest",), "Europe/Budapest"), (("ljubljana",), "Europe/Ljubljana"),
+    (("athens",), "Europe/Athens"), (("bucharest", "timisoara"), "Europe/Bucharest"),
+    (("kyiv", "kiev", "dnipro"), "Europe/Kyiv"),
     (("istanbul",), "Europe/Istanbul"), (("tel aviv",), "Asia/Jerusalem"),
     (("dubai", "abu dhabi"), "Asia/Dubai"), (("riyadh",), "Asia/Riyadh"),
     (("lagos",), "Africa/Lagos"), (("nairobi",), "Africa/Nairobi"),
     (("cape town", "johannesburg"), "Africa/Johannesburg"), (("cairo",), "Africa/Cairo"),
     (("karachi", "lahore"), "Asia/Karachi"),
-    (("mumbai", "delhi", "new delhi", "bangalore", "bengaluru", "hyderabad", "chennai", "pune",
-      "kolkata"), "Asia/Kolkata"),
+    (("ahmedabad", "jaipur", "mumbai", "delhi", "new delhi", "bangalore", "bengaluru", "hyderabad",
+      "chennai", "pune", "kolkata"), "Asia/Kolkata"),
     (("singapore",), "Asia/Singapore"), (("hong kong",), "Asia/Hong_Kong"),
+    (("kuala lumpur",), "Asia/Kuala_Lumpur"),
     (("beijing", "shanghai", "shenzhen", "guangzhou"), "Asia/Shanghai"),
     (("tokyo", "osaka"), "Asia/Tokyo"), (("seoul",), "Asia/Seoul"),
+    (("manila", "davao"), "Asia/Manila"),
     (("sydney",), "Australia/Sydney"), (("melbourne",), "Australia/Melbourne"),
+    (("brisbane",), "Australia/Brisbane"),
     (("auckland",), "Pacific/Auckland"), (("sao paulo",), "America/Sao_Paulo"),
-    (("mexico city",), "America/Mexico_City"), (("toronto",), "America/Toronto"),
-    (("vancouver",), "America/Vancouver"),
-    (("new york", "new york city", "nyc"), "America/New_York"),
-    (("san francisco", "bay area", "silicon valley", "los angeles"), "America/Los_Angeles"),
-    (("chicago", "dallas", "houston", "austin"), "America/Chicago"),
+    (("santiago",), "America/Santiago"),
+    (("mexico city",), "America/Mexico_City"),
+    (("toronto", "montreal", "ottawa"), "America/Toronto"),
+    (("vancouver",), "America/Vancouver"), (("calgary",), "America/Edmonton"),
+    (("new york", "new york city", "nyc", "charlotte", "pittsburgh", "raleigh", "durham",
+      "chapel hill", "orlando", "tampa", "tampa bay", "cincinnati", "knoxville", "chattanooga",
+      "lynchburg", "gainesville", "erie", "augusta", "charleston", "asheville",
+      "homosassa springs"), "America/New_York"),
+    (("san francisco", "san francisco bay", "silicon valley", "los angeles", "sacramento",
+      "bend"), "America/Los_Angeles"),
+    (("chicago", "dallas", "houston", "austin", "minneapolis", "milwaukee", "little rock",
+      "sioux falls", "waco"), "America/Chicago"),
     (("boston", "atlanta", "miami", "washington dc", "philadelphia"), "America/New_York"),
-    (("seattle",), "America/Los_Angeles"), (("denver",), "America/Denver"),
+    (("seattle",), "America/Los_Angeles"), (("denver", "albuquerque", "santa fe"), "America/Denver"),
+    (("phoenix", "tucson", "scottsdale"), "America/Phoenix"),
+    (("indianapolis", "terre haute"), "America/Indiana/Indianapolis"),
+    (("detroit",), "America/Detroit"), (("boise",), "America/Boise"),
 ]
 
 _DECOR = re.compile(r"\b(greater|metropolitan|metro|area|region|city of)\b")
@@ -286,7 +340,8 @@ def location_zone(location: str | None) -> str | None:
     names, _ = _tables()
     parts = [_DECOR.sub(" ", p).strip() for p in text.split(",")]
     parts = [re.sub(r"\s+", " ", p) for p in parts if p.strip()]
-    for part in reversed(parts):
+    for i in range(len(parts) - 1, -1, -1):
+        part = parts[i]
         if part == "georgia":
             code = "US" if _names_a_us_place(text.replace("georgia", " ")) else "GE"
             return _country_zone(code, text)
@@ -294,7 +349,14 @@ def location_zone(location: str | None) -> str | None:
             return _country_zone(names[part], text)
         if part in _REGION_COUNTRY:
             return _country_zone(_REGION_COUNTRY[part], text)
+        if i > 0:
+            if part in _US_STATE_CODES:
+                return _country_zone("US", f"{text} {_US_STATE_CODES[part]}")
+            if part in _CA_PROVINCE_CODES:
+                return _country_zone("CA", f"{text} {_CA_PROVINCE_CODES[part]}")
     flat = " ".join(parts)
+    if _DECOR.findall(text) and any(_has(flat, n) for n in _UK_METRO_TOWNS):
+        return "Europe/London"
     for city_names, zone in _CITIES:
         if any(_has(flat, n) for n in city_names):
             return zone

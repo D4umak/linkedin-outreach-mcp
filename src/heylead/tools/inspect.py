@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 VALID_ACTIONS = (
     "agents", "holds", "replans", "closer", "skips", "jobs", "commons", "journal", "review",
-    "waiting",
+    "waiting", "autonomy",
 )
 
 _PLAN_SKIP_REASONS = frozenset({
@@ -254,6 +254,8 @@ async def run_inspect(
     except (TypeError, ValueError):
         cap = _DEFAULT_LIMIT
     cap = max(1, min(cap, _MAX_LIMIT))
+    if action == "autonomy":
+        return await _autonomy(campaign_id.strip(), outreach_id.strip(), cap)
     try:
         return await run_db(
             _render, action, (campaign_id or "").strip(),
@@ -262,6 +264,30 @@ async def run_inspect(
     except Exception as exc:
         logger.warning("inspect failed: %s", exc)
         return f"Inspect failed: {exc}"
+
+
+async def _autonomy(campaign_id: str, outreach_id: str, limit: int) -> str:
+    """Cloud-owned settings must never be guessed from a local cache."""
+    from ..config import is_backend_mode
+    from ..services.cloud_sync import get_hosted_json
+
+    if is_backend_mode():
+        params: dict[str, Any] = {"action": "autonomy", "limit": limit}
+        if campaign_id:
+            params["campaign_id"] = campaign_id
+        if outreach_id:
+            params["outreach_id"] = outreach_id
+        try:
+            data = await get_hosted_json("/api/v1/scheduler/inspect", params=params)
+            text = data.get("text")
+            if isinstance(text, str) and text.strip():
+                return text
+        except Exception:
+            pass
+        return ("Agent authority unavailable. Could not read the hosted workspace's settings. "
+                "No local settings were substituted. No settings changed.")
+    from ..services.autonomy_inventory import inspect_local
+    return await run_db(inspect_local, campaign_id, outreach_id, limit)
 
 
 def _utc_day_start() -> int:
