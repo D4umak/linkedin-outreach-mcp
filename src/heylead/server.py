@@ -2,10 +2,13 @@
 
 Registers all MCP tools and runs via stdio or streamable-http transport.
 
-Usage (Claude Code):
-    claude mcp add heylead -- uvx heylead
+Install (local stdio):
+    uv tool install heylead
 
-Usage (Cursor): add an MCP server with command `uvx heylead`.
+Usage (Claude Code):
+    claude mcp add heylead -- heylead
+
+Usage (Cursor): add an MCP server with command `heylead`.
 
 Remote alternative (hosted endpoint, nothing runs locally):
     claude mcp add --transport http heylead https://heylead.dev/mcp
@@ -43,6 +46,14 @@ def _err_text(exc: BaseException) -> str:
 
 _CHANGELOG = """\
 # HeyLead Changelog
+
+## v0.10.484 (2026-10-30)
+- note hosted HTTP MCP command in nurture_email.py (#4496)
+- Fix: recommend uv tool install heylead and remove dead help branch (#4496)
+- Fix: shim claims v2 at import and restore test clocks (#4489)
+- Fix: fix merge queue shim and mock state (#4489)
+- Fix: orchestrator and status support for claims bypass (#4489)
+- New: support claims bypass notifications and status (api #4489)
 
 ## v0.10.483 (2026-10-30)
 - Fix: address review changes for MCP sigint hang (#4473)
@@ -2627,7 +2638,7 @@ def capabilities() -> str:
         ],
         "resources": ["heylead://capabilities", "heylead://changelog"],
         "transport": ["stdio", "sse", "streamable-http"],
-        "install": "uvx heylead",
+        "install": "uv tool install heylead",
         "pypi": "https://pypi.org/project/heylead/",
         "repository": "https://github.com/D4umak/linkedin-outreach-mcp",
     }, indent=2)

@@ -39,26 +39,30 @@ waiting messages, answering replies, a weekly review, pausing, and adding a
 list of people. Its source is in
 [plugins/heylead](https://github.com/D4umak/linkedin-outreach-mcp/tree/main/plugins/heylead).
 
-**Or run the client locally over stdio.** You need [uv](https://docs.astral.sh/uv/):
+**Or run the client locally over stdio.** Install the CLI once with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install heylead
+```
 
 **Claude Code:**
 ```bash
-claude mcp add heylead -- uvx heylead
+claude mcp add heylead -- heylead
 ```
 
-**Cursor:** Settings > MCP > "Add new MCP server" > Name: `heylead`, Command: `uvx heylead`
+**Cursor:** Settings > MCP > "Add new MCP server" > Name: `heylead`, Command: `heylead`
 
 **Any MCP client:**
 ```json
 {
   "heylead": {
-    "command": "uvx",
-    "args": ["heylead"]
+    "command": "heylead",
+    "args": []
   }
 }
 ```
 
-Update with `uvx --refresh heylead`.
+Update with `uv tool upgrade heylead`.
 
 ### Step 2: Set up your account
 
@@ -278,8 +282,8 @@ pip install heylead[all]    # Both
 
 ## Troubleshooting
 
-**"uvx: command not found"**
-Install `uv` first: `curl -LsSf https://astral.sh/uv/install.sh | sh` (or `brew install uv` on Mac)
+**"heylead: command not found" or "uv: command not found"**
+Install `uv` first (`curl -LsSf https://astral.sh/uv/install.sh | sh` or `brew install uv` on Mac), then run `uv tool install heylead` and `uv tool update-shell` (or pass the full path from `command -v heylead`).
 
 **"MCP server not connecting"**
 Restart your editor after adding the MCP server. In Cursor, check Settings > MCP — the server should show a green dot.
@@ -310,7 +314,7 @@ twine check dist/*       # optional: validate
 twine upload dist/*      # prompts for PyPI username + password (use __token__ and your API token)
 ```
 
-After publishing, anyone can add it with `claude mcp add heylead -- uvx heylead` (Cursor: command `uvx heylead`).
+After publishing, anyone can install it with `uv tool install heylead` and add it with `claude mcp add heylead -- heylead` (Cursor: command `heylead`).
 
 ---
 
@@ -322,8 +326,8 @@ HeyLead is designed as an MCP-native tool — built for AI agents, not humans cl
 ```json
 {
   "heylead": {
-    "command": "uvx",
-    "args": ["heylead"]
+    "command": "heylead",
+    "args": []
   }
 }
 ```

@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest release on PyPI is supported. Update with `uvx --refresh heylead`.
+Only the latest release on PyPI is supported. Update with `uv tool upgrade heylead`.
 
 ## Reporting a vulnerability
 

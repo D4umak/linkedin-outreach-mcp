@@ -144,12 +144,14 @@ Brand and content, signals, bulk import, CRM sync and the shared network pool ar
 
 ## Installation
 
+Install the CLI once with `uv tool install heylead`.
+
 **Claude Code:**
 ```bash
-claude mcp add heylead -- uvx heylead
+claude mcp add heylead -- heylead
 ```
 
-**Cursor:** Settings → MCP → Add new MCP server → Name: `heylead`, Command: `uvx heylead`
+**Cursor:** Settings → MCP → Add new MCP server → Name: `heylead`, Command: `heylead`
 
 **OpenClaw** (`openclaw.json`):
 ```json
@@ -158,8 +160,8 @@ claude mcp add heylead -- uvx heylead
     "servers": [
       {
         "name": "heylead",
-        "command": "uvx",
-        "args": ["heylead"]
+        "command": "heylead",
+        "args": []
       }
     ]
   }
@@ -170,13 +172,13 @@ claude mcp add heylead -- uvx heylead
 ```json
 {
   "heylead": {
-    "command": "uvx",
-    "args": ["heylead"]
+    "command": "heylead",
+    "args": []
   }
 }
 ```
 
 ## Transport
 
-- **stdio** — `uvx heylead`; update with `uvx --refresh heylead`
+- **stdio** — `heylead` (installed via `uv tool install heylead`); update with `uv tool upgrade heylead`
 - **streamable-http** — `heylead --transport streamable-http` for self-hosted HTTP serving

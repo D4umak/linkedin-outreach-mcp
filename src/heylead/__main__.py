@@ -35,7 +35,9 @@ def _parse_serve_args(args: list[str]) -> dict:
     return {"transport": transport, "host": host, "port": port}
 
 
-USAGE = """usage: heylead [--transport stdio|sse|streamable-http] [--host H] [--port P]
+USAGE = """HeyLead — AI outreach agent (MCP server)
+
+usage: heylead [--transport stdio|sse|streamable-http] [--host H] [--port P]
        heylead init | version | reset
        heylead config telemetry on|off|status
        heylead config get <setting> | config set <setting> <value>
@@ -44,7 +46,14 @@ USAGE = """usage: heylead [--transport stdio|sse|streamable-http] [--host H] [--
        heylead daemon [--install [--load] | --uninstall | --status]
 
 With no command, heylead starts the MCP server. `heylead daemon` with no
-flag runs the scheduler daemon in the foreground (launchd uses this)."""
+flag runs the scheduler daemon in the foreground (launchd uses this).
+
+Install (local stdio):
+  uv tool install heylead
+  claude mcp add heylead -- heylead
+
+Remote alternative (hosted endpoint, nothing runs locally):
+  claude mcp add --transport http heylead https://heylead.dev/mcp"""
 
 _DAEMON_FLAGS = {"--install", "--load", "--uninstall", "--status"}
 
@@ -144,7 +153,7 @@ def main() -> None:
         print("   No API keys needed!")
         print()
         print("Not using Cursor yet? Install HeyLead with one click:")
-        print("   cursor://anysphere.cursor-deeplink/mcp/install?name=heylead&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJoZXlsZWFkIl19")
+        print("   cursor://anysphere.cursor-deeplink/mcp/install?name=heylead&config=eyJjb21tYW5kIjoiaGV5bGVhZCIsImFyZ3MiOltdfQ==")
 
     elif cmd == "reset":
         confirm = input("⚠️  This will delete ALL HeyLead data. Continue? (yes/no): ")
@@ -224,32 +233,6 @@ def main() -> None:
             print(f"Database restored from {selected.path.name}")
         else:
             print("Cancelled.")
-
-    elif cmd == "help" or cmd == "--help" or cmd == "-h":
-        print("HeyLead — MCP-native autonomous LinkedIn SDR")
-        print()
-        print("Usage:")
-        print("  heylead                                  Start MCP server (stdio)")
-        print("  heylead --transport streamable-http       Start HTTP server")
-        print("  heylead --transport sse --port 3000       Start SSE server on port 3000")
-        print("  heylead init                              Initialize HeyLead")
-        print("  heylead version                           Show version")
-        print("  heylead backup                             Create a database backup")
-        print("  heylead restore                            Restore from a backup")
-        print("  heylead reset                             Delete all data")
-        print()
-        print("Transport options:")
-        print("  --transport <type>   stdio (default), sse, or streamable-http")
-        print("  --host <addr>        Bind address for HTTP (default: 0.0.0.0)")
-        print("  --port <num>         Port for HTTP (default: 8080)")
-        print()
-        print("Install:")
-        print("  Claude Code: claude mcp add heylead -- uvx heylead")
-        print("  Cursor:      Settings → MCP → Add → Name: heylead, Command: uvx heylead")
-        print()
-        print("Remote alternative (hosted endpoint, nothing runs locally):")
-        print("  Claude Code: claude mcp add --transport http heylead https://heylead.dev/mcp")
-        print("  Cursor:      Settings → MCP → Add → Type: URL, Name: heylead, URL: https://heylead.dev/mcp")
 
     else:
         print(f"Unknown command: {cmd}")

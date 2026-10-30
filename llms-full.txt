@@ -28,18 +28,20 @@ HeyLead reads the user's LinkedIn posts only to learn their voice. It never publ
 
 ## Installation
 
+Install the CLI once with `uv tool install heylead`.
+
 ### Cursor (one-click)
 
-[Install in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=heylead&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJoZXlsZWFkIl19) — click the link and Cursor installs it automatically.
+[Install in Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=heylead&config=eyJjb21tYW5kIjoiaGV5bGVhZCIsImFyZ3MiOltdfQ==) — click the link and Cursor installs it automatically.
 
 ### Cursor (manual)
 
-Settings > MCP > "Add new MCP server" > Name: `heylead`, Command: `uvx heylead`
+Settings > MCP > "Add new MCP server" > Name: `heylead`, Command: `heylead`
 
 ### Claude Code
 
 ```
-claude mcp add heylead -- uvx heylead
+claude mcp add heylead -- heylead
 ```
 
 ### Any MCP client (manual)
@@ -47,8 +49,8 @@ claude mcp add heylead -- uvx heylead
 ```json
 {
   "heylead": {
-    "command": "uvx",
-    "args": ["heylead"]
+    "command": "heylead",
+    "args": []
   }
 }
 ```
@@ -156,7 +158,7 @@ the local repository agent are registered only when the client is started with
 default; setting the variable gives a session the full set of 47.
 
 ```json
-{ "mcpServers": { "heylead": { "command": "uvx", "args": ["heylead"],
+{ "mcpServers": { "heylead": { "command": "heylead", "args": [],
   "env": { "HEYLEAD_TOOLS": "all" } } } }
 ```
 
@@ -277,8 +279,8 @@ Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 e
 ```json
 {
   "heylead": {
-    "command": "uvx",
-    "args": ["heylead"]
+    "command": "heylead",
+    "args": []
   }
 }
 ```

@@ -6,7 +6,7 @@ HeyLead gives AI agents 22 tools, from finding the right people to answering the
 
 Brand and content, signals, bulk import, CRM sync and the shared network pool are registered only when the client is started with `HEYLEAD_TOOLS=all`, which brings the full set of 47.
 
-Install: Claude Code `claude mcp add heylead -- uvx heylead` · Cursor: add an MCP server with command `uvx heylead`
+Install: run `uv tool install heylead`, then Claude Code `claude mcp add heylead -- heylead` · Cursor: add an MCP server with command `heylead`
 
 Work from your AI chat or from the web dashboard at https://heylead.dev/dashboard — both run the same campaigns.
 
