@@ -190,20 +190,31 @@ def get_voice_format_for_outreach(
 
 
 def _significant_winner(
-    va: dict[str, Any], vb: dict[str, Any],
+    va: dict[str, Any], vb: dict[str, Any], *, test_type: str = "message", min_n: int = 15
 ) -> tuple[str, str, dict[str, Any]] | None:
     """The arm that won, why, and the test that says so; None to keep running.
 
     Reply rate (replied of connected) first, acceptance (connected of invited)
-    second. Either needs a two-proportion z-test at p < 0.05 with both arms at
-    the sample size the observed effect needs (services/ab_stats.py). Until
-    24 Sep 2026 a fixed 2-point reply gap crowned a winner: 3 replies in 10
-    against 5 in 10 completed the test for B at p = 0.36.
+    second. Each a two-proportion z-test at p < 0.05 with both arms at the
+    sample size the observed effect needs (services/ab_stats.py).
     """
-    metrics = (
-        ("reply rate", "replied", "connected"),
-        ("acceptance", "connected", "invited"),
-    )
+    floor = max(15, int(min_n or 15))
+    if va.get("invited", 0) < floor or vb.get("invited", 0) < floor:
+        return None
+
+    metrics = []
+    if test_type in ("message", "opener"):
+        # 1. qualified replies (mature cohort)
+        if va.get("qualification_ready") or vb.get("qualification_ready"):
+            metrics.append(("qualified replies", "qualified_replied", "invited"))
+
+    # 2. reply rate (exposed or connected)
+    metrics.append(("reply rate", "replied", "exposed" if va.get("exposed") or vb.get("exposed") else "connected"))
+
+    if test_type in ("message", "opener"):
+        # 3. acceptance (total invited)
+        metrics.append(("acceptance", "connected", "invited"))
+
     for label, success, trials in metrics:
         a_s, a_n = int(va.get(success, 0) or 0), int(va.get(trials, 0) or 0)
         b_s, b_n = int(vb.get(success, 0) or 0), int(vb.get(trials, 0) or 0)
@@ -244,7 +255,7 @@ def evaluate_ab_tests() -> list[str]:
         if a_n < _MIN_PER_VARIANT or b_n < _MIN_PER_VARIANT:
             continue  # Not enough data
 
-        decided = _significant_winner(va, vb)
+        decided = _significant_winner(va, vb, test_type=t.get("test_type") or "message")
         if decided is None:
             continue  # Not significant yet, or an arm is below its minimum n
         winner, reason, test = decided

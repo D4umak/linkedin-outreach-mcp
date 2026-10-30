@@ -47,6 +47,15 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.485 (2026-10-30)
+- Fix: use skipped_by_label in pick.py and restore tests
+- Fix: allow case issues with devflow label in picker (#4640)
+- Outcome #4641: A/B decision parity and opener acceptance evaluation
+- Outcome #4539: Address reviewer findings for review lessons
+- remove #4539 lesson from live file
+- move #4539 lesson to archive
+- add designer miss for held reply note (#4539)
+
 ## v0.10.484 (2026-10-30)
 - note hosted HTTP MCP command in nurture_email.py (#4496)
 - Fix: recommend uv tool install heylead and remove dead help branch (#4496)
