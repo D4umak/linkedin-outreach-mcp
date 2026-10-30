@@ -69,7 +69,10 @@ def main() -> None:
         from . import bytecode_cache
         bytecode_cache.keep_bytecode()
         from .server import main as serve
-        serve(**serve_args)
+        try:
+            serve(**serve_args)
+        except KeyboardInterrupt:
+            sys.exit(0)
         return
 
     cmd = args[0].lower()

@@ -91,3 +91,11 @@ async def run_db(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     # what the task it serves knows: the draft save_message stamps
     # (ai/copywriter/provenance.py) is one such thing.
     return await loop.run_in_executor(_get_executor(), contextvars.copy_context().run, _call)
+
+
+async def drain_db() -> None:
+    """Wait for any in-flight callable on the single-worker DB executor to finish."""
+    if _db_executor is None:
+        return
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(_db_executor, lambda: None)

@@ -458,6 +458,7 @@ class SchedulerEngine:
         # Read off the lock before releasing it, so we come back as the same
         # kind we were leading as rather than mislabelling a daemon as mcp.
         self._leader_kind: str = "mcp"
+        self._startup_tasks: list[asyncio.Task[Any]] = []
 
     def _timer(self, name: str) -> float:
         """Get a timer value (last execution timestamp). Returns 0 if never run."""
@@ -578,14 +579,19 @@ class SchedulerEngine:
         # Non-blocking: verify cloud fallback is active, and move existing
         # hosted campaigns onto the cloud if they still sit on this machine.
         # Held by heylead.background: a bare create_task can be collected mid-run.
-        background.spawn(self._check_cloud_on_startup(), name="engine.check_cloud")
-        background.spawn(self._ensure_cloud_default_on_startup(), name="engine.cloud_default")
-        background.spawn(self._cancel_cloud_owned_jobs_on_startup(), name="engine.cancel_cloud_owned")
-        # Seat / Premium can change while the laptop is closed — probe on start
-        # even if the persisted daily timer would have skipped this tick.
-        background.spawn(self._schedule_sn_redetect(), name="engine.sn_redetect")
+        self._startup_tasks = [
+            t for t in (
+                background.spawn(self._check_cloud_on_startup(), name="engine.check_cloud"),
+                background.spawn(self._ensure_cloud_default_on_startup(), name="engine.cloud_default"),
+                background.spawn(self._cancel_cloud_owned_jobs_on_startup(), name="engine.cancel_cloud_owned"),
+                # Seat / Premium can change while the laptop is closed — probe on start
+                # even if the persisted daily timer would have skipped this tick.
+                background.spawn(self._schedule_sn_redetect(), name="engine.sn_redetect"),
+            )
+            if t is not None
+        ]
 
-    async def stop(self) -> None:
+    async def stop(self, *, verify_cloud_fallback: bool = True) -> None:
         """Gracefully stop the scheduler."""
         uptime = time.time() - self._started_at if self._started_at else 0
         logger.warning(
@@ -593,6 +599,15 @@ class SchedulerEngine:
             uptime, self._tick_count,
         )
         self._running = False
+
+        # Cancel any unfinished startup tasks
+        if self._startup_tasks:
+            for t in self._startup_tasks:
+                if not t.done():
+                    t.cancel()
+            await asyncio.gather(*self._startup_tasks, return_exceptions=True)
+            self._startup_tasks = []
+
         if self._task and not self._task.done():
             self._task.cancel()
             try:
@@ -607,7 +622,8 @@ class SchedulerEngine:
             logger.debug("Timer persistence on stop failed: %s", e)
 
         # Check if cloud scheduler is picking up the slack
-        await self._verify_cloud_fallback(uptime)
+        if verify_cloud_fallback:
+            await self._verify_cloud_fallback(uptime)
 
         logger.warning("Scheduler engine stopped")
 
