@@ -28,6 +28,7 @@ Priority order:
 from __future__ import annotations
 
 from ..services.campaign_naming import cut_at_word
+from ..services import accept_signal
 
 import logging
 import time
@@ -307,16 +308,17 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
         def _get_outreaches():
             db = get_db()
             rows = db.execute(
-                """SELECT o.id as outreach_id, o.campaign_id, o.contact_id,
+                f"""SELECT o.id as outreach_id, o.campaign_id, o.contact_id,
                           o.status, o.followup_count, o.next_action, o.updated_at,
                           o.invited_at, o.created_at,
                           o.last_attempt_error,
-                          c.name, c.title, c.company, c.fit_score, c.linkedin_url, c.source
+                          c.name, c.title, c.company, c.fit_score, c.linkedin_url, c.source,
+                          c.profile_json, c.analysis_json, c.research_summary
                    FROM outreaches o
                    JOIN contacts c ON o.contact_id = c.id
                    WHERE o.campaign_id = ?
                      AND o.status NOT IN ('opted_out', 'closed_happy', 'closed_unhappy', 'skipped')
-                   ORDER BY c.fit_score DESC""",
+                   ORDER BY {accept_signal.INVITE_ORDER_SQL}""",
                 (cid,),
             ).fetchall()
             db.close()
@@ -499,29 +501,52 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
 
             # Priority 6 & 7: Pending prospects (R1 enforcement)
             elif status == "pending":
+                prof = r.get("profile_json")
+                anal = r.get("analysis_json")
+                rs = r.get("research_summary")
+                is_first_degree = accept_signal.is_first_degree_profile(prof)
+
+                if is_first_degree:
+                    rank_score = fit_score
+                    score_fit = fit_score
+                    priority_str = f"Fit: {int(round(fit_score * 100))}%" if fit_score > 0 else ""
+                else:
+                    accept_score = accept_signal.likely_to_accept(prof, anal, rs)
+                    rank_score = accept_signal.rank(fit_score, accept_score)
+                    score_fit = rank_score
+                    priority_str = f"Priority: {int(round(rank_score * 100))}% · Fit: {int(round(fit_score * 100))}%" if fit_score > 0 else ""
+
+                priority_note = f" [{priority_str}]" if priority_str else ""
+
                 if eng_count >= MIN_WARMUP_ENGAGEMENTS:
                     # Warm-up complete → ready to invite
-                    score = _score_action(6, temperature, eng_count, days_since, fit_score)
+                    score = _score_action(6, temperature, eng_count, days_since, score_fit)
                     recommendations.append({
                         "priority": 6,
                         "score": score,
                         "icon": ACTION_ICONS["invite_ready"],
-                        "text": f"Send invitation to **{name}** ({role_str}){_src_tag} — warm-up done ({eng_count} touches) {temp_badge}",
+                        "text": f"Send invitation to **{name}** ({role_str}){_src_tag}{priority_note} — warm-up done ({eng_count} touches) {temp_badge}",
                         "action": "Run: generate_and_send()",
                         "fit_score": fit_score,
+                        "rank_score": rank_score,
+                        "created_at": r.get("created_at") or 0,
+                        "outreach_id": r.get("outreach_id") or "",
                         "campaign": camp_name,
                         "temp": temp_badge,
                     })
                 else:
                     # R1: Needs warm-up first (COLD)
-                    score = _score_action(7, temperature, eng_count, days_since, fit_score)
+                    score = _score_action(7, temperature, eng_count, days_since, score_fit)
                     recommendations.append({
                         "priority": 7,
                         "score": score,
                         "icon": ACTION_ICONS["warmup"],
-                        "text": f"Engage with **{name}**'s posts first ({eng_count}/{MIN_WARMUP_ENGAGEMENTS} warm-up) {temp_badge}",
+                        "text": f"Engage with **{name}**'s posts first ({eng_count}/{MIN_WARMUP_ENGAGEMENTS} warm-up){priority_note} {temp_badge}",
                         "action": "Run: engage_prospect()",
                         "fit_score": fit_score,
+                        "rank_score": rank_score,
+                        "created_at": r.get("created_at") or 0,
+                        "outreach_id": r.get("outreach_id") or "",
                         "campaign": camp_name,
                         "temp": temp_badge,
                     })
@@ -753,8 +778,8 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
     except Exception:
         pass
 
-    # ── Sort by priority, then R4 score (desc), then fit_score (desc) ──
-    recommendations.sort(key=lambda r: (r["priority"], -r.get("score", 0), -r.get("fit_score", 0)))
+    # ── Sort by priority, then R4 score (desc), then rank_score (desc) ──
+    recommendations.sort(key=lambda r: (r["priority"], -r.get("score", 0), -r.get("rank_score", r.get("fit_score", 0)), r.get("created_at") or 0, r.get("outreach_id") or ""))
 
     from ..services.dashboard_snapshot import status_footer
 

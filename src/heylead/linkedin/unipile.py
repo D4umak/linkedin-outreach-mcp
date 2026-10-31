@@ -1370,6 +1370,28 @@ class UnipileClient:
                 if item.get(key):
                     result["network_distance"] = str(item[key])
                     break
+
+            for k in ("follower_count", "followers_count"):
+                v = item.get(k)
+                if v is not None and v != "" and not isinstance(v, bool):
+                    try:
+                        iv = int(float(v))
+                        if iv >= 0:
+                            result["follower_count"] = iv
+                            break
+                    except (ValueError, TypeError):
+                        pass
+            for k in ("shared_connections_count", "mutual_connections_count", "shared_connections", "mutual_connections"):
+                v = item.get(k)
+                if v is not None and v != "" and not isinstance(v, bool):
+                    try:
+                        iv = int(float(v))
+                        if iv >= 0:
+                            result["shared_connections_count"] = iv
+                            break
+                    except (ValueError, TypeError):
+                        pass
+
             results.append(result)
         return results
 

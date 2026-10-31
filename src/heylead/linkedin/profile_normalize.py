@@ -51,6 +51,20 @@ def _skills(data: dict[str, Any]) -> list[str]:
     return skills
 
 
+def _optional_nonneg_int(data: dict[str, Any], *keys: str) -> int | None:
+    for key in keys:
+        val = data.get(key)
+        if val is None or val == "" or isinstance(val, bool):
+            continue
+        try:
+            num = int(float(val))
+            if num >= 0:
+                return num
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
 def normalize_linkedin_profile(data: Any) -> dict[str, Any]:
     """Map a Unipile user payload to HeyLead's stored profile dict.
 
@@ -124,6 +138,13 @@ def normalize_linkedin_profile(data: Any) -> dict[str, Any]:
         "is_premium": bool(data.get("is_premium", False)),
         "is_open_profile": bool(data.get("is_open_profile", False)),
     }
+    followers = _optional_nonneg_int(data, "follower_count", "followers_count")
+    if followers is not None:
+        profile["follower_count"] = followers
+    shared = _optional_nonneg_int(data, "shared_connections_count", "mutual_connections_count", "shared_connections", "mutual_connections")
+    if shared is not None:
+        profile["shared_connections_count"] = shared
+
     if email:
         profile["email"] = email
     if contact_info:

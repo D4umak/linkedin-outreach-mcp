@@ -1474,6 +1474,33 @@ class BackendClient:
                     parsed["is_open_profile"] = bool(item["is_open_profile"])
                 if "is_premium" in item:
                     parsed["is_premium"] = bool(item["is_premium"])
+
+                for key in ("network_distance", "networkDistance", "distance"):
+                    if item.get(key):
+                        parsed["network_distance"] = str(item[key])
+                        break
+
+                for k in ("follower_count", "followers_count"):
+                    v = item.get(k)
+                    if v is not None and v != "" and not isinstance(v, bool):
+                        try:
+                            iv = int(float(v))
+                            if iv >= 0:
+                                parsed["follower_count"] = iv
+                                break
+                        except (ValueError, TypeError):
+                            pass
+                for k in ("shared_connections_count", "mutual_connections_count", "shared_connections", "mutual_connections"):
+                    v = item.get(k)
+                    if v is not None and v != "" and not isinstance(v, bool):
+                        try:
+                            iv = int(float(v))
+                            if iv >= 0:
+                                parsed["shared_connections_count"] = iv
+                                break
+                        except (ValueError, TypeError):
+                            pass
+
                 results.append(parsed)
             if items and not results:
                 logger.warning(

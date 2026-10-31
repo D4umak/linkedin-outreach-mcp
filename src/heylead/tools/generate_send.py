@@ -13,6 +13,7 @@ from __future__ import annotations
 from .. import facts
 from ..hosted_writes import ensure_laptop_may_write
 from ..services.campaign_naming import cut_at_word
+from ..services import accept_signal
 
 import json
 import logging
@@ -217,6 +218,69 @@ def _thread_has_only_foreign_sends(
     return bool(thread_sdr_msgs) and local_sdr_count == 0
 
 
+def _fetch_next_prospect(target_oid: str, cid: str, force_channel: str = "", db: Any = None) -> dict | None:
+    from ..db.schema import get_db
+    _db = db if db is not None else get_db()
+    try:
+        dm_statuses = "('pending', 'connected')" if force_channel == "dm" else "('pending')"
+        if target_oid:
+            _row = _db.execute(
+                f"""SELECT o.id as outreach_id, o.contact_id, o.variant, o.signal_id,
+                          o.next_action, o.status as outreach_status, o.accepted_at, o.invited_at,
+                          c.id as contact_db_id, c.campaign_id as contact_campaign_id,
+                          c.name, c.title, c.company, c.linkedin_url, c.linkedin_id,
+                          c.profile_json, c.analysis_json, c.research_summary, c.fit_score, c.source as contact_source, c.status as contact_status
+                   FROM outreaches o
+                   JOIN contacts c ON o.contact_id = c.id
+                   WHERE o.id = ? AND o.status IN {dm_statuses}
+                   LIMIT 1""",
+                (target_oid,),
+            ).fetchone()
+        else:
+            order_sql = accept_signal.pending_order_sql(by_rank=force_channel != "dm")
+            _row = _db.execute(
+                f"""SELECT o.id as outreach_id, o.contact_id, o.variant, o.signal_id,
+                          o.next_action, o.status as outreach_status, o.accepted_at, o.invited_at,
+                          c.id as contact_db_id, c.campaign_id as contact_campaign_id,
+                          c.name, c.title, c.company, c.linkedin_url, c.linkedin_id,
+                          c.profile_json, c.analysis_json, c.research_summary, c.fit_score, c.source as contact_source, c.status as contact_status
+                   FROM outreaches o
+                   JOIN contacts c ON o.contact_id = c.id
+                   WHERE o.campaign_id = ? AND o.status IN {dm_statuses}
+                   ORDER BY {order_sql}
+                   LIMIT 1""",
+                (cid,),
+            ).fetchone()
+        return dict(_row) if _row else None
+    finally:
+        if db is None:
+            _db.close()
+
+
+def _fetch_warmed(cid: str, min_eng: int, db: Any = None) -> dict | None:
+    from ..db.schema import get_db
+    _db = db if db is not None else get_db()
+    try:
+        _row = _db.execute(
+            f"""SELECT o.id as outreach_id, o.contact_id, o.variant, o.signal_id,
+                      o.next_action,
+                      c.id as contact_db_id, c.campaign_id as contact_campaign_id,
+                      c.name, c.title, c.company, c.linkedin_url, c.linkedin_id,
+                      c.profile_json, c.analysis_json, c.research_summary, c.fit_score, c.source as contact_source, c.status as contact_status
+               FROM outreaches o
+               JOIN contacts c ON o.contact_id = c.id
+               WHERE o.campaign_id = ? AND o.status = 'pending'
+                 AND (SELECT COUNT(*) FROM engagements e WHERE e.outreach_id = o.id) >= ?
+               ORDER BY {accept_signal.INVITE_ORDER_SQL}
+               LIMIT 1""",
+            (cid, min_eng),
+        ).fetchone()
+        return dict(_row) if _row else None
+    finally:
+        if db is None:
+            _db.close()
+
+
 async def run_generate_and_send(
     campaign_id: str = "",
     force_channel: str = "",
@@ -313,40 +377,7 @@ async def run_generate_and_send(
     # connections and set status to 'connected' before any DM was sent.
     dm_statuses = "('pending', 'connected')" if force_channel == "dm" else "('pending')"
 
-    def _fetch_next_prospect(target_oid: str, cid: str) -> dict | None:
-        from ..db.schema import get_db as _get_db
-        _db = _get_db()
-        if target_oid:
-            _row = _db.execute(
-                f"""SELECT o.id as outreach_id, o.contact_id, o.variant, o.signal_id,
-                          o.next_action, o.status as outreach_status, o.accepted_at, o.invited_at,
-                          c.id as contact_db_id, c.campaign_id as contact_campaign_id,
-                          c.name, c.title, c.company, c.linkedin_url, c.linkedin_id,
-                          c.profile_json, c.analysis_json, c.fit_score, c.source as contact_source, c.status as contact_status
-                   FROM outreaches o
-                   JOIN contacts c ON o.contact_id = c.id
-                   WHERE o.id = ? AND o.status IN {dm_statuses}
-                   LIMIT 1""",
-                (target_oid,),
-            ).fetchone()
-        else:
-            _row = _db.execute(
-                f"""SELECT o.id as outreach_id, o.contact_id, o.variant, o.signal_id,
-                          o.next_action, o.status as outreach_status, o.accepted_at, o.invited_at,
-                          c.id as contact_db_id, c.campaign_id as contact_campaign_id,
-                          c.name, c.title, c.company, c.linkedin_url, c.linkedin_id,
-                          c.profile_json, c.analysis_json, c.fit_score, c.source as contact_source, c.status as contact_status
-                   FROM outreaches o
-                   JOIN contacts c ON o.contact_id = c.id
-                   WHERE o.campaign_id = ? AND o.status IN {dm_statuses}
-                   ORDER BY c.fit_score DESC
-                   LIMIT 1""",
-                (cid,),
-            ).fetchone()
-        _db.close()
-        return dict(_row) if _row else None
-
-    row = await run_db(_fetch_next_prospect, target_outreach_id, campaign_id)
+    row = await run_db(_fetch_next_prospect, target_outreach_id, campaign_id, force_channel)
 
     if not row:
         return (
@@ -627,26 +658,6 @@ async def run_generate_and_send(
 
     if eng_count < MIN_WARMUP_ENGAGEMENTS and channel != "dm":
         # Skip un-warmed prospects, find a warmed-up one instead
-        def _fetch_warmed(cid: str, min_eng: int) -> dict | None:
-            from ..db.schema import get_db as _get_db
-            db2 = _get_db()
-            _row = db2.execute(
-                """SELECT o.id as outreach_id, o.contact_id, o.variant, o.signal_id,
-                          o.next_action,
-                          c.id as contact_db_id, c.campaign_id as contact_campaign_id,
-                          c.name, c.title, c.company, c.linkedin_url, c.linkedin_id,
-                          c.profile_json, c.analysis_json, c.fit_score, c.source as contact_source, c.status as contact_status
-                   FROM outreaches o
-                   JOIN contacts c ON o.contact_id = c.id
-                   WHERE o.campaign_id = ? AND o.status = 'pending'
-                     AND (SELECT COUNT(*) FROM engagements e WHERE e.outreach_id = o.id) >= ?
-                   ORDER BY c.fit_score DESC
-                   LIMIT 1""",
-                (cid, min_eng),
-            ).fetchone()
-            db2.close()
-            return dict(_row) if _row else None
-
         warmed_row = await run_db(_fetch_warmed, campaign_id, MIN_WARMUP_ENGAGEMENTS)
 
         if warmed_row:
@@ -1828,8 +1839,13 @@ async def run_generate_and_send(
             delay = get_next_delay()
             delay_minutes = delay // 60
 
+            _fit_val = float(prospect.get("fit_score") or 0.0)
+            _accept_val = accept_signal.likely_to_accept(prospect.get("profile_json"), prospect.get("analysis_json"), prospect.get("research_summary"))
+            _rank_val = accept_signal.rank(_fit_val, _accept_val)
+
             return (
                 f"✅ Sent to {prospect_name} ({role_str})\n"
+                f"   Priority: {int(round(_rank_val * 100))}% | Fit: {int(round(_fit_val * 100))}%\n"
                 f'   "{message}"\n\n'
                 f"⏱️ Next send in ~{delay_minutes} minutes\n"
                 f"📊 Daily limit: {new_limit}/day"

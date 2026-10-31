@@ -1229,7 +1229,7 @@ async def _show_overview_from_backend(data: dict) -> str:
         pass
 
     # ── Account Health ──
-    sent = rl.get("sent_today", 0)
+    sent = rl.get("daily_invite_sent", rl.get("sent_today", 0))
     # The cap is enforced on the seat's count across every workspace it sends
     # from. /api/v1/stats' plain weekly_sent is one workspace's count, so a
     # seat inviting from two workspaces would read 28/100 while every invite

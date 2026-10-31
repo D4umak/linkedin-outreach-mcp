@@ -47,6 +47,24 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.486 (2026-10-31)
+- Fix: align generate_send fetchers with run_db signature and isolate DM test campaign (#4410)
+- Fix: extract generate_send fetchers to module level (#4410)
+- Fix: address review findings for invite priority ranking (#4410)
+- Fix: record strict_due proof runs and keep ticketless runner from clobbering last.json (#4359)
+- Fix: client-side invite priority ranking parity (#4410)
+- Fix: flag 3D office speech bubbles covered by open drawer (#4360)
+- New: enforce designer review form declaration
+- record #4315 F1 lesson on case-designer (heylead-api#4455)
+- Fix: read dated GitHub searches past the 1,000 cap (api #4015)
+- New: enforce designer form declaration in review gate (#4388)
+- New: claim wait wakes the waiter (api #4488)
+- Fix: use broad pattern-not for f-string with prefix
+- Fix: fix syntax in claim-wait marker rule
+- New: wake waiting sessions and surface details on merge-queue claim waits (#4488)
+- Fix: remove mock_semgrep and use real binary in push gate tests
+- Fix: mock semgrep in push gate tests to avoid failing open on missing tool
+
 ## v0.10.485 (2026-10-30)
 - Fix: use skipped_by_label in pick.py and restore tests
 - Fix: allow case issues with devflow label in picker (#4640)

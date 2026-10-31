@@ -19,6 +19,7 @@ from ..db.queries import (
 from ..db.schema import get_db
 from ..db.async_bridge import run_db
 from ..services.cloud_sync import sync_outreach_skip
+from ..services import accept_signal
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ async def run_skip_prospect(
         def _find_next_pending():
             db = get_db()
             r = db.execute(
-                """SELECT o.id as outreach_id, o.status, o.campaign_id, o.contact_id
+                f"""SELECT o.id as outreach_id, o.status, o.campaign_id, o.contact_id
                    FROM outreaches o
                    JOIN contacts c ON o.contact_id = c.id
                    WHERE o.campaign_id = ?
@@ -85,7 +86,7 @@ async def run_skip_prospect(
                    -- ASC, so skipping with no id terminally skipped the
                    -- WORST-fit prospect while the one the user was looking at
                    -- stayed in the queue -- and was then printed as "Next up".
-                   ORDER BY c.fit_score DESC, o.created_at ASC
+                   ORDER BY {accept_signal.INVITE_ORDER_SQL}
                    LIMIT 1""",
                 (campaign_id,),
             ).fetchone()
@@ -160,12 +161,12 @@ async def run_skip_prospect(
         def _get_next_and_count():
             db = get_db()
             nr = db.execute(
-                """SELECT c.name, c.title, c.company, c.fit_score
+                f"""SELECT c.name, c.title, c.company, c.fit_score
                    FROM outreaches o
                    JOIN contacts c ON o.contact_id = c.id
                    WHERE o.campaign_id = ?
                      AND o.status = 'pending'
-                   ORDER BY c.fit_score DESC
+                   ORDER BY {accept_signal.INVITE_ORDER_SQL}
                    LIMIT 1""",
                 (cid,),
             ).fetchone()

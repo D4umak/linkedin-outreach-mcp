@@ -16,6 +16,7 @@ from .schema import get_db
 from .message_rows import insert_message_row
 from ..ai.copywriter import provenance as copy_provenance
 from ..ai.copywriter.provenance import Provenance
+from ..services import accept_signal
 from ..services.response_time import response_seconds
 from ..next_step import statuses_sql as _followup_statuses_sql
 from ..constants import (
@@ -1740,7 +1741,7 @@ def get_next_pending_outreach(campaign_id: str, exclude_job_type: str = "") -> O
     db = get_db()
     if exclude_job_type:
         row = db.execute(
-            """SELECT o.id, o.contact_id, c.fit_score
+            f"""SELECT o.id, o.contact_id, c.fit_score
                FROM outreaches o
                JOIN contacts c ON o.contact_id = c.id
                WHERE o.campaign_id = ? AND o.status = 'pending'
@@ -1750,17 +1751,17 @@ def get_next_pending_outreach(campaign_id: str, exclude_job_type: str = "") -> O
                        AND sj.job_type = ?
                        AND sj.status IN ('pending', 'running')
                  )
-               ORDER BY c.fit_score DESC
+               ORDER BY {accept_signal.INVITE_ORDER_SQL}
                LIMIT 1""",
             (campaign_id, exclude_job_type),
         ).fetchone()
     else:
         row = db.execute(
-            """SELECT o.id, o.contact_id, c.fit_score
+            f"""SELECT o.id, o.contact_id, c.fit_score
                FROM outreaches o
                JOIN contacts c ON o.contact_id = c.id
                WHERE o.campaign_id = ? AND o.status = 'pending'
-               ORDER BY c.fit_score DESC
+               ORDER BY {accept_signal.INVITE_ORDER_SQL}
                LIMIT 1""",
             (campaign_id,),
         ).fetchone()
@@ -3787,7 +3788,7 @@ def get_next_invite_candidate(
              {job_exclude}
              {extras}
              AND {FIT_SENDABLE_SQL}
-           ORDER BY c.fit_score DESC
+           ORDER BY {accept_signal.INVITE_ORDER_SQL}
            LIMIT 1""",
         params + [min_fit_score],
     ).fetchone()
