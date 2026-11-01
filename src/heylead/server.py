@@ -47,6 +47,38 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.487 (2026-11-01)
+- Fix: unresolved_profile skip words match the api (heylead-api#4924 parity)
+- New: Kofi's own booking sends in Last Action, parity with the api (heylead-api#4924)
+- Fix: revert fixture and remove false slice match (#4880)
+- FirstTouch form sent, Salesforge skipped (#4914)
+- Fix: compact tests and fixtures to fit PR size limit (#4887)
+- Smithery dropped (#4914)
+- Smithery closed to new listings (#4914)
+- AI directories status 1 Nov (mails sent, Show HN final) (#4914)
+- Fix: enforce D1 metric verification before outcome closure (#4887)
+- Fix: allow read-only office ticket chips in safeclick (#4335)
+- record #4256 UI QA F1 missed lesson under case-qa (#4332)
+- Fix: route classifier outcome parsing through outcome_ref (#4889)
+- Fix: cap devflow/harness merge share and classify harness work by paths (#4889)
+- Fix: isolate model phases and release locks early to prevent deploy starvation (#4879)
+- Fix: move st_mtime access out of main and fix test fixture imports (#4880)
+- Fix: tighten PR gate event extraction (mirror heylead-api#4913)
+- Fix: isolate environment in test_devflow_now_4105.py
+- Fix: run cooldown and gated dispatcher pause (#4880)
+- Fix: run cooldown and gated dispatcher pause (#4880)
+- Fix: updated health readers and prompts for heylead-ci cutover (#4892)
+- New: schedule readings at each merge, patrol completed closes, daily catch-up (api #4887)
+- New: close gate, completion deferral and devflow proof keep to the reading rule (api #4887)
+- New: metric_reading.py, the one rule for closing on a met reading (api #4887)
+- move oldest designer lesson to the archive (section cap 15)
+- record AI directory submissions and links for api #4914
+- review lesson for #4883 UI QA F1 (confirm focus)
+- AI directories submission package for api #4914
+- Fix: ensure refresh_venv.sh doesn't fail if venv-ci directory exists
+- Fix: correct semgrep test fixture for pinned-tools-test-dev-only
+- Fix: enforce pinned venv versions and add sync script (#4445)
+
 ## v0.10.486 (2026-10-31)
 - Fix: align generate_send fetchers with run_db signature and isolate DM test campaign (#4410)
 - Fix: extract generate_send fetchers to module level (#4410)

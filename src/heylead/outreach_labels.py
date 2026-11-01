@@ -60,6 +60,12 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "approval_sent": "Sent after your approval",
     "approval_waiting": "Waiting: your approval",
     "approval_withdrawn": "Withdrawn: yours to answer",
+    # Kofi sent a booking draft HeyLead decided, with no approval asked (heylead-api#4924).
+    "closer_emailed": "Kofi emailed your booking link",
+    "closer_invited": "Kofi sent a calendar invite",
+    # The api's per-lane words for a profile it could not find (heylead-api#4306).
+    "dm_unresolved_profile": "Message not sent: the LinkedIn profile could not be found",
+    "invite_unresolved_profile": "Invite not sent: the LinkedIn profile could not be found",
     "archived_outreach_disarmed": "Stopped (campaign archived)",
     "below_min_fit": "Held: fit below the campaign floor",
     "campaign_review": "Campaign review",
@@ -193,6 +199,7 @@ SKIP_REASON_LABELS: dict[str, str] = {
     "conversation_elsewhere": "already in a conversation elsewhere",
     "duplicate_of_another_conversation": "a duplicate of another conversation",
     "dm_not_claimable": "the message could not be claimed",
+    "unresolved_profile": "no LinkedIn profile could be found for this link or ID",
 }
 #: Reasons that say nothing: the status word itself (a legacy writer stored
 #: last_attempt_error "skipped", and the #1969 backfill copied it: 18 rows on
