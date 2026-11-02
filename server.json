@@ -3,8 +3,17 @@
   "name": "io.github.D4umak/heylead",
   "title": "HeyLead \u2014 AI agent for LinkedIn outreach",
   "description": "AI agent for LinkedIn outreach: finds the right people, writes in your voice, follows up, replies.",
-  "version": "0.10.487",
+  "version": "0.10.488",
   "websiteUrl": "https://heylead.dev",
+  "icons": [
+    {
+      "src": "https://heylead.dev/icon-512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    }
+  ],
   "repository": {
     "url": "https://github.com/D4umak/linkedin-outreach-mcp",
     "source": "github"
@@ -13,7 +22,7 @@
     {
       "registryType": "pypi",
       "identifier": "heylead",
-      "version": "0.10.487",
+      "version": "0.10.488",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

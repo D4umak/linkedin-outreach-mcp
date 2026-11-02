@@ -132,6 +132,7 @@ HOSTED_INVITE_CAPS_SETTING = "hosted_invite_caps"
 # to it; the api computes the plan hosted accounts see, and this twin renders
 # the same steps for self-hosted installs and when the api cannot be reached.
 PLAN_DAILY_ADD_BUDGET = 100          # heylead-api scheduler.DAILY_ADD_BUDGET: people found a day
+INVITE_PAUSE_WINDOW_HOURS = 24      # heylead-api drafts_waiting.PAUSE_INVITES_AFTER_WINDOW_SECONDS // 3600 (#4347)
 NOT_NOW_WAIT_DAYS = 30               # heylead-api not_now.DEFAULT_WAIT_DAYS: check-in after "not now"
 # heylead-api working_hours.DEFAULT_SENDING_WINDOW: weekdays 08:00-22:00 in the
 # owner's zone, London when nothing says where the seat lives.

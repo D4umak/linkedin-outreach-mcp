@@ -47,6 +47,14 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.488 (2026-11-01)
+- Fix: the pause copy says 24 sending hours, the rule's real threshold (#4347)
+- New: campaign plan says invitations pause for unreviewed openers (#4347)
+- review lesson from #4924 UI QA F1 (case-designer, missed)
+- Fix: apply review changes for invites paused for backlogged approvals (#4347)
+- Fix: set icon-512.png in manifests and fix plugin/icon.svg rect (#4935)
+- New: pause connection invitations for unreviewed opening messages (#4347)
+
 ## v0.10.487 (2026-11-01)
 - Fix: unresolved_profile skip words match the api (heylead-api#4924 parity)
 - New: Kofi's own booking sends in Last Action, parity with the api (heylead-api#4924)

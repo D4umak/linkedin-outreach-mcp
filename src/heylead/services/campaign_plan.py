@@ -411,8 +411,9 @@ def campaign_plan(
     else:
         # The api's drafts_waiting alert sends that email (api #2497).
         opener += (
-            "held for your approval until you switch to autopilot, on the Approvals page. "
-            "When one has waited 2 hours in your sending window, the workspace owner gets an email."
+            "held for your approval until you switch to autopilot, on the Approvals page (if "
+            f"three or more opening messages wait {c.INVITE_PAUSE_WINDOW_HOURS} of your sending hours, new invitations pause "
+            "until you review them). When one has waited 2 hours in your sending window, the workspace owner gets an email."
         )
     steps.append(PlanStep("open", "Open", opener, open_hint))
 
