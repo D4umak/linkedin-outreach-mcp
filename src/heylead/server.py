@@ -47,6 +47,13 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.489 (2026-11-02)
+- Fix: mock client close as AsyncMock (#5038)
+- remove temporary PR body file (#5038)
+- Fix: address review comments and mirror semgrep rules (#5038)
+- Fix: address review comments and mirror semgrep rules (#5038)
+- Fix: discovery DMs from invitations ask for purpose without pitching (#5038)
+
 ## v0.10.488 (2026-11-01)
 - Fix: the pause copy says 24 sending hours, the rule's real threshold (#4347)
 - New: campaign plan says invitations pause for unreviewed openers (#4347)

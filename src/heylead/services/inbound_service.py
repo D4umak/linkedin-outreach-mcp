@@ -194,6 +194,11 @@ async def send_discovery_dms() -> str:
             skipped += 1
             continue
 
+        if signal.get("signal_type") == "profile_view":
+            await run_db(update_inbound_signal, signal["id"], status="dismissed")
+            skipped += 1
+            continue
+
         intent = signal.get("intent", "unknown")
         confidence = signal.get("confidence", 0) or 0
 

@@ -1741,7 +1741,7 @@ async def _generate_contextual_reply(
 
     Falls back to generate_discovery_question() if reply generation fails.
     """
-    if not content:
+    if not content or str(signal.get("signal_type") or "").strip() == "invitation":
         return await _fallback_discovery(
             prospect, voice_signature, signal, conversation_history,
         )

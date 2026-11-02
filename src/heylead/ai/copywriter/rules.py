@@ -79,6 +79,8 @@ OUTREACH = frozenset({
     "discovery_dm", "counter_pitch",
 })
 
+DISCOVERY_DM = "discovery_dm"
+
 
 RULES: tuple[Rule, ...] = (
     # ── typography ──
@@ -229,11 +231,11 @@ RULES: tuple[Rule, ...] = (
         text=(
             "Never ask a vague rhetorical question such as \"Do you still make "
             "time for new ideas?\". Ask one concrete question about the work in "
-            "front of them, or ask nothing at all."
+            "front of them, or ask what prompted them to connect, or ask nothing at all."
         ),
         channels=CONVERSATIONAL,
         short=(
-            "Never ask a vague rhetorical question. Ask one concrete question about their work, or none at all."
+            "End with a real question about their work or what prompted them to connect, or with a plain statement."
         ),
     ),
     # ── vocabulary ──
@@ -262,6 +264,7 @@ RULES: tuple[Rule, ...] = (
             "could have asked them."
         ),
         channels=CONVERSATIONAL,
+        except_channels=frozenset({DISCOVERY_DM}),
         short=(
             "Ask about their own week, never about industry trends or AI in "
             "general."
@@ -277,6 +280,7 @@ RULES: tuple[Rule, ...] = (
             "activity, or say nothing about them at all."
         ),
         channels=CONVERSATIONAL,
+        except_channels=frozenset({DISCOVERY_DM}),
         short=(
             "Do not make the observation you would make about anyone in "
             "their role."

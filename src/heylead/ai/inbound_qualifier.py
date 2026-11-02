@@ -786,19 +786,18 @@ Rules:
 - If they asked a question: acknowledge it, relate to it briefly, then suggest a call or deeper chat — do NOT try to fully answer complex questions in a DM
 - If they shared a challenge: show you understand, share a brief relevant insight, then open the door to help
 - If they said "not interested" or "not now": respect it gracefully, leave the door open, don't push
-- Only ask a generic "what brought you here?" question for silent connections with no message
+- For silent connections (no message): thank them for connecting, optionally note their role as a peer, and ask what prompted them to reach out or connect. NEVER diagnose challenges or pitch.
+- For invitations with a note: reply directly to what they wrote and ask one natural follow-up question. NEVER pivot to a pitch.
+- NEVER diagnose the inviter's challenges, infer unstated pain points, or pitch your offering.
 - Keep it under 400 characters
 - Never use salesy language, emojis, or exclamation marks
 - Never hard-pitch — be genuinely helpful and curious
 - NEVER sign off with "- YourName", "Best, YourName", "Cheers", "Regards", or any email-style signature. LinkedIn DMs don't sign off — it's a bot tell.
 - Do not cite a specific stat from their content (e.g. "That 21x gap") or use sales-methodology jargon (call cadence, market context, more than rapport, repeatable habits). Plain English only.
 
-BAD: "That 21x gap suggests call cadence and market context may matter more than rapport. How much hands-on work does it take to make those habits repeatable?"
-WHY BAD: Points at a specific stat, then wraps it in jargon the sender would not say.
-
 Output a JSON object with "message" and "reasoning" fields. No markdown or code fences."""
 
-_DISCOVERY_PROMPT = """Generate a contextual LinkedIn reply.
+_DISCOVERY_PROMPT = """Generate a contextual LinkedIn greeting or reply.
 
 MY VOICE
 {voice_desc}
@@ -810,7 +809,7 @@ Their headline: {headline}
 {content_section}
 {qualification_section}
 
-Reply naturally to what they said. Reference their specific words or situation. If they asked something, acknowledge it and suggest connecting for a proper conversation — don't try to give a full answer in a DM."""
+Reply naturally. If they sent a message, respond to it. If not, open from the connection itself and ask what prompted it. Do not pitch."""
 
 
 # ──────────────────────────────────────────────
@@ -1017,6 +1016,9 @@ async def generate_discovery_question(
 
     Returns dict with 'message' and 'reasoning' keys.
     """
+    if signal_type == "profile_view":
+        return {"message": "", "reasoning": "profile_view skipped"}
+
     from ..ops_log import message_hash
 
     content = _with_thread_context(content, conversation_history)
@@ -1035,8 +1037,6 @@ async def generate_discovery_question(
     qual_section = ""
     if qualification:
         qual_section = f"Qualification: {qualification.intent} ({qualification.confidence:.0%} confidence)"
-        if qualification.reasoning:
-            qual_section += f"\nContext: {qualification.reasoning}"
 
     # Build sender context from stored profile
     sender_context = ""
@@ -1044,7 +1044,7 @@ async def generate_discovery_question(
     from ..db.queries import get_setting
     try:
         my_profile = await run_db(get_setting, "profile", {})
-        if my_profile:
+        if my_profile and signal_type != "profile_view":
             my_headline = my_profile.get("headline", "")
             if my_headline:
                 sender_context = f"About me: {my_headline}"
