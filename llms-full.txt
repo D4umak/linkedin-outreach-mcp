@@ -4,7 +4,7 @@
 
 ## What is HeyLead?
 
-HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. Through MCP (Model Context Protocol) tools it finds prospects on LinkedIn, sends personalized outreach that sounds like you wrote it, follows up automatically, reads and classifies replies, answers the clear ones and holds anything ambiguous for you, all through natural language commands.
+HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. Through MCP (Model Context Protocol) tools it finds prospects on LinkedIn, sends personalized outreach that sounds like you wrote it, follows up automatically, reads and classifies replies and answers them from the campaign's facts, all through natural language commands. A reply that could mean two things gets one short question back. A question your facts can't answer is held for you.
 
 Tell your AI "find me CTOs at fintech startups" and watch it work — or use the web dashboard at https://heylead.dev/dashboard, which runs the same campaigns.
 

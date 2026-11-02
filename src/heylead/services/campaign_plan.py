@@ -424,8 +424,10 @@ def campaign_plan(
         reply = "Every reply is held for you; nothing answers on its own."
     elif _flag(cfg, "enable_auto_replies", True):
         reply = (
-            "Replies are read and answered from your campaign's facts; anything unclear is "
-            f"held for you; a 'not now' gets a check-in in {c.NOT_NOW_WAIT_DAYS} days."
+            # One line for every reply-agent mode, as the api's (api #5093): an act
+            # campaign asks what a short reply meant, so no line says it holds it.
+            "Replies are read and answered from your campaign's facts; "
+            f"a 'not now' gets a check-in in {c.NOT_NOW_WAIT_DAYS} days."
         )
     else:
         reply = "Replies are read and held for you to answer; nothing answers on its own."

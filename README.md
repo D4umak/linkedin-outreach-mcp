@@ -339,7 +339,7 @@ Sign in at [heylead.dev](https://heylead.dev) (hosted), or bring your own Unipil
 
 **Capabilities:** LinkedIn lead generation, cold outreach automation, ICP generation with buyer personas, voice-matched personalized messaging, multi-touch drip sequences, reply sentiment classification, engagement warm-ups, campaign analytics, and scheduled sending from the cloud with your laptop closed.
 
-**22 tools**, from finding the right people to answering their replies: prospect discovery, ICP generation with buyer personas, connection invitations with a note, opening messages and follow-ups, warm-ups (profile views, follows, comments), reply handling that holds anything ambiguous for you, and outcome tracking.
+**22 tools**, from finding the right people to answering their replies: prospect discovery, ICP generation with buyer personas, connection invitations with a note, opening messages and follow-ups, warm-ups (profile views, follows, comments), reply handling and outcome tracking. Replies are read, classified and answered from the campaign's facts. A reply that could mean two things gets one short question back. A question your facts can't answer is held for you.
 
 See [`AGENTS.md`](AGENTS.md) for the full agent integration guide.
 

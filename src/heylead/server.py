@@ -47,6 +47,10 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.490 (2026-11-02)
+- copy: replies that could mean two things get one question, not a hold (api #5093)
+- case-qa names the shortest window a 'stays inside the window' criterion holds at (api #5092)
+
 ## v0.10.489 (2026-11-02)
 - Fix: mock client close as AsyncMock (#5038)
 - remove temporary PR body file (#5038)
