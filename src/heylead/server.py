@@ -47,6 +47,14 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.491 (2026-11-04)
+- Fix: handle text_body in message_text (#1536)
+- Fix: only the designer's marker is checked for a form (#5069)
+- Slack noise and agent autonomy, six tickets for the flow (heylead-api#5203)
+- move the oldest case-designer line to the archive (15-line cap)
+- the #5184 F2 note, read on each surface (heylead-api#5184)
+- Pedro owns the backlog: north-star lane, hold-clearing rights, triage
+
 ## v0.10.490 (2026-11-02)
 - copy: replies that could mean two things get one question, not a hold (api #5093)
 - case-qa names the shortest window a 'stays inside the window' criterion holds at (api #5092)

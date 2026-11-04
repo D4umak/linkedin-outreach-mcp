@@ -156,7 +156,9 @@ def message_text(raw: Mapping[str, Any]) -> str:
     A message that is only a file reads as its file line, never as "".
     A link preview's URL is already in the words, or on its line.
     """
-    words = str(raw.get("text") or raw.get("body") or raw.get("content") or "").strip()
+    words = str(
+        raw.get("text") or raw.get("text_body") or raw.get("body") or raw.get("content") or ""
+    ).strip()
     lines = [
         attachment_line(att) for att in attachment_summary(raw)
         if not (att.get("url") and att["url"] in words)
