@@ -172,6 +172,9 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "sync_version_disagreement": "Syncing",
     "unanswered_no_reopened": "Reopened: their \"no\" gets an answer",
     "visible_dm_recorded": "Answered outside HeyLead",
+    # The owner answered on LinkedIn, so HeyLead stood down (heylead-api#5197).
+    "owner_took_over": "You answered on LinkedIn. HeyLead stopped.",
+    "owner_handed_back": "Handed back to HeyLead",
     "voice_dm_fell_back_to_text": "Sent as text",
 }
 
@@ -200,6 +203,8 @@ SKIP_REASON_LABELS: dict[str, str] = {
     "duplicate_of_another_conversation": "a duplicate of another conversation",
     "dm_not_claimable": "the message could not be claimed",
     "unresolved_profile": "no LinkedIn profile could be found for this link or ID",
+    # The owner answered them on LinkedIn themself (heylead-api#5197).
+    "handled_elsewhere": "you're handling this conversation",
 }
 #: Reasons that say nothing: the status word itself (a legacy writer stored
 #: last_attempt_error "skipped", and the #1969 backfill copied it: 18 rows on

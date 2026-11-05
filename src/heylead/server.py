@@ -47,6 +47,9 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.492 (2026-11-05)
+- Fix: owner took over / handed back read as words (heylead-api#5197)
+
 ## v0.10.491 (2026-11-04)
 - Fix: handle text_body in message_text (#1536)
 - Fix: only the designer's marker is checked for a form (#5069)
