@@ -65,45 +65,81 @@ class OfferCard:
         return bool(self.confirmed_at)
 
 
-def _words(text: str) -> int:
+def word_count(text: str) -> int:
+    """Words as every Offer card rule counts them: runs of whitespace split them.
+
+    The dashboard counts the same way (offerLimits.ts), checked on one shared
+    table of strings in both suites (#5276).
+    """
     return len([w for w in str(text or "").split() if w.strip()])
+
+
+def _words(text: str) -> int:
+    return word_count(text)
 
 
 def _clean(text: Any) -> str:
     return " ".join(str(text or "").split())
 
 
-def offer_card_defects(card: OfferCard) -> list[str]:
-    """Deterministic checks. Empty means the card may be shown and sent from."""
-    defects: list[str] = []
+def offer_limits() -> dict[str, int]:
+    """The word limit of each field the owner writes, for the editors to show."""
+    return {"outcome": OUTCOME_MAX_WORDS, "how": HOW_MAX_WORDS, "ask": ASK_MAX_WORDS, "proof": PROOF_MAX_WORDS}
+
+
+def _too_many(over: int) -> str:
+    return "1 word too many." if over == 1 else f"{over} words too many."
+
+
+def offer_card_problems(card: OfferCard) -> list[dict[str, Any]]:
+    """Every broken rule, one entry each: the field, the rule, the count and the limit (#5276).
+
+    ``defect`` is the sentence ``offer_card_defects`` has always returned;
+    ``message`` is what the owner reads at the field. Neither carries the
+    field's own text: a refusal is ledgered, and proof can name a customer.
+    """
+    problems: list[dict[str, Any]] = []
     outcome, how, ask, proof = _clean(card.outcome), _clean(card.how), _clean(card.ask), _clean(card.proof)
+
+    def add(field: str, rule: str, defect: str, message: str, **extra: Any) -> None:
+        problems.append({"field": field, "rule": rule, "defect": defect, "message": message, **extra})
+
+    def length(field: str, text: str, limit: int) -> None:
+        words = _words(text)
+        if words > limit:
+            add(field, "too_long", f"{field} is over {limit} words", _too_many(words - limit),
+                words=words, limit=limit, over=words - limit)
+
     if not outcome:
-        defects.append("outcome is empty")
-    if _words(outcome) > OUTCOME_MAX_WORDS:
-        defects.append(f"outcome is over {OUTCOME_MAX_WORDS} words")
+        add("outcome", "empty", "outcome is empty", "Say what changes for them.")
+    length("outcome", outcome, OUTCOME_MAX_WORDS)
     outcome_norm = outcome.lower().replace("-", " ")
     for noun in PRODUCT_NOUNS:
         noun_norm = noun.replace("-", " ")
         if contains_term(outcome_norm, noun_norm):
-            defects.append(f"outcome names a product noun: {noun}")
+            add("outcome", "product_noun", f"outcome names a product noun: {noun}",
+                f'Say what changes for them, not what you sell. Take out "{noun}".', noun=noun)
     if re.match(r"^\s*(I|We)\b", outcome, flags=re.IGNORECASE):
-        defects.append("outcome starts with the sender")
+        add("outcome", "starts_with_sender", "outcome starts with the sender", "Start with them, not with you.")
     if not ask:
-        defects.append("ask is empty")
+        add("ask", "empty", "ask is empty", "Write the one question your first message asks.")
     elif not ask.rstrip().endswith("?"):
-        defects.append("ask is not a question")
+        add("ask", "not_a_question", "ask is not a question", "End it with a question mark.")
     if ask.count("?") > 1:
-        defects.append("ask holds more than one question")
-    if _words(ask) > ASK_MAX_WORDS:
-        defects.append(f"ask is over {ASK_MAX_WORDS} words")
-    if _words(how) > HOW_MAX_WORDS:
-        defects.append(f"how is over {HOW_MAX_WORDS} words")
-    if _words(proof) > PROOF_MAX_WORDS:
-        defects.append(f"proof is over {PROOF_MAX_WORDS} words")
+        add("ask", "two_questions", "ask holds more than one question",
+            f"Ask one question only. This has {ask.count('?')}.")
+    length("ask", ask, ASK_MAX_WORDS)
+    length("how", how, HOW_MAX_WORDS)
+    length("proof", proof, PROOF_MAX_WORDS)
     for name, text in (("outcome", outcome), ("how", how), ("ask", ask), ("proof", proof), ("for", _clean(card.for_))):
         if _PLACEHOLDER_RE.search(text):
-            defects.append(f"{name} holds a placeholder")
-    return defects
+            add(name, "placeholder", f"{name} holds a placeholder", "Replace the [brackets] with real words.")
+    return problems
+
+
+def offer_card_defects(card: OfferCard) -> list[str]:
+    """Deterministic checks. Empty means the card may be shown and sent from."""
+    return [p["defect"] for p in offer_card_problems(card)]
 
 
 def source_hash(context: dict[str, Any] | None) -> str:

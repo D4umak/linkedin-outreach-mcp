@@ -47,6 +47,9 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.493 (2026-11-06)
+- Fix: edit_campaign names the field, its count and the limit
+
 ## v0.10.492 (2026-11-05)
 - Fix: owner took over / handed back read as words (heylead-api#5197)
 

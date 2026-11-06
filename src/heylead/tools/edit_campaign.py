@@ -10,6 +10,7 @@ from ..services.campaign_naming import cut_at_word
 
 import json
 import logging
+from typing import Any
 
 from ..config import is_backend_mode
 from ..constants import VALID_VOICE_MODES, VOICE_MEMOS_OFF
@@ -770,7 +771,7 @@ async def run_edit_campaign(
             card_to_dict,
             confirm_card,
             distil_offer,
-            offer_card_defects,
+            offer_card_problems,
         )
         from ..services.offer_card import source_hash as offer_source_hash
 
@@ -806,9 +807,9 @@ async def run_edit_campaign(
             card.edited_at = int(_time.time())
             redistilled_needs_review = False
             card.source_hash = offer_source_hash(existing_ctx)
-            defects = offer_card_defects(card)
-            if defects:
-                return "❌ Offer card not saved: " + "; ".join(defects)
+            problems = offer_card_problems(card)
+            if problems:
+                return _offer_refusal(problems)
             change_descriptions.append("Offer card: " + cut_at_word(card.outcome, 80))
             existing_ctx["offer"] = card_to_dict(card)
             ctx_changed = True
@@ -1002,3 +1003,14 @@ async def run_edit_campaign(
 
     output.extend(status_footer("campaign", campaign_id, snapshot=False))
     return "\n".join(output)
+
+
+def _offer_refusal(problems: list[dict[str, Any]]) -> str:
+    """One line per broken rule: the field, and its count and limit when it is too long (api #5276)."""
+    lines = ["❌ Offer card not saved:"]
+    for p in problems:
+        if p["rule"] == "too_long":
+            lines.append(f"- {p['field']}: {p['words']} words, the limit is {p['limit']} (cut {p['over']})")
+        else:
+            lines.append(f"- {p['field']}: {p['message']}")
+    return "\n".join(lines)
