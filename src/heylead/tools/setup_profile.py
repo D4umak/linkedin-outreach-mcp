@@ -498,8 +498,11 @@ def same_linkedin_account(stored: dict | None, new: dict | None) -> bool:
 
 def voice_reply_mode(backend: bool) -> str:
     """M1 hosted and the cloud sends, M2 hosted and this Mac sends, M3 local
-    mode on the user's own LLM key (read as the seat line below reads it)."""
-    if not backend:
+    mode or a hosted install on the user's own LLM key (read as analyze_voice
+    routes it)."""
+    from ..config import has_local_llm_key
+
+    if not backend or has_local_llm_key():
         return "M3"
     from ..services.cloud_sync import local_scheduler_engine_enabled
 

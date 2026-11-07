@@ -47,6 +47,9 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.495 (2026-11-07)
+- Fix: show LLM key hint on voice failure with local LLM key
+
 ## v0.10.494 (2026-11-06)
 - Fix: client twin of review round 1
 - wip(api #5290): client twin of the language-in-its-own-country planner fix
