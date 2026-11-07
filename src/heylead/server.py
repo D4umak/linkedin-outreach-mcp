@@ -47,6 +47,41 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.496 (2026-11-07)
+- Fix: clean up client workspace booking link inheritance and scope
+- Fix: fix undefined name 'status' in campaign_control tool
+- Fix: import Mapping for type hints
+- Fix: pass state to followup and reply pipelines
+- Fix: workspace booking link inheritance and stopped hold visibility
+- Fix workspace booking link inheritance and stop incorrect state passing (client)
+- the reading's bar, not a prorated target (api #5374)
+- impact contracts in devflow.md, delivery.md; incident note; semgrep guard (api #5374)
+- implementation plan for impact contracts slices 1-2 (api #5374)
+- impact-contract design for devflow outcomes (api #5374)
+- Fix: case-pm keeps the worked-example rule; contract markers checked like the review ones (api #5374)
+- New: the PM's round carries the impact contract block (api #5374)
+- the reading's bar, not a prorated target (api #5374)
+- impact contracts in devflow.md, delivery.md; incident note; semgrep guard (api #5374)
+- Fix: the hold's contract read trusts the body by its author (api #5374)
+- Fix: the model cannot shrink the bar; holds re-decide from the contract (api #5374)
+- Fix: a reading covers the days since the merge and says so (api #5374)
+- New: a not-met reading is its own hold (api #5374)
+- New: the day-7/14 readings carry the contract and decide met from the numbers (api #5374, AC4)
+- New: review_post renders the PM's contract block; review_markers validates contract markers (api #5374)
+- implementation plan for impact contracts slices 1-2 (api #5374)
+- impact-contract design for devflow outcomes (api #5374)
+- Fix: scope test-timer-without-cancel semgrep rule to tests and .semgrep
+- Fix: serial client suite isolation #4481
+- Fix: serial suite isolation across the client suite #4481
+- Fix: propagate state for workspace booking link inheritance Co-Authored-By: Claude Code <noreply@anthropic.com>
+- Fix: propagate state for workspace booking link inheritance Co-Authored-By: Claude Code <noreply@anthropic.com>
+- Fix: propagate state for workspace booking link inheritance
+- Fix: update designer form validation in review_markers.py
+- Fix: commit local parity/CI fixes before merge
+- Fix: restore parity for Claude hooks and update booking links logic
+- Fix: pass candidate state to offered_link and booking_context in heylead repo
+- New: workspace booking link inheritance parity (#3411)
+
 ## v0.10.495 (2026-11-07)
 - Fix: show LLM key hint on voice failure with local LLM key
 

@@ -451,7 +451,13 @@ async def run_edit_campaign(
         config = {}
 
     if booking_link:
-        from ..services.booking_links import BookingLinkInvalid, link_kind, link_line, normalise
+        from ..services.booking_links import (
+            BookingLinkInvalid,
+            link_kind,
+            link_line,
+            normalise,
+            save_workspace_booking_link_if_unset,
+        )
 
         try:
             booking_link = normalise(booking_link)
@@ -467,6 +473,11 @@ async def run_edit_campaign(
             config["booking_link_confirmed_page"] = confirmed
         # Repeat saves still explain an unconfirmed page and can confirm it.
         change_descriptions.append(link_line(booking_link, confirmed=confirmed))
+
+        # Propagate to workspace if it's not set there yet (#3411).
+        from ..db.async_bridge import run_db as _run_db
+        if await _run_db(save_workspace_booking_link_if_unset, booking_link, confirmed):
+            change_descriptions.append("Saved as default booking link for the workspace")
 
     if voice_mode:
         old_voice = config.get("voice_mode", "text_only")

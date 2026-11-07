@@ -5,7 +5,7 @@ The pinned fixture tests hold the host/path table in sync across all clients.
 from __future__ import annotations
 import json
 import re
-from typing import Any
+from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 KEY = "booking_link"
@@ -178,6 +178,10 @@ def stored_link(config: Any) -> str:
 
 
 
+def has_booking_link(config: Any) -> bool:
+    return bool(stored_link(config))
+
+
 def page_confirmed(config: Any) -> bool:
     """The owner kept this campaign's link though it reads as a website."""
     return config_of(config).get(CONFIRMED_KEY) is True
@@ -189,20 +193,23 @@ def stored_link_kind(config: Any) -> str:
     return link_kind(link) if link else ""
 
 
-def offered_link(config: Any) -> str:
-    """The link a prospect may be sent, or "" (#3021).
+def offered_link(
+    config: Any, org_id: str | None = None, *,
+    user_id: str | None = None, state: Mapping[str, Any] | None = None,
+) -> str:
+    """The link a prospect may be sent, or "" (#3021, #3411).
 
-    The stored link when it is a scheduler, or a page the owner kept
-    (``booking_link_page_ok``). An unconfirmed page is no booking target: a
-    meeting reply on it is held with ``no_booking_target``, like no link.
+    The campaign's link when it has one (and is a scheduler or confirmed).
+    If the campaign has no link, falls back to the workspace link.
+    An unconfirmed page is no booking target: it does NOT fall back.
     """
     cfg = config_of(config)
     link = stored_link(cfg)
-    if not link:
+    if link:
+        if link_kind(link) == SCHEDULER or page_confirmed(cfg):
+            return link
         return ""
-    if link_kind(link) == SCHEDULER or page_confirmed(cfg):
-        return link
-    return ""
+    return workspace_offered_link(org_id, user_id=user_id, state=state)
 
 
 def host_of(link: str) -> str:
@@ -223,6 +230,108 @@ def config_of(raw: Any) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def booking_context(config: Any) -> dict[str, Any]:
+def _profile_dict(state: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    profile_json = (state or {}).get("profile_json")
+    if profile_json:
+        return config_of(profile_json)
+    try:
+        from ..db.queries import get_setting
+        return config_of(get_setting("profile", "{}"))
+    except RuntimeError:
+        # get_db() on the loop
+        return {}
+
+
+def workspace_stored_link(
+    org_id: str | None = None, *, user_id: str | None = None,
+    state: Mapping[str, Any] | None = None,
+) -> str:
+    """The link the workspace profile carries, or ""."""
+    profile = _profile_dict(state)
+    return str(profile.get(KEY) or "").strip()
+
+
+def workspace_page_confirmed(
+    org_id: str | None = None, *, user_id: str | None = None,
+    state: Mapping[str, Any] | None = None,
+) -> bool:
+    """The owner kept the workspace link though it reads as a website."""
+    profile = _profile_dict(state)
+    return profile.get(CONFIRMED_KEY) is True
+
+
+def workspace_stored_link_kind(
+    org_id: str | None = None, *, user_id: str | None = None,
+    state: Mapping[str, Any] | None = None,
+) -> str:
+    """``link_kind`` of the workspace link, or "" with none."""
+    link = workspace_stored_link(org_id, user_id=user_id, state=state)
+    return link_kind(link) if link else ""
+
+
+def workspace_offered_link(
+    org_id: str | None = None, *, user_id: str | None = None,
+    state: Mapping[str, Any] | None = None,
+) -> str:
+    """The workspace link a prospect may be sent, or ""."""
+    link = workspace_stored_link(org_id, user_id=user_id, state=state)
+    if not link:
+        return ""
+    if link_kind(link) == SCHEDULER or workspace_page_confirmed(org_id, user_id=user_id, state=state):
+        return link
+    return ""
+
+
+def save_workspace_booking_link_if_unset(link: str, confirmed: bool) -> bool:
+    """Save link to workspace settings if KEY is currently empty.
+
+    Returns True if saved, False if it was already set or link was empty.
+    """
+    if not link:
+        return False
+    if workspace_stored_link():
+        return False
+
+    from ..db.schema import get_db
+    profile = _profile_dict()
+    profile[KEY] = link
+    profile[CONFIRMED_KEY] = confirmed
+
+    db = get_db()
+    try:
+        from ..db.queries import save_setting
+        save_setting("profile", profile)
+    finally:
+        db.close()
+    return True
+
+
+def booking_link_source(
+    config: Any, org_id: str | None = None, *,
+    user_id: str | None = None, state: Mapping[str, Any] | None = None,
+) -> str:
+    """"campaign" if the campaign has its own link, "workspace" if it inherits one, else "none"."""
+    if stored_link(config):
+        return "campaign"
+    if workspace_stored_link(org_id, user_id=user_id, state=state):
+        return "workspace"
+    return "none"
+
+
+def booking_context(
+    config: Any, org_id: str | None = None, *,
+    user_id: str | None = None, state: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Keep classification evidence with a link in reduced prompt contexts."""
-    return {KEY: offered_link(config), CONFIRMED_KEY: page_confirmed(config)}
+    link = stored_link(config)
+    confirmed = (
+        page_confirmed(config)
+        if link
+        else workspace_page_confirmed(org_id=org_id, user_id=user_id, state=state)
+    )
+    if not link:
+        link = workspace_offered_link(org_id, user_id=user_id, state=state)
+    return {
+        KEY: link,
+        CONFIRMED_KEY: confirmed,
+    }

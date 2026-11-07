@@ -71,7 +71,7 @@ def _inventory(campaign_id: str, limit: int) -> str:
     else:
         lines.append("Local scheduler mode gate: passed; runtime eligibility is not evaluated here.")
     lines.extend(["Approval setting: hosted message-approval policy is unavailable here.",
-                  "Standing delegation: not evaluated; existing settings govern this view.", "",
+                  "Standing delegations (evaluated): hosted standing mandates and rollout cohorts are evaluated on the cloud server; local settings govern this installation.", "",
                   "Installation agent settings:",
                   _mode_line("Audience research", icp_research_mode, profile, "icp_research_mode",
                              "enable_icp_research_agent", "installation setting"),
@@ -98,6 +98,7 @@ def _inventory(campaign_id: str, limit: int) -> str:
     if len(campaigns) > limit:
         lines.append("More campaigns omitted. Pass campaign_id for a complete campaign view.")
     lines.extend(["", "Act applies only to each agent's implemented actions.",
+                  "Strategy changes apply to subsequent sends only and never retract past sends.",
                   "Runtime quality, recipient and provider checks, approvals and conversation/campaign holds still apply.",
                   "These settings do not show that a message was sent or delivered.", "No settings changed."])
     return "\n".join(lines)
