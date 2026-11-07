@@ -1,6 +1,6 @@
 {
   "name": "heylead",
-  "version": "0.10.493",
+  "version": "0.10.494",
   "description": "LinkedIn outreach from Claude: connects the hosted HeyLead server and adds skills to start a campaign for a goal, approve waiting messages, answer replies, review results and pause. Campaigns are drafts until you launch them.",
   "author": {
     "name": "HeyLead",

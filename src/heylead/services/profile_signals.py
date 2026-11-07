@@ -216,6 +216,49 @@ def is_place_in_a_list(
     return any(_says(blob, loc) for loc in locations if not _is_this_country(loc))
 
 
+def _names(gaz: dict[str, Any]) -> list[str]:
+    return [_norm(a) for a in [gaz.get("label", "")] + list(gaz.get("aliases") or []) if a]
+
+
+def language_is_spoken_everywhere(
+    gaz: dict[str, Any], location_names: list[str] | None,
+) -> bool:
+    """Every place searched is one where this country's language is spoken.
+
+    The gazetteer's ``spoken_in`` lists them (German: Germany, Austria,
+    Switzerland, Liechtenstein, Luxembourg); without one, only the country
+    itself. A brief that also searches elsewhere ("German-speaking engineers
+    in the UK and Germany") still needs the tie for that half (api #5290 review).
+    """
+    places = [_norm(p) for p in (gaz.get("spoken_in") or [gaz.get("label", "")]) if p]
+    names = set(_names(gaz)) | set(places)
+    locations = [_norm(str(loc)) for loc in (location_names or []) if loc and _norm(str(loc))]
+    return bool(locations) and all(any(_says(loc, n) for n in names) for loc in locations)
+
+
+def is_searched_country(
+    gaz: dict[str, Any], text: str, location_names: list[str] | None,
+) -> bool:
+    """True when *text* asks for this country's language where it is spoken.
+
+    A country tie is for people away from the country ("Ukrainians in
+    Germany", "Nigerian founders in the UK and Nigeria"). A brief that asks
+    for a language ("German-speaking", "French speaking") and searches only
+    places where it is spoken names people the place already describes:
+    a brief for "German-speaking … in Germany, Austria and
+    Switzerland" was planned as a Germany tie, so a Head of Marketing in
+    Zurich or Bavaria whose profile named no German school, language or city
+    was turned down (api #5290).
+    """
+    blob = _norm(text)
+    if not any(
+        re.search(rf"(?<![\w-]){re.escape(n)}[\s-]+speaking(?!\w)", blob)
+        for n in _names(gaz)
+    ):
+        return False
+    return language_is_spoken_everywhere(gaz, location_names)
+
+
 def _match_gazetteer(
     text: str, location_names: list[str] | None = None,
 ) -> dict[str, Any] | None:
@@ -226,6 +269,8 @@ def _match_gazetteer(
     scored: list[tuple[int, dict[str, Any]]] = []
     for gaz in _load_all_gazetteers().values():
         if is_place_in_a_list(gaz, blob, location_names):
+            continue
+        if is_searched_country(gaz, blob, location_names):
             continue
         aliases = [gaz.get("label", "")] + list(gaz.get("aliases") or [])
         for alias in aliases:
@@ -381,6 +426,9 @@ def compile_profile_signals(
             code = str(existing.get("code") or "").lower()
             if code:
                 gaz = load_country_gazetteer(code)
+                # A tie stored without its brief: the places alone decide (api #5290 review).
+                if gaz and language_is_spoken_everywhere(gaz, location_names):
+                    gaz = None
     if gaz:
         spec = _spec_from_gazetteer(
             gaz, titles=titles, location_codes=location_codes,

@@ -47,6 +47,10 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.494 (2026-11-06)
+- Fix: client twin of review round 1
+- wip(api #5290): client twin of the language-in-its-own-country planner fix
+
 ## v0.10.493 (2026-11-06)
 - Fix: edit_campaign names the field, its count and the limit
 
