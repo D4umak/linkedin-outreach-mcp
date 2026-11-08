@@ -91,23 +91,24 @@ def _no_chat_key(account_id: str) -> str:
     return f"attendee_no_chat:{account_id}"
 
 
-async def _load_no_chat(account_id: str) -> tuple[dict[str, list[Any]], bool]:
-    """provider id → [checked at, outreach status] for this seat, unexpired and
-    for a remembered status only, and whether anything stored was dropped (so
-    the save drops it too)."""
+async def _load_no_chat(account_id: str, active_pids: set[str] | None = None) -> tuple[dict[str, list[Any]], bool]:
+    """provider id → [checked at, outreach status] for this seat, and whether
+    anything stored was dropped (pruned against active_pids or bad status)."""
     try:
         raw = await run_db(get_setting, _no_chat_key(account_id), {})
     except Exception:
         return {}, False
     if not isinstance(raw, dict):
         return {}, False
-    oldest = int(time.time()) - ATTENDEE_NO_CHAT_TTL_SECONDS
-    kept = {
-        pid: v for pid, v in raw.items()
-        if isinstance(v, list) and len(v) == 2
-        and isinstance(v[0], (int, float)) and v[0] > oldest
-        and v[1] in _NO_CHAT_STATUSES
-    }
+    kept = {}
+    for pid, v in raw.items():
+        if not (isinstance(v, list) and len(v) == 2 and isinstance(v[0], (int, float))):
+            continue
+        if v[1] not in _NO_CHAT_STATUSES:
+            continue
+        if active_pids is not None and pid not in active_pids:
+            continue
+        kept[pid] = v
     return kept, len(kept) != len(raw)
 
 
@@ -192,24 +193,47 @@ async def _revisit_off_page_threads(
         start = 0
     start %= len(candidates)
     ordered = candidates[start:] + candidates[:start]
-    batch = ordered[:REVISIT_THREADS_PER_SWEEP]
 
-    no_chat, pruned = await _load_no_chat(account_id)
+    active_no_chat_pids = {c[1] for c in candidates if c[2] in _NO_CHAT_STATUSES}
+    no_chat, pruned = await _load_no_chat(account_id, active_pids=active_no_chat_pids)
+    for _oid, pid, status in candidates:
+        memo = no_chat.get(pid)
+        if memo and memo[1] != status:
+            no_chat.pop(pid, None)
+            pruned = True
+
+    # Filter before slicing so remembered rows do not starve the sweep
+    # (D4umak/heylead-api#4712).
+    pollable = [
+        c for c in ordered
+        if (no_chat.get(c[1]) or [None, None])[1] != c[2]
+    ]
+    batch = pollable[:REVISIT_THREADS_PER_SWEEP]
+
+    # Find how many rows in 'ordered' we skipped to fill this batch
+    traversed = 0
+    if batch:
+        last_in_batch = batch[-1]
+        for i, c in enumerate(ordered):
+            if c == last_in_batch:
+                traversed = i + 1
+                break
+
     no_chat_before = dict(no_chat)
     found: list[dict[str, Any]] = []
     asked = 0
-    remembered = 0
     for _oid, pid, status in batch:
-        if (no_chat.get(pid) or [None, None])[1] == status:
-            # Unipile said "no messages" for this status within the TTL.
-            remembered += 1
-            continue
         try:
             msgs = await _attendee_messages_for_sweep(
                 client, account_id, pid, status, no_chat,
             )
         except (CircuitBreakerOpen, asyncio.TimeoutError) as e:
             logger.info("Reply revisit stopped early (%s) after %d thread(s)", e, asked)
+            # Stop traversed at the last one we actually asked
+            for i, c in enumerate(ordered):
+                if c[1] == pid:
+                    traversed = i
+                    break
             break
         if msgs is None:
             continue
@@ -232,19 +256,18 @@ async def _revisit_off_page_threads(
                 "timestamp": newest.get("timestamp"),
                 "_revisit": True,
             })
-    # A remembered row is passed over like an asked one, so the cursor moves
-    # past it instead of parking the rotation in front of it.
-    if asked + remembered:
+
+    if traversed:
         await run_db(
             save_setting, _REVISIT_CURSOR_KEY,
-            (start + asked + remembered) % len(candidates),
+            (start + traversed) % len(candidates),
         )
     if pruned or no_chat != no_chat_before:
         await _save_no_chat(account_id, no_chat)
     logger.info(
         "Reply revisit: %d of %d off-page thread(s) checked, %d skipped as known "
         "to have no messages, %d with a prospect message",
-        asked, len(candidates), remembered, len(found),
+        asked, len(candidates), traversed - asked, len(found),
     )
     return found
 

@@ -47,6 +47,18 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.498 (2026-11-08)
+- Fix: remove committed .venv-local, restore ATTENDEE_NO_CHAT_TTL_SECONDS, and align cursor test (#4712)
+- Fix: remove no-chat TTL and filter before slice to prevent sweep starvation (#4712)
+- guard: fix client semgrep rule fixtures for no-chat pre-slice filtering
+- Fix: satisfy semgrep and fix client NameError
+- Fix: restore from corruption and re-apply no_chat fixes
+- Fix: satisfy semgrep no-chat-pre-slice-filtering rule
+- Fix: satisfy semgrep no-chat-pre-slice-filtering rule
+- Fix: satisfy semgrep no-chat-pre-slice-filtering rule
+- Fix: rewrite no_chat filtering to satisfy semgrep rule
+- Fix: remove no-chat TTL and filter before slice to prevent sweep starvation (#4712)
+
 ## v0.10.497 (2026-11-08)
 - Fix: take wip-queued off an outcome a PR now serves (#5383)
 - Fix: every Popen fake serves subprocess.run as a context manager (api #5397)
