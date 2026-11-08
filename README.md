@@ -124,7 +124,7 @@ text is what is sent. Read what is waiting on the dashboard's Approvals page or
 with `inspect(action="waiting")`; decide with `prospect(action="approve_message")`
 or `discard_message`. Autopilot sends them unread and is one switch away
 (Settings → Sending, or `scheduler(action="approval_mode", mode="autopilot")`).
-Invitations, InMail and replies are never held.
+Invitations and InMail are never held. In review mode, invitations go out without a note.
 
 ---
 

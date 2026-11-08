@@ -47,6 +47,16 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.497 (2026-11-08)
+- Fix: take wip-queued off an outcome a PR now serves (#5383)
+- Fix: every Popen fake serves subprocess.run as a context manager (api #5397)
+- Fix: apply reviewer feedback on hold-reply wording (api #4522)
+- Fix: standardize long_reply contraction in held_note (api #4522)
+- Fix: synchronize held_note logic and suppress redundant held lines (api #4522)
+- Fix: standardize client wording and fix undefined name (api #4522)
+- Fix: unify hold-reply wording (#4522)
+- Fix: unify hold-reply wording (#4522)
+
 ## v0.10.496 (2026-11-07)
 - Fix: clean up client workspace booking link inheritance and scope
 - Fix: fix undefined name 'status' in campaign_control tool

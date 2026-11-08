@@ -2322,6 +2322,106 @@ def _acknowledged_handoffs(db: Any, narrowing: str = "", params: Sequence[Any] =
 # heylead-api unanswered_leads.STOPPED_CAMPAIGN_STATUSES). Paused is not here
 # on purpose: a pause is "not now".
 STOPPED_CAMPAIGN_STATUSES = frozenset({"archived", "deleted"})
+# The hold the stopped-campaign path writes (hold_reasons.CAMPAIGN_STOPPED).
+_CAMPAIGN_STOPPED = "campaign_stopped"
+
+
+def _stopped_hold(next_action: str | None) -> bool:
+    """A hold that says the campaign stopped and the reply is the owner's (#4307)."""
+    import json
+
+    try:
+        payload = json.loads(next_action or "")
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return (
+        isinstance(payload, dict)
+        and payload.get("type") == "hold_for_operator"
+        and payload.get("reason_code") == _CAMPAIGN_STOPPED
+    )
+
+
+def hidden_as_stopped(campaign_status: str | None, held_next_action: str | None = "") -> bool:
+    """True when a stopped campaign keeps this thread off every waiting list.
+
+    Twin of heylead-api unanswered_leads.hidden_as_stopped (#4307).
+    """
+    status = str(campaign_status or "")
+    if status not in STOPPED_CAMPAIGN_STATUSES:
+        return False
+    return not (status == "archived" and _stopped_hold(held_next_action))
+
+
+# A campaign_stopped hold outlives a resume: only these statuses make "the
+# campaign is <status>" true.
+_STOPPED_NOW = frozenset({"paused", "archived"})
+
+
+def stopped_hold_reason(campaign_status: str, hours: int) -> str:
+    """Needs attention's words for a reply held because its campaign stopped."""
+    from ..formatter import format_wait_age
+
+    age = format_wait_age(hours)
+    if campaign_status in _STOPPED_NOW:
+        return (
+            f"Held for you: the campaign is {campaign_status}, "
+            f"so HeyLead doesn't answer for it, unanswered {age}"
+        )
+    return f"Held for you: the campaign was stopped when they replied, unanswered {age}"
+
+
+def held_note(hold: dict[str, Any], campaign_status: str) -> str:
+    """The drawer's words under "Held for you", never the stored reason as written.
+
+    Twin of heylead-api unanswered_leads.held_note (#4307).
+    """
+    from .stopped_campaign_replies import stopped_reason
+
+    code = str(hold.get("reason_code") or "")
+    if code == "campaign_stopped":
+        if campaign_status in _STOPPED_NOW:
+            return stopped_reason(campaign_status)
+        return (
+            "The campaign was stopped when they replied, so HeyLead didn't answer. "
+            "Nothing has been sent; the reply is yours to answer."
+        )
+
+    # Twin of heylead-api hold_reasons.OWNER_WORDS
+    words = {
+        "language_issues": "the Ukrainian in the message still had mistakes after one rewrite",
+        "model_unavailable": "the model couldn't be reached",
+        "owner_answer": "they asked something only you can answer",
+        "still_unclear": "they answered the question about what they meant, and it is still not clear",
+        "no_booking_target": "they replied about a meeting and the campaign has no booking link",
+        "unsupported_claim": "the answer said something the campaign's facts don't back",
+        "claimed_action": "the answer said an invite, booking or email was sent when none was",
+        "unknown_link": "the answer carried a link that is not this campaign's booking link or one of its own",
+        "unresponsive": "the answer talked about something else, not what they said",
+        "file_unread": "they sent a file and no words, and HeyLead can't read the file",
+        "instruction_in_reply": "their message asked HeyLead to do something other than answer them",
+        "booking_link_offer": "you added a booking link and the answer offering it waits for you",
+        "starting_point": "HeyLead left this one to you and wrote a starting point you can change",
+        "rule_broken": "the finished text broke one of HeyLead's writing rules",
+        "proposal_link_missing": "the answer offered a call, and it could not go out with the campaign's booking link in it",
+        "campaign_stopped": "the campaign is paused or archived, so HeyLead doesn't answer for it",
+        "no_mailbox": "no email mailbox is connected to this workspace, so Kofi could not email your booking link",
+        "email_failed": "the email provider did not accept Kofi's booking-link email",
+        "invite_failed": "the calendar did not accept Kofi's invite",
+        "repeat_message": "the message repeated the one before it",
+        "same_opener": "the message opened the same way as the one before it",
+        "filler_followup": "the follow-up said nothing new",
+        "early_restart": "the pitch started again too soon after an unanswered message",
+        "fit_concern": "the message didn't fit the conversation",
+        "repeat_question": "the follow-up asked a question we had already asked",
+        "pitched_again": "the follow-up pitched again with nothing new for them",
+        "too_early": "the follow-up came before the campaign's planned gap",
+        "off_icp": "the person didn't fit the campaign's audience",
+        "needs_signals": "the message needed more about the person",
+        "needs_replan": "the plan for the person needed another look",
+        "needs_icp": "the audience needed another look",
+        "needs_rewrite": "the message needed rewriting",
+    }.get(code, "")
+    return f"{words[:1].upper()}{words[1:]}." if words else ""
 
 
 # The kinds of wait these rows carry; services.waiting_on_you names them for
@@ -2455,11 +2555,12 @@ def waiting_candidates(
             live.append({**_as_the_action(candidate, pending), "kind": HANDOFF})
             continue
         # Twin of heylead-api unanswered_leads (api #1260): an archived
-        # campaign sends nothing, so its "closing reply unsent" can never be
-        # sent and an engaged reply from a campaign someone stopped months
-        # ago is not an action anyone takes. A handoff (above) is a person's
-        # call and stays whatever the campaign's status; paused stays too.
-        if str(candidate.get("campaign_status") or "") in STOPPED_CAMPAIGN_STATUSES:
+        # campaign sends nothing (api #1080), with one exception: an archived
+        # campaign's reply HeyLead held for its owner (#4307). A handoff
+        # (above) is a person's call and stays whatever the campaign's status;
+        # paused stays too.
+        held_action = (held_by_id.get(oid) or {}).get("next_action") or ""
+        if hidden_as_stopped(candidate.get("campaign_status"), held_action):
             continue
         if _calendar_in_next_action(str(candidate.get("next_action") or "")):
             kind = HANDOFF
@@ -2478,6 +2579,11 @@ def waiting_candidates(
     for row in live:
         hours = max(0, (now - int(row.get("last_message_ts") or 0)) // 3600)
         sentiment = str(row.get("last_sentiment") or "")
+        if row["kind"] == HOLD and _stopped_hold(row.get("next_action")):
+            # Why nobody answered: the campaign stopped, not a sentiment (#4522).
+            row["reason"] = stopped_hold_reason(str(row.get("campaign_status") or ""), hours)
+            row["prospect_calendar_url"] = ""
+            continue
         if row["kind"] == HOLD and str(row["outreach_id"]) in held_only and sentiment != "negative":
             # Held before Needs attention's own query would admit it: say
             # what it is, not a sentiment the lane did not act on.

@@ -5,7 +5,7 @@ description: Review HeyLead messages waiting for approval before they go out on 
 
 # Approve waiting messages
 
-In approval mode, HeyLead writes opening messages and follow-ups and holds them until the user approves them. Invitations are not held. A workspace is in approval mode until the user switches to autopilot.
+In approval mode, HeyLead writes opening messages and follow-ups and holds them until the user approves them. Invitations are not held. In review mode, invitations go out without a note. A workspace is in approval mode until the user switches to autopilot.
 
 ## Steps
 

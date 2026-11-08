@@ -393,8 +393,9 @@ def campaign_plan(
             f"{send_when}: {pace_clause(daily, weekly, len(hours.get('days') or ALL_DAYS), ramp)}, {window}, "
             f"{_minutes(c.INVITE_DELAY_MIN)} to {_minutes(c.INVITE_DELAY_MAX)} minutes apart, "
             # The quoted sentence ends with its own full stop; a "." after the
-            # clause read 'assistant.".' (UI QA of #1561, F1).
-            "each with a short note in your voice.",
+            # clause read 'assistant.".' (UI QA of #1561, F1). In review mode
+            # the invitation carries no note (heylead-api#5378, Option B).
+            + ("each with a short note in your voice." if autopilot else "without a note (review mode)."),
             send_hint,
         ))
         steps.append(PlanStep("accept", "Accept", ACCEPT_LINE, "A few days later"))

@@ -93,8 +93,7 @@ def fresh_operator_holds(*, campaign_id: str = "", outreach_id: str = "") -> lis
     """
     params: list[Any] = []
     narrowing = q.narrowing_sql(campaign_id, outreach_id, params)
-    stopped = sorted(q.STOPPED_CAMPAIGN_STATUSES)
-    params += [*stopped, *_OPEN_STATUSES, *_INBOUND_ROLES, _HOLDS_MAX]
+    params += [*_OPEN_STATUSES, *_INBOUND_ROLES, _HOLDS_MAX]
     db = get_db()
     try:
         rows = db.execute(
@@ -109,7 +108,6 @@ def fresh_operator_holds(*, campaign_id: str = "", outreach_id: str = "") -> lis
                 LEFT JOIN campaigns ca ON ca.id = o.campaign_id
                 WHERE json_valid(o.next_action)
                   AND json_extract(o.next_action, '$.type') = 'hold_for_operator'{narrowing}
-                  AND COALESCE(ca.status, '') NOT IN ({", ".join("?" for _ in stopped)})
                   AND o.status IN ({", ".join("?" for _ in _OPEN_STATUSES)})
                   AND m.id = (
                       SELECT m2.id FROM messages m2
@@ -127,6 +125,8 @@ def fresh_operator_holds(*, campaign_id: str = "", outreach_id: str = "") -> lis
     out: list[dict[str, Any]] = []
     for raw in rows:
         row = dict(raw)
+        if q.hidden_as_stopped(row.get("campaign_status"), row.get("next_action")):
+            continue
         hold = parse_operator_hold(row.get("next_action"))
         if not hold or not is_fresh_hold(hold, int(row.get("last_message_ts") or 0)):
             continue
@@ -157,7 +157,10 @@ def who_is_waiting(
         outreach_id=outreach_id, held=held,
     )
     held_because = {
-        str(h["outreach_id"]): str((h.get("hold") or {}).get("reason") or "").strip()
+        str(h["outreach_id"]): (
+            q.held_note(h["hold"], str(h.get("campaign_status") or ""))
+            or str((h.get("hold") or {}).get("reason") or "").strip()
+        )
         for h in held
     }
     people: list[Waiting] = []
@@ -229,7 +232,7 @@ def _person_lines(person: Waiting) -> list[str]:
     who = person_line(person.name or "Unknown", person.linkedin_url,
                       title=person.title, company=person.company)
     lines = [f"• {who}", f"  {person.why}"]
-    if person.held_because:
+    if person.held_because and not person.why.startswith("Held for you:"):
         # The reason is shown whole: it says what the person must decide.
         lines.append(f"  held: {' '.join(str(person.held_because).split())}")
     if person.preview:
