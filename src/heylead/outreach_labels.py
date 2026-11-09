@@ -137,6 +137,9 @@ LAST_ACTION_LABELS: dict[str, str] = {
     "reply_status_repaired": "Status corrected",
     "send_blocked": "Not sent: stopped by a check before sending",
     "send_deferred_no_sender_profile": "Waiting: your profile is still being read",
+    # A first send waits for the owner's voice; at the 2 h ceiling it goes plain (api #5379).
+    "send_deferred_no_voice": "Waiting: HeyLead is still learning your voice",
+    "send_released_without_voice": "Written in a plain style: your voice wasn't ready in time",
     "send_dm_rate_limited": "Paused by LinkedIn",
     "send_fit_agent_decision": "Draft checked before sending",
     "send_fit_followups_ended": "Follow-ups stopped: each draft was held",

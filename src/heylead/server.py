@@ -47,6 +47,22 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.499 (2026-11-09)
+- New: last-action words for the first-send voice wait (api #5379)
+- Fix: a hotfix/incident label is an exemption beside a contract too, as in the api and weekly.py
+- Fix: an exemption outcome gets no model-word reading, whatever Measured by names
+- archive the oldest designer line to stay at 15
+- the active campaign page #5378's review missed (F1)
+- Fix: synchronize hook files and tests across repos #4167
+- Fix: synchronize hook files and tests across repos #4167
+- Fix: ruff and logic fixes for cross-repo parity #4167 Co-Authored-By: Claude Code <noreply@anthropic.com>
+- Fix: ruff and logic fixes for cross-repo parity #4167 Co-Authored-By: Claude Code <noreply@anthropic.com>
+- Fix: restore #3903 size warning ref and condense wip_gate imports
+- Fix: unify hook path resolution and branch-aware testing
+- Fix: unify hook path resolution and branch-aware testing
+- Fix: unify hook path resolution and branch-aware testing
+- New: unify PR gates across three repos (#4167)
+
 ## v0.10.498 (2026-11-08)
 - Fix: remove committed .venv-local, restore ATTENDEE_NO_CHAT_TTL_SECONDS, and align cursor test (#4712)
 - Fix: remove no-chat TTL and filter before slice to prevent sweep starvation (#4712)
