@@ -33,6 +33,7 @@ from ..services.cloud_sync import (
     sync_campaign_status_explained,
 )
 from ..services.count_words import count_noun
+from ..services import icp_hold
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ _PAUSE_SKIP_MARKER = "campaign_paused"
 
 
 async def _sync_active_to_host(
-    campaign_id: str, *, caller: str, reason: str,
+    campaign_id: str, *, caller: str, reason: str, icp_hold_ok: bool = False,
 ) -> tuple[bool, str]:
     """Resume on the host; if the row is missing, push just this campaign once.
 
@@ -54,6 +55,7 @@ async def _sync_active_to_host(
     """
     synced, detail = await sync_campaign_status_explained(
         campaign_id, STATUS_ACTIVE, caller=caller, reason=reason,
+        icp_hold_ok=icp_hold_ok,
     )
     if synced or not config.is_backend_mode():
         return synced, detail
@@ -66,10 +68,36 @@ async def _sync_active_to_host(
             return False, str(result.get("error") or "")
         return await sync_campaign_status_explained(
             campaign_id, STATUS_ACTIVE, caller=caller, reason=reason,
+            icp_hold_ok=icp_hold_ok,
         )
     except Exception as e:
         logger.warning("Targeted campaign push after resume miss failed: %s", e)
         return False, str(e)
+
+
+def _keep_off_for_held_icp(
+    campaign_id: str, campaign_name: str, status: str, *, repark: bool = False,
+) -> None:
+    """Put the local row back where it was after the api's 409 icp_held.
+
+    The cloud kept the campaign (a draft, or paused) because its target is
+    held; a local row left active would read as running while nothing sends
+    (heylead-api#5380). A resume also re-parks the queue it un-parked.
+    """
+    if repark:
+        _park_pending_outreaches(campaign_id)
+    update_campaign(campaign_id, status=status)
+    log_action(
+        "campaign_status_change", result=status,
+        details={
+            "campaign_id": campaign_id,
+            "campaign_name": campaign_name,
+            "old_status": STATUS_ACTIVE,
+            "new_status": status,
+            "changed_by": "system",
+            "reason": "icp_held (the cloud refused: the research agent held the target)",
+        },
+    )
 
 
 def _pause_retry_warning(campaign_id: str) -> str:
@@ -254,6 +282,11 @@ async def resume_observed_campaigns_in_cloud(
             outcome, detail = "failed", str(e)
         if outcome != "failed":
             await run_db(_set_pending_cloud_resume, cid, False)
+        held = icp_hold.icp_held_refusal(detail) if outcome == "refused" else None
+        if held:
+            # The cloud keeps it a draft until the owner answers (#5380).
+            await run_db(_keep_off_for_held_icp, cid, row["name"], STATUS_DRAFT)
+            outcome, detail = "icp_held", icp_hold.refusal_message(held)
         outcomes.append({**row, "outcome": outcome, "detail": detail})
     return outcomes
 
@@ -282,6 +315,8 @@ def format_cloud_resume_report(outcomes: list[dict]) -> str:
                 f"- {name}: completed in the cloud, so it was not restarted and "
                 f"will not send. Run {retry} if you want it to send again."
             )
+        elif outcome == "icp_held":
+            lines.append(f"- {name}: back to a draft. {o.get('detail') or ''}".rstrip())
         elif outcome == "refused":
             why = o.get("detail") or "refused by the backend"
             lines.append(
@@ -555,7 +590,7 @@ async def _select_campaign_to_start(
     return campaign, campaign_id, ""
 
 
-async def run_launch_campaign(campaign_id: str = "") -> str:
+async def run_launch_campaign(campaign_id: str = "", icp_hold_ok: bool = False) -> str:
     """Start outreach for a draft campaign.
 
     Campaigns are created as drafts so that building one never sends anything.
@@ -596,6 +631,15 @@ async def run_launch_campaign(campaign_id: str = "") -> str:
     ask = _language.language_needs_asking(_cfg, parse_campaign_context(campaign))
     if ask:
         return _language.not_launched_text(ask)
+
+    # The research agent held this campaign's target (heylead-api#5380):
+    # nothing goes active until the owner answers. icp_hold_ok is their
+    # "launch anyway"; a hosted workspace's api asks the same on /resume.
+    held = await run_db(icp_hold.held_icp_for_config, _cfg)
+    if held and not icp_hold_ok:
+        return icp_hold.not_started_text(held, action="launch")
+    if held:
+        await run_db(icp_hold.answer_icp_hold, held["icp_id"], "launch_anyway")
 
     status = campaign.get("status", "")
     observing = get_scheduler_mode() == "observe"
@@ -666,8 +710,13 @@ async def run_launch_campaign(campaign_id: str = "") -> str:
         ])
 
     synced, _host_detail = await _sync_active_to_host(
-        campaign_id, caller="user", reason="manual_launch",
+        campaign_id, caller="user", reason="manual_launch", icp_hold_ok=icp_hold_ok,
     )
+    held_refusal = None if synced else icp_hold.icp_held_refusal(_host_detail)
+    if held_refusal:
+        # The api kept it a draft (409 icp_held): so does this machine.
+        await run_db(_keep_off_for_held_icp, campaign_id, campaign["name"], status)
+        return icp_hold.refusal_message(held_refusal, action="launch")
     unconfirmed = _language.is_language_unconfirmed(_host_detail)
     if not synced and unconfirmed:
         # The api asked the same question (409 language_unconfirmed): nothing
@@ -819,7 +868,7 @@ async def run_campaign_plan(campaign_id: str = "") -> str:
     return f"Campaign '{name}'\n\n" + await plan_text_for(campaign_id, campaign)
 
 
-async def run_resume_campaign(campaign_id: str = "") -> str:
+async def run_resume_campaign(campaign_id: str = "", icp_hold_ok: bool = False) -> str:
     """Resume a paused campaign, re-enabling outreach.
 
     If no campaign_id is provided, resumes the first paused campaign found.
@@ -872,7 +921,13 @@ async def run_resume_campaign(campaign_id: str = "") -> str:
             # and an archived campaign comes back as a 409 with its reason.
             synced, host_detail = await _sync_active_to_host(
                 campaign_id, caller="user", reason="manual_resume_retry",
+                icp_hold_ok=icp_hold_ok,
             )
+            held_refusal = None if synced else icp_hold.icp_held_refusal(host_detail)
+            if held_refusal:
+                # Active here, held as a draft in the cloud (#5380).
+                await run_db(_keep_off_for_held_icp, campaign_id, campaign["name"], STATUS_DRAFT)
+                return icp_hold.refusal_message(held_refusal, action="launch")
             if synced:
                 await run_db(_set_pending_cloud_resume, campaign_id, False)
                 cloud_line = "The resume was sent to the cloud scheduler again."
@@ -903,6 +958,13 @@ async def run_resume_campaign(campaign_id: str = "") -> str:
     missing = refuse_without_project_brief(campaign)
     if missing:
         return missing
+
+    # Same gate as launch (heylead-api#5380): a held target stays paused.
+    held = await run_db(icp_hold.held_icp_for_config, _campaign_cfg(campaign))
+    if held and not icp_hold_ok:
+        return icp_hold.not_started_text(held, action="resume")
+    if held:
+        await run_db(icp_hold.answer_icp_hold, held["icp_id"], "launch_anyway")
 
     # Resume it, restore the parked queue, and clear pause metadata
     restored = await run_db(_unpark_paused_outreaches, campaign_id)
@@ -986,8 +1048,15 @@ async def run_resume_campaign(campaign_id: str = "") -> str:
 
     # Sync to backend so cloud scheduler resumes
     synced, host_detail = await _sync_active_to_host(
-        campaign_id, caller="user", reason="manual_resume",
+        campaign_id, caller="user", reason="manual_resume", icp_hold_ok=icp_hold_ok,
     )
+    held_refusal = None if synced else icp_hold.icp_held_refusal(host_detail)
+    if held_refusal:
+        # The api kept it paused (409 icp_held): so does this machine.
+        await run_db(queries.merge_campaign_config_delta, campaign_id, cfg, cfg_before)
+        await run_db(_keep_off_for_held_icp, campaign_id, campaign["name"], "paused",
+                     repark=True)
+        return icp_hold.refusal_message(held_refusal, action="resume")
     if synced:
         await run_db(_set_pending_cloud_resume, campaign_id, False)
     logger.info(

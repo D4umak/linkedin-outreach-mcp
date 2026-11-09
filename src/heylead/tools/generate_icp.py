@@ -307,7 +307,9 @@ async def run_generate_icp(
     if watchlist_info:
         output += watchlist_info
     if research_note:
-        output += f"\n\nICP research: {research_note}"
+        # An act-mode hold reads as a sentence (heylead-api#5380, designer round 2).
+        sep = " " if research_note.startswith("held this target:") else ": "
+        output += f"\n\nICP research{sep}{research_note}"
     return output
 
 

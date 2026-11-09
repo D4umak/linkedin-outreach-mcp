@@ -65,6 +65,7 @@ REASON_NO_ACCOUNT = "no LinkedIn account connected"
 REASON_COOLDOWN = "waiting on cooldown"
 REASON_NO_ICP = "no usable ICP"
 REASON_CLOUD = "left to the cloud scheduler"
+REASON_ICP_HELD = "target held by ICP research until the owner answers"
 
 # The job is granted 44s at best (_TICK_JOB_DEADLINE_SECONDS). A run that is
 # still inside LinkedIn search when asyncio.wait_for fires has no return
@@ -190,6 +191,13 @@ async def refill_campaigns(budget_seconds: float | None = None) -> str:
             and now - last_refill < CAMPAIGN_REFILL_COOLDOWN_HOURS * 3600
         ):
             _passed_over(REASON_COOLDOWN)
+            continue
+
+        # The research agent held this campaign's target (heylead-api#5380):
+        # nobody new is added until the owner answers launch_anyway or edits it.
+        from .icp_hold import held_icp_for_config
+        if await run_db(held_icp_for_config, config):
+            _passed_over(REASON_ICP_HELD)
             continue
 
         # Parse ICP

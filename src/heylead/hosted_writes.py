@@ -25,7 +25,7 @@ dashboard page is built with ``dashboard_links.dashboard_url``.
 
 from __future__ import annotations
 
-from . import config
+from . import config, constants
 from .dashboard_links import dashboard_url
 
 
@@ -34,9 +34,27 @@ def laptop_writes_refused() -> bool:
 
     The same predicate the daemon uses to keep SchedulerEngine off
     (``cloud_sync.local_scheduler_engine_enabled`` is its negation), read
-    live from config so a sign-in or sign-out takes effect at once.
+    live from config so a sign-in or sign-out takes effect at once. A hosted
+    install whose sign-in lapsed is still hosted (heylead-api#5541).
     """
-    return config.is_backend_mode()
+    return not config.is_self_hosted()
+
+
+def not_signed_in_reply(outcome: str) -> str:
+    """What a chat tool answers on a hosted install with no sign-in token.
+
+    ``outcome`` says what did not happen ("nothing was sent"). The sentence is
+    true whether the sign-in lapsed or was never made, and it ends on the one
+    step that works there: paste a fresh setup message. Until heylead-api#5541
+    such a machine was told its "active campaigns send on their own" and sent
+    to tools that need the sign-in. The words are the designer review's on
+    that issue (C1, B).
+    """
+    return (
+        f"You're not signed in to HeyLead on this machine, so {outcome}. "
+        "HeyLead sends from the cloud, never from this machine. "
+        f"To sign in, {constants.WHERE_TO_COPY}"
+    )
 
 
 class LaptopWriteRefused(RuntimeError):

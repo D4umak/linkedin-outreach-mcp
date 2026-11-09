@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import re
 
-from ..constants import SENIORITY_KEYWORDS
+from ..constants import ROLE_OWNER_NOUNS, SENIORITY_KEYWORDS
 from ..textutil import contains_term
 
 __all__ = [
@@ -34,6 +34,9 @@ __all__ = [
     "normalize_seniority",
     "normalize_seniority_list",
     "infer_seniority_level",
+    "names_role_owner",
+    "without_role_owners",
+    "mentions_owner",
     "states_seniority",
     "is_decision_maker",
     "decision_maker_share",
@@ -129,6 +132,45 @@ def normalize_seniority_list(values: object) -> list[str]:
     return out
 
 
+# "<role noun> Owner": the whole phrase, so neither "owner" nor the role noun
+# ("business" of "Business Process Owner") is left to match an ICP's "Owner"
+# or "Business Owner" word by word (heylead-api #5470). Longest noun first,
+# so "technical product owner" goes as one phrase. People write a space, a
+# non-breaking space, a hyphen or a dash between the words.
+_ROLE_OWNER_SEP = r"[\s\u00a0\-\u2010-\u2014]+"
+_ROLE_OWNER_RE = re.compile(
+    r"(?<![a-z0-9])(?:"
+    + "|".join(
+        _ROLE_OWNER_SEP.join(re.escape(w) for w in noun.split())
+        for noun in sorted(ROLE_OWNER_NOUNS, key=len, reverse=True)
+    )
+    + r")" + _ROLE_OWNER_SEP + r"owners?(?![a-z0-9])",
+    re.IGNORECASE,
+)
+_OWNER_WORD_RE = re.compile(r"(?<![a-z0-9])owners?(?![a-z0-9])", re.IGNORECASE)
+
+
+def without_role_owners(text: str | None) -> str:
+    """*text* with every "<role noun> Owner" phrase replaced by a bar.
+
+    "Senior Product Owner" -> "Senior | ": the person is senior, and nothing
+    in what is left says they own a business. A real ownership elsewhere in
+    the same title ("Product Owner and Owner of a bakery") is kept. The bar
+    stops the in-order word matchers from bridging across the gap.
+    """
+    return _ROLE_OWNER_RE.sub(" | ", str(text or ""))
+
+
+def names_role_owner(text: str | None) -> bool:
+    """True when *text* holds a "<role noun> Owner" phrase ("Product Owner")."""
+    return bool(_ROLE_OWNER_RE.search(str(text or "")))
+
+
+def mentions_owner(text: str | None) -> bool:
+    """True when *text* holds the word "owner(s)" at all ("Co-owner" too)."""
+    return bool(_OWNER_WORD_RE.search(str(text or "")))
+
+
 def infer_seniority_level(title: str | None) -> str | None:
     """The level a title *states*, or ``None`` when it states none.
 
@@ -136,7 +178,9 @@ def infer_seniority_level(title: str | None) -> str | None:
     with no level word returns ``None``. Guessing "manager" is what handed
     0.15 of free scoring weight to every unreadable headline.
     """
-    text = str(title or "").strip().lower()
+    # "Product Owner" is a role, not a rung: the bare "owner" keyword would
+    # put it above every CEO (heylead-api #5470).
+    text = without_role_owners(title).strip().lower()
     if not text:
         return None
     # "president" is a cxo keyword and it is a whole word inside "vice
@@ -253,6 +297,12 @@ def levels_named(text: str | None) -> list[str]:
         level = infer_seniority_level(phrase)
         if level:
             found.add(level)
+        elif names_role_owner(phrase):
+            # "Product Owners at SaaS companies": a role owner states no rung,
+            # and the people who hold it are senior or manager level. Keep
+            # those, or the decision-maker floor drops every Senior Product
+            # Owner the brief asked for (heylead-api #5470).
+            found.update(("senior", "manager"))
     return [lvl for lvl in SENIORITY_ORDER if lvl in found]
 
 

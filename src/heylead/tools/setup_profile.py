@@ -38,7 +38,7 @@ from ..config import (
     set_api_key,
     set_backend_config,
 )
-from ..constants import DEFAULT_BACKEND_URL, GEMINI_KEY_URL, LOGIN_URL_PATH
+from ..constants import DEFAULT_BACKEND_URL, GEMINI_KEY_URL, LOGIN_URL_PATH, WHERE_TO_COPY
 from ..db.queries import get_setting, save_setting
 from ..formatter import format_voice_reply, voice_posts_line
 from ..linkedin import (
@@ -57,11 +57,9 @@ _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 # Test seam: None means the real network transport.
 _TOKEN_CHECK_TRANSPORT: httpx.AsyncBaseTransport | None = None
 
-# Where a setup message comes from. Both refusals end on this sentence.
-WHERE_TO_COPY = (
-    f"copy a fresh setup message from {DEFAULT_BACKEND_URL}{LOGIN_URL_PATH} "
-    "(or Settings → Integrations → Chat client on the dashboard) and paste it here."
-)
+# Where a setup message comes from: constants.WHERE_TO_COPY. Both refusals end
+# on it, and so does the reply a machine with no sign-in gets
+# (hosted_writes.not_signed_in_reply, heylead-api#5541).
 
 # First-time setup with an unreachable backend stores the token and carries on
 # with no workspace selected — every later call is then implicit and

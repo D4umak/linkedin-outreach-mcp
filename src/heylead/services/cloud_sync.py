@@ -848,8 +848,9 @@ def cancel_cloud_owned_pending_jobs() -> int:
 
 
 def local_cloud_owns_sending() -> bool:
-    """True for every hosted account; the twin of local_scheduler_engine_enabled."""
-    return config.is_backend_mode()
+    """True for every hosted account, signed in or not; the twin of
+    local_scheduler_engine_enabled."""
+    return not config.is_self_hosted()
 
 
 def local_scheduler_engine_enabled() -> bool:
@@ -858,10 +859,34 @@ def local_scheduler_engine_enabled() -> bool:
 
     This used to read ``sending_host``, and a stored ``local`` opted the
     laptop back in. That is how a new user's laptop sent, spawned and alerted
-    overnight on 4-5 Oct 2026 (heylead-api#2120). Only an install with no
-    backend runs the engine.
+    overnight on 4-5 Oct 2026 (heylead-api#2120).
+
+    Then it read "no sign-in token" as "no backend". A hosted install whose
+    sign-in lapsed has no token, so from 6 Nov 2026 Denys's Mac ran the
+    engine and failed 1,125 local jobs in a day with «Unipile not
+    configured» (heylead-api#5541). Only a self-hosted install, no sign-in
+    and its own Unipile key, runs the engine.
     """
-    return not config.is_backend_mode()
+    return config.is_self_hosted()
+
+
+def sign_in_lapsed_line() -> str:
+    """The line a sync-only start logs on a hosted install with no live sign-in, else "".
+
+    The daemon and the MCP server log it once per start, next to their
+    sync-only line, so the log says why this machine is quiet and how to
+    fix it (heylead-api#5541). The words are true whether the sign-in lapsed
+    or was never made, and say "syncs nothing" because a machine with no
+    token makes no call at all (the designer review's A on that issue).
+    """
+    why = config.sign_in_lapsed()
+    if not why:
+        return ""
+    return (
+        f"HeyLead is not signed in on this machine ({why}): it sends nothing "
+        f"and syncs nothing. To sign in, {constants.SETUP_MESSAGE_ROUTE} and "
+        "paste it into your chat; setup_profile stores its token."
+    )
 
 
 # A cloud-owned workspace is written by the cloud: it plans the jobs, sends the
@@ -2044,6 +2069,14 @@ async def push_locally_authored_records() -> None:
         await _sync_icps_to_cloud()
     except Exception as e:
         logger.warning("ICP sync failed (non-fatal): %s", e)
+
+    # After the ICPs: a research hold the api answered 404 for (its ICP was
+    # not ingested yet) is posted again now (heylead-api#5380).
+    try:
+        from .icp_hold import retry_pending_icp_holds
+        await retry_pending_icp_holds()
+    except Exception as e:
+        logger.warning("ICP hold retry failed (non-fatal): %s", e)
 
 
 async def _sync_signals_to_cloud() -> None:
@@ -3556,19 +3589,24 @@ async def sync_campaign_status_explained(
     *,
     caller: str = "user",
     reason: str = "",
+    icp_hold_ok: bool = False,
 ) -> tuple[bool, str]:
     """Like sync_campaign_status, plus the backend's refusal text.
 
     The bool stays the same contract. The string is the FastAPI detail on a
-    refused call (a 409 on an archived row), or "" when there is nothing
-    useful to show the user.
+    refused call (a 409 on an archived row, or a held ICP's 409 ``icp_held``
+    as JSON text), or "" when there is nothing useful to show the user.
+
+    A resume carries ``{"icp_hold_ok": bool}``: True is the owner's "launch
+    anyway" on a target the research agent held (heylead-api#5380).
     """
     if not config.is_backend_mode():
         return True, ""
 
     action = "pause" if status == "paused" else "resume"
-    outcome, detail = await _campaign_scope_request(
-        "post", f"/api/v1/campaigns/{campaign_id}/{action}"
+    outcome, detail, _status = await _campaign_scope_request_full(
+        "post", f"/api/v1/campaigns/{campaign_id}/{action}",
+        json_body={"icp_hold_ok": bool(icp_hold_ok)} if action == "resume" else None,
     )
     if outcome == "ok":
         logger.info(
@@ -3592,6 +3630,7 @@ _DEFINITIVE_REFUSAL_STATUSES = (409, 410)
 
 async def resume_campaign_in_cloud_classified(
     campaign_id: str, *, caller: str = "user", reason: str = "",
+    icp_hold_ok: bool = False,
 ) -> tuple[str, str]:
     """POST /campaigns/{id}/resume and say what kind of answer came back.
 
@@ -3602,7 +3641,8 @@ async def resume_campaign_in_cloud_classified(
     if not config.is_backend_mode():
         return "ok", ""
     outcome, detail, status = await _campaign_scope_request_full(
-        "post", f"/api/v1/campaigns/{campaign_id}/resume"
+        "post", f"/api/v1/campaigns/{campaign_id}/resume",
+        json_body={"icp_hold_ok": bool(icp_hold_ok)},
     )
     if outcome == "ok":
         logger.info(
@@ -3950,6 +3990,10 @@ def _response_reason(resp: Any) -> str:
     """
     try:
         body = resp.json()
+        if isinstance(body, dict) and isinstance(body.get("detail"), dict):
+            # A structured refusal ({code, ...}: icp_held, language_unconfirmed)
+            # stays parseable JSON and whole: its message is shown as written.
+            return json.dumps(body["detail"])[:4000]
         if isinstance(body, dict) and body.get("detail"):
             return str(body["detail"])[:300]
     except Exception:
@@ -3967,7 +4011,7 @@ async def _campaign_scope_request(method: str, path: str) -> tuple[str, str]:
 
 
 async def _campaign_scope_request_full(
-    method: str, path: str,
+    method: str, path: str, *, json_body: dict | None = None,
 ) -> tuple[str, str, int | None]:
     """Issue a per-campaign backend request, following the campaign across
     workspaces on 404.
@@ -3986,10 +4030,11 @@ async def _campaign_scope_request_full(
     caller can tell a refusal (409) from a failure worth retrying.
     """
     url = f"{_base_url()}{path}"
+    body_kw = {"json": json_body} if json_body is not None else {}
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         send = getattr(client, method)
         try:
-            resp = await send(url, headers=_headers())
+            resp = await send(url, headers=_headers(), **body_kw)
         except httpx.HTTPError as e:
             logger.warning("Backend %s %s failed: %s", method.upper(), path, e)
             return "error", str(e), None
@@ -4035,7 +4080,7 @@ async def _campaign_scope_request_full(
             if scope == active:
                 continue
             try:
-                resp = await send(url, headers=_scope_headers(scope))
+                resp = await send(url, headers=_scope_headers(scope), **body_kw)
             except httpx.HTTPError:
                 saw_error = True
                 continue
@@ -4362,8 +4407,19 @@ async def sync_campaign_settings(campaign_id: str, settings: dict) -> bool:
 
     Returns True if sync succeeded.
     """
+    ok, _reply = await push_campaign_settings(campaign_id, settings)
+    return ok
+
+
+async def push_campaign_settings(campaign_id: str, settings: dict) -> tuple[bool, dict]:
+    """Push campaign settings and return (succeeded, the backend's answer).
+
+    The answer carries ``notice`` when a chosen day is one the workspace window
+    blocks, or ``detail`` when the backend refused the change, such as a day
+    set that sends on no day (heylead-api#5516). ``{}`` when nothing was read.
+    """
     if not config.is_backend_mode():
-        return False
+        return False, {}
 
     base = _base_url()
     url = f"{base}/api/v1/campaigns/{campaign_id}/settings"
@@ -4373,7 +4429,18 @@ async def sync_campaign_settings(campaign_id: str, settings: dict) -> bool:
             resp = await client.patch(url, json=settings, headers=_headers())
             resp.raise_for_status()
             logger.info("Synced campaign %s settings to backend: %s", campaign_id, list(settings.keys()))
-            return True
+            try:
+                body = resp.json()
+            except ValueError:
+                body = {}
+            return True, body if isinstance(body, dict) else {}
+        except httpx.HTTPStatusError as e:
+            logger.warning("Backend settings sync failed for %s: %s", campaign_id, e)
+            try:
+                body = e.response.json()
+            except ValueError:
+                body = {}
+            return False, body if isinstance(body, dict) else {}
         except httpx.HTTPError as e:
             logger.warning("Backend settings sync failed for %s: %s", campaign_id, e)
-            return False
+            return False, {}

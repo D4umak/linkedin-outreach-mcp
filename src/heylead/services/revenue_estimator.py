@@ -18,7 +18,6 @@ from typing import Any
 from ..constants import (
     HEADCOUNT_BASE_ACV,
     INDUSTRY_MULTIPLIERS,
-    SENIORITY_KEYWORDS,
     SENIORITY_MULTIPLIERS,
 )
 from ..db.async_bridge import run_db
@@ -169,21 +168,18 @@ def extract_industry(
 
 
 def infer_seniority(title: str) -> str:
-    """Infer seniority level from job title using keyword matching."""
+    """Infer seniority level from job title.
+
+    Reads the one vocabulary in ``services/seniority.py``; its private walk
+    over SENIORITY_KEYWORDS read "Product Owner" as an owner and "Vice
+    President" as a C-level (heylead-api #5470). Its own defaults stay: no
+    title is entry, a title that states no level is manager.
+    """
     if not title:
         return "entry"
-    title_lower = title.lower()
+    from .seniority import infer_seniority_level
 
-    # Check each seniority level in priority order (highest first).
-    # Whole-word matching, not substring: "cto" is inside "director" and
-    # "successfactors", "vp" inside "vpn", "lead" inside "leadership".
-    for level in ("owner", "cxo", "vp", "director", "manager", "senior", "entry"):
-        keywords = SENIORITY_KEYWORDS.get(level, [])
-        for kw in keywords:
-            if contains_term(title_lower, kw):
-                return level
-
-    return "manager"  # Default for unrecognized titles
+    return infer_seniority_level(title) or "manager"
 
 
 def _headcount_to_acv(headcount: int | None) -> int:

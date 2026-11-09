@@ -17,6 +17,7 @@ async def run_campaign(
     action: str,
     campaign_id: str = "",
     confirm: bool = False,
+    icp_hold_ok: bool = False,
 ) -> str:
     """Control campaign lifecycle.
 
@@ -41,12 +42,14 @@ async def run_campaign(
             clear_coordinator_hold. Auto-selects if empty for other actions.
         confirm: Must be True for delete, and to archive a campaign that
             still has pending/connected/invited outreach.
+        icp_hold_ok: launch and resume only. True is the user's "launch
+            anyway" on a target the ICP research agent held (heylead-api#5380).
     """
     action = action.lower().strip()
 
     if action in ("launch", "start"):
-        from .campaign_control import run_launch_campaign
-        return await run_launch_campaign(campaign_id)
+        from . import campaign_control
+        return await campaign_control.run_launch_campaign(campaign_id, icp_hold_ok=icp_hold_ok)
 
     # Deliberately not aliased to 'observe': scheduler(action='observe') sets
     # the mode, and one word meaning two things across two tools is how the
@@ -64,8 +67,8 @@ async def run_campaign(
         return await run_pause_campaign(campaign_id)
 
     if action == "resume":
-        from .campaign_control import run_resume_campaign
-        return await run_resume_campaign(campaign_id)
+        from . import campaign_control
+        return await campaign_control.run_resume_campaign(campaign_id, icp_hold_ok=icp_hold_ok)
 
     if action == "archive":
         from .archive_campaign import run_archive_campaign

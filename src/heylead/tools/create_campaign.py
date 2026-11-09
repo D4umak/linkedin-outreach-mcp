@@ -122,6 +122,7 @@ def build_campaign_config(
     competitor_companies: str = "",
     goal: str = "",
     message_language: str = "",
+    icp_id: str = "",
 ) -> dict:
     """The config_json a new campaign starts with.
 
@@ -138,6 +139,11 @@ def build_campaign_config(
     chosen" (it writes English, and launch asks once when the brief is in
     another language); an explicit "en" is a choice (heylead-api#2560). The
     caller validates it.
+
+    `icp_id` is the saved ICP the campaign was made from, stored only when
+    there is one: launch, resume and refill read it to find the research
+    agent's hold, and the sync push carries it so the api links the campaign
+    to that ICP (heylead-api#5380). An ICP generated inline has no id.
     """
     from .. import goals as _goals
     from ..services.competitors import initial_competitor_config
@@ -204,6 +210,7 @@ def build_campaign_config(
             {"message_language": message_language.strip().lower()}
             if message_language and message_language.strip() else {}
         ),
+        **({"icp_id": icp_id.strip()} if icp_id and icp_id.strip() else {}),
     }
 
 
@@ -456,6 +463,7 @@ async def run_create_campaign(
 
     # ── Step 3: Load saved ICP or generate new one ──
     saved_icp_result: IcpResult | None = None
+    icp_record: dict | None = None
 
     if icp_id:
         # Full ID first, then prefix match — shared with icp(action='preview')
@@ -1150,6 +1158,13 @@ async def run_create_campaign(
         search_account_id=search_acct_id if search_acct_id != account_id else "",
         competitor_companies=format_competitor_companies(competitor_names),
         message_language=message_language,
+        # The saved ICP's full id (a prefix may have been passed), only when
+        # the campaign really runs on it (heylead-api#5380).
+        icp_id=(
+            str(icp_record.get("id") or "")
+            if icp_record and saved_icp_result and saved_icp_result.icps
+            else ""
+        ),
     )
 
     # Build context_json — persist brief + short offerings so prompts have both

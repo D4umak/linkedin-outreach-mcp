@@ -89,10 +89,21 @@ async def refuse_if_hosted_send() -> str | None:
 
     ``local_scheduler_engine_enabled`` is the same predicate the daemon uses
     to decide whether to start that engine, so the two cannot drift apart.
+
+    A machine with no sign-in token (a lapsed sign-in, or one never made)
+    gets the not-signed-in reply instead: HOSTED_SEND_BLOCKED points at
+    launch and the inbox, which need the sign-in, and on a fresh install it
+    claimed active campaigns (heylead-api#5541). The token is read through
+    the config module, so a test that patches ``config.is_backend_mode`` is
+    read the way it means.
     """
+    from .. import config as heylead_config
+    from ..hosted_writes import not_signed_in_reply
     from ..services.cloud_sync import local_scheduler_engine_enabled
 
     if not local_scheduler_engine_enabled():
+        if not heylead_config.is_backend_mode():
+            return not_signed_in_reply("nothing was sent")
         return HOSTED_SEND_BLOCKED
     return None
 

@@ -329,6 +329,8 @@ async def _apply_decision(
         log_action, "icp_research_decision",
         result=decision,
         details={
+            # Keyed by ICP so the hold can be found again (heylead-api#5380).
+            "icp_id": icp_id,
             "reason": reason,
             "mode": mode,
             "exhausted": result.exhausted,
@@ -345,7 +347,15 @@ async def _apply_decision(
     elif decision == "revise":
         summary = f"revise recommended (observe) — {reason}" if reason else "revise recommended (observe)"
     elif decision == "hold":
-        summary = f"hold — {reason}" if reason else "hold"
+        # A hold is a record launch, resume and refill read, not a summary
+        # line (heylead-api#5380): until the owner answers, nothing starts.
+        from .icp_hold import held_reply_summary, record_icp_hold
+
+        await record_icp_hold(icp_id, reason=reason, mode=mode)
+        if mode == "act":
+            summary = held_reply_summary(reason)
+        else:
+            summary = f"hold — {reason}" if reason else "hold"
     else:
         summary = f"keep — {reason}" if reason else "keep"
 

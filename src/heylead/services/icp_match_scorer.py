@@ -488,7 +488,17 @@ def _score_title_match(title: str, icp: dict) -> float:
     if role_hit(title_lower, include):
         return 1.0
 
-    # Partial word overlap: check individual words from include terms
+    # Partial word overlap: check individual words from include terms. An ICP
+    # that asks for owners (and for no "Product Owner" kind of role) never
+    # meets the words of a role owner: "Business Process Owner" shares
+    # "business" and "owner" with "Business Owner" and is neither
+    # (heylead-api #5470).
+    from .seniority import mentions_owner, names_role_owner, without_role_owners
+
+    if any(mentions_owner(t) for t in include) and not any(
+        names_role_owner(t) for t in include
+    ):
+        title_lower = without_role_owners(title_lower)
     title_words = set(title_lower.split())
     best_overlap = 0.0
     for term in include:

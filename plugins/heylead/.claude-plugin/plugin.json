@@ -1,6 +1,6 @@
 {
   "name": "heylead",
-  "version": "0.10.500",
+  "version": "0.10.501",
   "description": "LinkedIn outreach from Claude: connects the hosted HeyLead server and adds skills to start a campaign for a goal, approve waiting messages, answer replies, review results and pause. Campaigns are drafts until you launch them.",
   "author": {
     "name": "HeyLead",
@@ -25,7 +25,10 @@
     "outreach",
     "mcp",
     "mcp-server",
-    "model-context-protocol"
+    "model-context-protocol",
+    "claude",
+    "chatgpt",
+    "cursor"
   ],
   "displayName": "HeyLead",
   "repository": "https://github.com/D4umak/linkedin-outreach-mcp",

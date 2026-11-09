@@ -1,12 +1,12 @@
 {
   "name": "heylead",
-  "version": "0.10.500",
-  "description": "LinkedIn outreach from your AI assistant: find the right people, write to them in your own voice, follow up and handle replies. For sales prospecting, recruiting, job search, investor or partner outreach, finding a vendor, and research interviews. Campaigns are drafts until you launch them.",
+  "version": "0.10.501",
+  "description": "HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard.",
   "mcpServers": {
     "heylead": {
       "command": "uvx",
       "args": [
-        "heylead@0.10.500"
+        "heylead@0.10.501"
       ]
     }
   },

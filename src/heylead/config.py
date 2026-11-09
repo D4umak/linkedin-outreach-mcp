@@ -572,9 +572,76 @@ def set_telemetry(enabled: bool) -> None:
 
 
 def is_backend_mode() -> bool:
-    """Check if the MCP server should use the backend proxy."""
+    """Check if the MCP server should use the backend proxy.
+
+    This answers "can this machine reach the backend right now", not "is
+    this install self-hosted": a hosted install whose sign-in lapsed has no
+    token either. Ask ``is_self_hosted()`` for that (heylead-api#5541).
+    """
     url, jwt = get_backend_config()
     return bool(url and jwt)
+
+
+def backend_jwt_expired(token: str, *, now: float | None = None) -> bool:
+    """True when the token's own ``exp`` claim is in the past.
+
+    Read without checking the signature: the backend checks it. This only
+    asks whether the sign-in on this machine has lapsed. A token with no
+    readable ``exp`` is not called expired; the backend's 401 says the rest.
+    """
+    import base64
+    import time
+
+    parts = str(token or "").split(".")
+    if len(parts) != 3:
+        return False
+    payload = parts[1] + "=" * (-len(parts[1]) % 4)
+    try:
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+    except (ValueError, TypeError):
+        return False
+    exp = claims.get("exp") if isinstance(claims, dict) else None
+    if isinstance(exp, bool) or not isinstance(exp, (int, float)):
+        return False
+    return exp <= (time.time() if now is None else now)
+
+
+def is_self_hosted() -> bool:
+    """True only for a self-hosted install: no HeyLead sign-in, and its own
+    Unipile URL and key (heylead-api#2320's definition).
+
+    A missing sign-in token alone is not self-hosted. A hosted install whose
+    sign-in lapsed has no token either, and no Unipile key. Read as
+    self-hosted, it ran SchedulerEngine on Denys's Mac from 6 Nov 2026 and
+    failed 1,125 local jobs in a day, every send with «Unipile not
+    configured» (heylead-api#5541).
+
+    The one answer to "may this machine plan and send": the engine
+    (``cloud_sync.local_scheduler_engine_enabled``), the laptop-send and
+    laptop-write refusals, the leftover-job stand-down and the sending host
+    all read it, so they cannot drift apart.
+    """
+    if is_backend_mode():
+        return False
+    api_url, api_key = get_unipile_config()
+    return bool(api_url and api_key)
+
+
+def sign_in_lapsed() -> str:
+    """Why a hosted install's sign-in lapsed, or "" when it has not.
+
+    "" for a self-hosted install (it never signs in) and for a live token.
+    """
+    if is_self_hosted():
+        return ""
+    _url, jwt = get_backend_config()
+    if not jwt:
+        # "could be read", not "is stored": a keychain that times out with no
+        # file copy also reads as no token (secret_store.get_secret, #4261).
+        return "no sign-in token could be read"
+    if backend_jwt_expired(jwt):
+        return "the sign-in token expired"
+    return ""
 
 
 def dashboard_snapshots_enabled() -> bool:
@@ -752,9 +819,12 @@ def get_sending_host() -> str:
            new user's laptop then sent 7 invitations and 4 DMs overnight
            through the api's proxy, spawned 7 "[Auto]" drafts and emailed
            him stall alerts at 01:45 his time (heylead-api#2120).
-    local  direct / self-hosted installs, which have no backend.
+    local  self-hosted installs: no sign-in and their own Unipile key
+           (``is_self_hosted``). A hosted install whose sign-in lapsed is
+           still ``cloud``: it has no Unipile key to send with
+           (heylead-api#5541).
     """
-    if not is_backend_mode():
+    if is_self_hosted():
         return "local"
     return "cloud"
 

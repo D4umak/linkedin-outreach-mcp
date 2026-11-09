@@ -57,7 +57,12 @@ async def run_scheduler_status() -> str:
         lines.append("**Always-On**: Active (auto-re-enables if disabled, sends immediate alerts)")
         lines.append("")
 
-    if is_backend_mode():
+    # Every hosted account sends from the cloud, signed in or not. Until
+    # heylead-api#5541 this asked the token, so a machine whose sign-in had
+    # lapsed lost the line exactly when the header still read "Enabled".
+    from .. import config
+
+    if not config.is_self_hosted():
         lines.append(
             "**Sending from the cloud** — this machine never sends for a "
             "hosted account."
@@ -616,7 +621,7 @@ async def run_send_from(host: str) -> str:
     if host not in ("cloud", "local"):
         return "host must be 'cloud' or 'local'."
 
-    if not config.is_backend_mode():
+    if config.is_self_hosted():
         if host == "cloud":
             return (
                 "This install has no hosted account. Sending stays on this "
@@ -626,6 +631,16 @@ async def run_send_from(host: str) -> str:
             "full", caller="mcp_tool", reason="send_from local",
         )
         return "Sending is on this machine. There is no cloud scheduler here."
+
+    if not config.is_backend_mode():
+        # A hosted install whose sign-in lapsed: no token and no Unipile key.
+        # Until heylead-api#5541 it read as self-hosted here, told Claude
+        # "Sending is on this machine" and set the local scheduler to full on
+        # a machine that cannot send. host='cloud' would need the sign-in, so
+        # the cloud scheduler is left as it is too.
+        from ..hosted_writes import not_signed_in_reply
+
+        return not_signed_in_reply("nothing was changed on this machine or in the cloud")
 
     if host == "local":
         # Refused without touching the cloud. Until 5 Oct 2026 this switched

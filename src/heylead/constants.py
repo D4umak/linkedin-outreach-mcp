@@ -329,6 +329,16 @@ DEFAULT_BACKEND_URL = "https://heylead.dev"
 LOGIN_URL_PATH = "/auth/login-url"
 GEMINI_KEY_URL = "https://aistudio.google.com/apikey"
 
+# Where a person gets a fresh setup message: the one copy of these words
+# (heylead-api#5541). A chat reply ends them with WHERE_TO_COPY's "and paste it
+# here."; the daemon's log line names setup_profile instead. The page behind
+# the URL shows "Copy setup message" to every signed-in user.
+SETUP_MESSAGE_ROUTE = (
+    f"copy a fresh setup message from {DEFAULT_BACKEND_URL}{LOGIN_URL_PATH} "
+    "(or Settings → Integrations → Chat client on the dashboard)"
+)
+WHERE_TO_COPY = f"{SETUP_MESSAGE_ROUTE} and paste it here."
+
 # ──────────────────────────────────────────────
 # Misc
 # ──────────────────────────────────────────────
@@ -1373,6 +1383,19 @@ SENIORITY_KEYWORDS: dict[str, list[str]] = {
               "jr.", "jr ", "assistant", "specialist",
               "engineer", "developer", "representative", "sdr", "bdr"],
 }
+
+# A word before "Owner" that makes it a role in someone else's business, not
+# the owner of one: a "Product Owner" is a Scrum role, a "Data Owner" a
+# governance role. Read as the bare word "owner" they took the top seniority
+# rung and matched an ICP's "Owner"/"Business Owner" (heylead-api #5470). Not
+# "service" or "asset": a Cleaning Service Owner and a Hotel Asset Owner own
+# what they name. Copied verbatim into heylead-api `app/services/seniority.py`
+# and pinned by `tests/fixtures/seniority_cases.json` ("role_owner_nouns").
+ROLE_OWNER_NOUNS: tuple[str, ...] = (
+    "product", "technical product", "process", "business process", "data",
+    "system", "application", "platform", "feature", "epic", "risk", "control",
+    "content",
+)
 
 # Strategy engine thresholds
 STRATEGY_MIN_SAMPLE_SIZE = 30           # Min prospects before pattern detection

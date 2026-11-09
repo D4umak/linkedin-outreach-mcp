@@ -47,6 +47,13 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.501 (2026-11-09)
+- Start CI again on a new head (night fixer)
+- Revert "fix: drift test tolerates an open twin on any outcome if the file matches origin/main"
+- Fix: drift test tolerates an open twin on any outcome if the file matches origin/main
+- New: edit_campaign names a chosen day the workspace window blocks
+- Fix: a held ICP stops launch, resume and refill until the owner answers
+
 ## v0.10.500 (2026-11-09)
 - Fix: the local plan claims the voice only when it exists (heylead-api#5429)
 - Fix: a live_seats reading reads the route's live_seats key, as its baseline does
@@ -2369,6 +2376,11 @@ async def _scheduler_lifespan(app: FastMCP) -> AsyncIterator[dict]:
             logger.info(
                 "Hosted sending_host=cloud — local engine off; cloud owns every job"
             )
+            from .services.cloud_sync import sign_in_lapsed_line
+
+            lapsed = sign_in_lapsed_line()
+            if lapsed:
+                logger.warning(lapsed)
             try:
                 from .db.async_bridge import run_db
                 from .services.cloud_sync import (
@@ -3417,6 +3429,7 @@ async def _campaign_impl(
     action: str,
     campaign_id: str = "",
     confirm: bool = False,
+    icp_hold_ok: bool = False,
 ) -> str | list[str | Image]:
     """Control campaign lifecycle — launch, monitor, pause, resume, archive, delete, emergency stop, or retry failed.
 
@@ -3442,6 +3455,9 @@ async def _campaign_impl(
             "clear_coordinator_hold" — Release a campaign-wide coordinator hold
         campaign_id: Which campaign to act on. Auto-selects if empty.
         confirm: Must be True for delete action. Safety guard.
+        icp_hold_ok: For "launch" and "resume" only. Pass True only after the
+            user chose "launch anyway" on a target the ICP research agent held;
+            until then launch and resume answer what it found and ask.
     """
     from .services.dashboard_snapshot import attach_snapshot
     from .tools.campaign import run_campaign
@@ -3461,7 +3477,7 @@ async def _campaign_impl(
     try:
         return await run_traced(
             "campaign",
-            attach_snapshot(run_campaign(action, campaign_id, confirm)),
+            attach_snapshot(run_campaign(action, campaign_id, confirm, icp_hold_ok)),
             action=action,
             campaign_id=campaign_id,
         )
@@ -5299,7 +5315,9 @@ async def account(action: str, account_id: str = "") -> str:
 
 
 @mcp.tool(structured_output=False, annotations=_acts("Launch, pause or stop a campaign"))
-async def campaign(action: str, campaign_id: str = "", confirm: bool = False) -> str | list[str | Image]:
+async def campaign(
+    action: str, campaign_id: str = "", confirm: bool = False, icp_hold_ok: bool = False,
+) -> str | list[str | Image]:
     """Launch, pause, resume, archive, delete or emergency-stop a campaign.
 
     Every action here changes what happens next. Watching one run, or reading
@@ -5311,10 +5329,14 @@ async def campaign(action: str, campaign_id: str = "", confirm: bool = False) ->
             "clear_coordinator_hold".
         campaign_id: Which campaign. Uses the active one if empty.
         confirm: Required by the actions that destroy work.
+        icp_hold_ok: launch and resume only: True after the user chose "launch
+            anyway" on a target the ICP research agent held.
     """
     if moved := _moved("campaign", action):
         return moved
-    return await _campaign_impl(action=action, campaign_id=campaign_id, confirm=confirm)
+    return await _campaign_impl(
+        action=action, campaign_id=campaign_id, confirm=confirm, icp_hold_ok=icp_hold_ok,
+    )
 
 
 @mcp.tool(annotations=_acts("Skip, close or dismiss a prospect"))

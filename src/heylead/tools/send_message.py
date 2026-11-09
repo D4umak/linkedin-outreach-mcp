@@ -81,10 +81,13 @@ async def run_send_message(
     # 'delete' is absent on purpose: it removes a message already sent, so it
     # is a remedy rather than a send, and it never reads the sender profile.
     if action in ("followup", "reply", "inmail"):
-        from .organization import refuse_if_hosted_send
+        from .organization import HOSTED_SEND_BLOCKED, refuse_if_hosted_send
 
         blocked = await refuse_if_hosted_send()
-        if blocked and action in ("followup", "reply"):
+        # Only a signed-in hosted account can hand a message to the cloud; a
+        # machine with no sign-in gets the not-signed-in reply as it is
+        # (heylead-api#5541).
+        if blocked == HOSTED_SEND_BLOCKED and action in ("followup", "reply"):
             return await _send_in_cloud(outreach_id, text)
         if blocked:
             return blocked

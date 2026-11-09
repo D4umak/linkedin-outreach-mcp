@@ -675,9 +675,17 @@ def role_hit(
     # hiring stems stay phrases: "hiring manager" word by word is any
     # "HIRING: UA Manager" (measured on a live campaign's pool, #2737).
     own = set(_role_needles(list(titles or []), False))
+    # An owner needle ("Owner", "Business Owner") never meets the "owner" of a
+    # role: a Product Owner owns a backlog, not a business (heylead-api #5470).
+    # A needle that is itself a role owner ("Product Owner") reads the title
+    # as written.
+    from .seniority import mentions_owner, names_role_owner, without_role_owners
+
+    plain = [_norm(without_role_owners(h)) for h in hays]
     for needle in _role_needles(list(titles or []), hiring):
         loose = needle in own
-        if any(_role_match(hay, needle, in_order=loose) for hay in hays):
+        read = plain if mentions_owner(needle) and not names_role_owner(needle) else hays
+        if any(_role_match(hay, needle, in_order=loose) for hay in read):
             return needle
     return ""
 

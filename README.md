@@ -1,7 +1,7 @@
 <!-- mcp-name: io.github.D4umak/heylead -->
 # HeyLead
 
-HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. Sign in on the web, then talk to your AI and say "find me leads."
+HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. Connect: https://heylead.dev/mcp (OAuth; works in Claude Code, in claude.ai as a custom connector, in Cursor, and in ChatGPT as a custom MCP app — tested on ChatGPT Pro on 29 September 2026; custom MCP apps depend on your ChatGPT plan and settings). Website: [heylead.dev](https://heylead.dev) · Agent setup and docs: [heylead.dev/llms.txt](https://heylead.dev/llms.txt)
 
 ## Use cases
 
@@ -22,9 +22,15 @@ Hire people, Find partners or investors and Research interviews run on a custom 
 
 MCP (Model Context Protocol) lets AI assistants use external tools. HeyLead gives your AI the ability to do LinkedIn outreach for you.
 
-**You need:** [Cursor](https://cursor.com) or [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — any MCP-compatible AI editor.
+**You need:** Claude Code, claude.ai, ChatGPT, [Cursor](https://cursor.com), or any MCP client — or use the web dashboard at [heylead.dev/dashboard](https://heylead.dev/dashboard).
 
 ### Step 1: Install HeyLead
+
+**Hosted remote server (nothing to install):** paste `Set up HeyLead using https://heylead.dev/llms.txt` into your AI chat, or add `https://heylead.dev/mcp` in Claude Code:
+
+```bash
+claude mcp add --transport http heylead https://heylead.dev/mcp
+```
 
 **Claude Code, as a plugin (hosted, nothing to install):**
 ```
@@ -32,8 +38,14 @@ MCP (Model Context Protocol) lets AI assistants use external tools. HeyLead give
 /plugin install heylead@heylead
 ```
 
-Then run `/mcp`, pick `heylead` and choose Authenticate to sign in to your
-HeyLead account. The plugin connects the hosted server at
+Then run `/mcp`, pick `plugin:heylead:heylead` and choose Authenticate to sign in to your
+HeyLead account. Use only one HeyLead connection, not both: if you also added HeyLead as a connector on claude.ai, sign that one in and skip the plugin's server, or remove it. Or sign in without the menu:
+
+```bash
+claude mcp login plugin:heylead:heylead
+```
+
+The plugin connects the hosted server at
 `https://heylead.dev/mcp` and adds skills for starting a campaign, approving
 waiting messages, answering replies, a weekly review, pausing, and adding a
 list of people. Its source is in

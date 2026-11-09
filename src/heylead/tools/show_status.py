@@ -266,8 +266,11 @@ def _daemon_health_lines() -> list[str]:
             ])
         return lines
 
-    from ..config import get_sending_host, is_backend_mode
-    hosted_cloud = is_backend_mode() and get_sending_host() == "cloud"
+    # The cloud keeps sending for every hosted account, signed in or not; only
+    # a self-hosted install has nothing else scheduling. Until
+    # heylead-api#5541 this asked the token, and a lapsed sign-in read
+    # "nothing is scheduling at all" while the cloud sent.
+    hosted_cloud = not config.is_self_hosted()
     if hosted_cloud:
         lines.extend([
             "🚨 Scheduler daemon: NOT RUNNING",

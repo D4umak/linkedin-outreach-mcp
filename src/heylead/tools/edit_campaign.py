@@ -15,7 +15,7 @@ from typing import Any
 from ..config import is_backend_mode
 from ..constants import VALID_VOICE_MODES, VOICE_MEMOS_OFF
 from ..db import aio as db
-from ..services.cloud_sync import sync_campaign_settings
+from ..services.cloud_sync import push_campaign_settings, sync_campaign_settings
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +163,8 @@ async def run_edit_campaign(
             (weekdays 08:00-22:00 in your own timezone, or London when it is unknown,
             unless the workspace set its own window).
         active_days: Active send days as comma-separated numbers (0=Mon, 6=Sun).
+            With business hours on, a day sends only if the workspace's sending
+            days (Settings → Sending) include it too; the reply names a day they block.
             E.g., "0,1,2,3,4" for weekdays. Leave empty to keep current.
         campaign_type: Prompt family: "outbound" (default) or "job_search".
             job_search selects the invitation note and the first DM that may
@@ -977,8 +979,15 @@ async def run_edit_campaign(
         # old value back over a dashboard-set language, and back again.
         sync_settings["message_language"] = wanted_language
 
+    days_line = ""
     if sync_settings:
-        synced = await sync_campaign_settings(campaign_id, sync_settings)
+        if "active_days" in sync_settings or "send_in_business_hours" in sync_settings:
+            # The backend knows the workspace window: it names a chosen day the
+            # window blocks, or refuses a set that sends on no day (heylead-api#5516).
+            synced, reply = await push_campaign_settings(campaign_id, sync_settings)
+            days_line = _days_reply_line(synced, reply)
+        else:
+            synced = await sync_campaign_settings(campaign_id, sync_settings)
         if not synced:
             logger.warning("Could not sync settings for campaign %s to backend", campaign_id)
 
@@ -1000,6 +1009,8 @@ async def run_edit_campaign(
     ]
     for desc in change_descriptions:
         output.append(f"   {desc}")
+    if days_line:
+        output.append(f"   {days_line}")
     output.append("")
 
     # Mode-specific hints
@@ -1025,3 +1036,25 @@ def _offer_refusal(problems: list[dict[str, Any]]) -> str:
         else:
             lines.append(f"- {p['field']}: {p['message']}")
     return "\n".join(lines)
+
+
+def _days_reply_line(synced: bool, reply: dict) -> str:
+    """The backend's word on the days that send, for the reply (heylead-api#5516).
+
+    A chosen day the workspace window blocks: "Sat does not send. Your workspace
+    sends Mon to Fri only. Add Sat in Settings → Sending on heylead.dev." A day
+    set that would send on no day is refused there, so the cloud keeps its days.
+    """
+    if not synced:
+        detail = reply.get("detail")
+        if isinstance(detail, str) and "send on no day" in detail:
+            return f"Not changed on heylead.dev: {detail}"
+        return ""
+    notice = str(reply.get("notice") or "").strip()
+    if not notice:
+        return ""
+    blocked = (reply.get("sending_days") or {}).get("blocked") or []
+    names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    days = [names[int(d)] for d in blocked if str(d).isdigit() and 0 <= int(d) <= 6]
+    which = days[0] if len(days) == 1 else (", ".join(days[:-1]) + " and " + days[-1] if days else "it")
+    return f"{notice} Add {which} in Settings → Sending on heylead.dev."

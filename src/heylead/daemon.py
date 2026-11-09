@@ -193,6 +193,7 @@ async def _serve_until_stopped(stop: asyncio.Event) -> None:
     from .db.async_bridge import run_db
     from .services.cloud_sync import (
         local_scheduler_engine_enabled,
+        sign_in_lapsed_line,
         stand_down_engine_off_leftovers,
         warn_if_pypi_refresh_rolled_back,
     )
@@ -211,6 +212,9 @@ async def _serve_until_stopped(stop: asyncio.Event) -> None:
             "heylead daemon sync-only (pid=%d) — hosted cloud owns every job",
             os.getpid(),
         )
+        lapsed = sign_in_lapsed_line()
+        if lapsed:
+            logger.warning(lapsed)
         try:
             cancelled = await run_db(stand_down_engine_off_leftovers)
             if cancelled:
