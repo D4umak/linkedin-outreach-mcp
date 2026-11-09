@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 
 from .. import constants as c
 from .. import facts
+from . import plan_voice
 from .invite_pace import pace_clause
 from .outreach_channel import exclude_connections_enabled
 
@@ -327,12 +328,18 @@ def _is_job_search(cfg: dict[str, Any], context: dict[str, Any]) -> bool:
     return str(merged.get("campaign_type") or "").strip().lower() == "job_search"
 
 
+def _with_sentence(line: str, sentence: str) -> str:
+    """``line`` with the voice sentence after it, when there is one."""
+    return f"{line} {sentence}" if sentence else line
+
+
 def campaign_plan(
     campaign: dict[str, Any],
     workspace_state: dict[str, Any] | None,
     seat: dict[str, Any] | None,
     *,
     now: datetime | None = None,
+    voice_state: str = plan_voice.USABLE,
 ) -> list[PlanStep]:
     """The ordered steps this campaign will take once launched.
 
@@ -343,7 +350,8 @@ def campaign_plan(
     as require_approval, as in the api. ``seat`` carries
     ``daily_invite_cap``, ``weekly_cap`` and ``invite_ramp`` (the names the
     api's ``invite_caps_payload`` uses); None reads as a free LinkedIn account.
-    ``now`` is for tests.
+    ``now`` is for tests. ``voice_state`` is plan_voice's state; the Invite
+    and Open lines claim the voice only for USABLE (heylead-api#5429).
     """
     cfg = _json_dict((campaign or {}).get("config_json"))
     context = _json_dict((campaign or {}).get("context_json"))
@@ -385,6 +393,8 @@ def campaign_plan(
         )
     steps.append(PlanStep("find", "Find", find, find_hint))
 
+    sentence = plan_voice.voice_sentence(voice_state)
+    invite_carries = autopilot and not connections_only
     if not connections_only:
         steps.append(PlanStep("warmup", "Warm-up", _warmup_line(cfg), "Before each invitation"))
         steps.append(PlanStep(
@@ -395,17 +405,18 @@ def campaign_plan(
             # The quoted sentence ends with its own full stop; a "." after the
             # clause read 'assistant.".' (UI QA of #1561, F1). In review mode
             # the invitation carries no note (heylead-api#5378, Option B).
-            + ("each with a short note in your voice." if autopilot else "without a note (review mode)."),
+            + (_with_sentence(f"each with a short note{plan_voice.voiced(voice_state)}.", sentence)
+               if autopilot else "without a note (review mode)."),
             send_hint,
         ))
         steps.append(PlanStep("accept", "Accept", ACCEPT_LINE, "A few days later"))
 
+    voiced = plan_voice.voiced(voice_state)
     if connections_only:
-        opener = (f"{send_when}, {window}: an opening message "
-                  "in your voice to each person, ")
+        opener = f"{send_when}, {window}: an opening message{voiced} to each person, "
         open_hint = send_hint
     else:
-        opener = "When someone accepts: an opening message in your voice, "
+        opener = f"When someone accepts: an opening message{voiced}, "
         open_hint = "On acceptance"
     if autopilot:
         opener += "sent inside your window, no review."
@@ -416,6 +427,9 @@ def campaign_plan(
             f"three or more opening messages wait {c.INVITE_PAUSE_WINDOW_HOURS} of your sending hours, new invitations pause "
             "until you review them). When one has waited 2 hours in your sending window, the workspace owner gets an email."
         )
+    # The voice sentence sits on one step: the note when an autopilot invitation
+    # carries one, else the opening message (designer, heylead-api#5429).
+    opener = _with_sentence(opener, "" if invite_carries else sentence)
     steps.append(PlanStep("open", "Open", opener, open_hint))
 
     fu_line, fu_hint = _followup_line(cfg, tier)
@@ -496,6 +510,15 @@ def _local_state() -> dict[str, Any]:
         "working_hours_source": "" if hosted else "local",
         "timezone": str(cfg.get("timezone") or ""),
     }
+
+
+def _local_voice_state() -> str:
+    """plan_voice's state for this install; a failed read makes no voice claim."""
+    try:
+        return plan_voice.local_voice_state()
+    except Exception as exc:  # the plan must never cost the reply
+        logger.info("Local voice unreadable for the plan: %s", exc)
+        return plan_voice.UNKNOWN
 
 
 def _local_seat() -> dict[str, Any]:
@@ -581,7 +604,7 @@ async def _local_plan_text(campaign_id: str, campaign: dict[str, Any] | None) ->
     except Exception as exc:
         logger.info("Local plan settings unreadable: %s", exc)
         state, seat = {}, {}
-    return render_plan(campaign_plan(row or {}, state, seat))
+    return render_plan(campaign_plan(row or {}, state, seat, voice_state=_local_voice_state()))
 
 
 def _local_checkpoint(now: datetime) -> str:

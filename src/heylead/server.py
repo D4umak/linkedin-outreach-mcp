@@ -47,6 +47,10 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.500 (2026-11-09)
+- Fix: the local plan claims the voice only when it exists (heylead-api#5429)
+- Fix: a live_seats reading reads the route's live_seats key, as its baseline does
+
 ## v0.10.499 (2026-11-09)
 - New: last-action words for the first-send voice wait (api #5379)
 - Fix: a hotfix/incident label is an exemption beside a contract too, as in the api and weekly.py
