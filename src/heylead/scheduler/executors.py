@@ -2330,10 +2330,17 @@ async def _execute_brand_analyze(job: dict[str, Any]) -> str:
     if not account_id:
         return "No LinkedIn account connected"
 
+    from ..services.brand_analysis import BrandAnalysisFailed
     from ..tools.brand_strategy import _handle_analyze, _handle_plan
 
     try:
-        result = await _handle_analyze(account_id, "")
+        try:
+            result = await _handle_analyze(account_id, "")
+        except BrandAnalysisFailed as failed:
+            # Nothing was stored; the re-analysis flag stays so the planner
+            # asks again, and no plan is built from nothing (api #5838).
+            logger.warning("Scheduler: brand analysis did not finish (%s)", failed.reason)
+            return f"Brand analysis did not finish ({failed.reason}); the stored analysis is unchanged"
         logger.info("Scheduler: brand analysis complete")
 
         # Clear re-analysis flag if it was set (by campaign creation)

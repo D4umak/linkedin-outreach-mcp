@@ -47,6 +47,13 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.505 (2026-11-10)
+- Fix: a failed brand analysis is never stored, shown or pushed (api #5838)
+- New: a line of up to ten goes as one batch (#5879)
+- New: the batch size follows the line (#5879)
+- wip: batching switch no longer leaks between tests
+- wip: dashboard queue batches (#5878)
+
 ## v0.10.504 (2026-11-10)
 - Release version bump
 

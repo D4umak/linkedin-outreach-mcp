@@ -13,6 +13,7 @@ from typing import Any
 
 from .. import config
 from ..db.queries import get_setting, list_campaigns, save_setting
+from . import brand_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,9 @@ def blobs_for_push() -> dict[str, Any]:
     """
     org = _workspace()
     out: dict[str, Any] = {k: get_setting(scoped_key(k, org)) for k in WORKSPACE_KEYS}
+    # A leftover an older client stored is not this workspace's analysis.
+    if not brand_analysis.usable(out[_KEY_ANALYSIS]):
+        out[_KEY_ANALYSIS] = None
     out["brand_org_id"] = org
     return out
 
@@ -79,10 +83,12 @@ def store_from_cloud(brand_updates: dict[str, Any]) -> list[str]:
             )
         return []
     saved = []
-    for key in (_KEY_PLAN, _KEY_ANALYSIS):
-        if brand_updates.get(key):
-            save_setting(scoped_key(key, org), brand_updates[key])
-            saved.append(key)
+    if brand_updates.get(_KEY_PLAN):
+        save_setting(scoped_key(_KEY_PLAN, org), brand_updates[_KEY_PLAN])
+        saved.append(_KEY_PLAN)
+    # The cloud's analysis keeps the cloud's analyzed_at.
+    if brand_updates.get(_KEY_ANALYSIS) and _store_analysis(brand_updates[_KEY_ANALYSIS], org):
+        saved.append(_KEY_ANALYSIS)
     return saved
 
 
@@ -110,13 +116,28 @@ def place_campaigns(campaign_ids: list[str], org_id: str, refused: list[str] | t
 # ──────────────────────────────────────────────
 
 
-def save_brand_analysis(analysis: dict[str, Any]) -> None:
+def _store_analysis(analysis: Any, org_id: str | None = None) -> bool:
+    """The one writer of the analysis key. False, and nothing written, for the
+    leftover of a failed call: the earlier analysis stays (api #5838)."""
+    if brand_analysis.is_failed(analysis):
+        logger.warning("brand analysis not stored: it is the leftover of a failed call")
+        return False
+    save_setting(scoped_key(_KEY_ANALYSIS, org_id), analysis)
+    return True
+
+
+def save_brand_analysis(analysis: dict[str, Any]) -> bool:
+    """Store a fresh analysis, stamped now. False when it is not one."""
+    if brand_analysis.is_failed(analysis):
+        return False
     analysis["analyzed_at"] = int(time.time())
-    save_setting(scoped_key(_KEY_ANALYSIS), analysis)
+    return _store_analysis(analysis)
 
 
 def load_brand_analysis() -> dict[str, Any] | None:
-    return get_setting(scoped_key(_KEY_ANALYSIS))
+    """The stored analysis, or None: a leftover an older client stored is none."""
+    stored = get_setting(scoped_key(_KEY_ANALYSIS))
+    return stored if brand_analysis.usable(stored) else None
 
 
 # ──────────────────────────────────────────────

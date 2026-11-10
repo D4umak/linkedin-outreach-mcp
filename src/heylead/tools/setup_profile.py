@@ -748,23 +748,9 @@ async def _fetch_and_analyze(
     # ── Auto-analyze brand & generate improvement plan ──
     brand_summary = ""
     try:
-        from .brand_strategy import _handle_analyze, _handle_plan
-
         account_id_for_brand = await run_db(get_setting, "unipile_account_id", "")
         if account_id_for_brand:
-            await _handle_analyze(account_id_for_brand, "")
-            await _handle_plan(account_id_for_brand, "")
-
-            from ..services.brand_service import load_brand_analysis
-
-            ba = await run_db(load_brand_analysis)
-            score = ba.get("overall_score", 0) if ba else 0
-            brand_summary = (
-                f"\n\n Brand Audit: {score}/100\n"
-                "A 4-week improvement plan has been auto-generated and will execute automatically.\n"
-                "Run brand_strategy(action='progress') anytime to check progress."
-            )
-            logger.info("Auto brand analysis complete: score=%d", score)
+            brand_summary = await _brand_summary(account_id_for_brand)
     except Exception as e:
         logger.warning("Auto brand analysis failed (non-fatal): %s", e)
 
@@ -881,3 +867,41 @@ async def _fetch_and_analyze(
         website_hint = ""
 
     return header + output + email_status + brand_summary + serper_hint + website_hint + next_hint
+
+
+async def _brand_summary(account_id: str) -> str:
+    """First-run brand audit and plan, and the lines setup prints about them.
+
+    A score and a plan are claimed only when both were saved: an audit that
+    did not finish stores nothing, and setup says so (api #5838).
+    """
+    from ..services.brand_analysis import BrandAnalysisFailed
+    from ..services.brand_service import load_brand_analysis, load_brand_plan
+    from .brand_strategy import _handle_analyze, _handle_plan
+
+    did_not_finish = (
+        "\n\n Brand audit: it did not finish this time, so there is no improvement plan yet.\n"
+        'Run brand_strategy(action="analyze") in a few minutes.'
+    )
+    try:
+        await _handle_analyze(account_id, "")
+    except BrandAnalysisFailed as failed:
+        logger.warning("Auto brand analysis did not finish (%s)", failed.reason)
+        return did_not_finish
+    await _handle_plan(account_id, "")
+
+    analysis = await run_db(load_brand_analysis)
+    if not analysis:
+        return did_not_finish
+    score = analysis.get("overall_score", 0)
+    logger.info("Auto brand analysis complete: score=%d", score)
+    if not await run_db(load_brand_plan):
+        return (
+            f"\n\n Brand Audit: {score}/100\n"
+            'Run brand_strategy(action="plan") to generate a 4-week improvement plan.'
+        )
+    return (
+        f"\n\n Brand Audit: {score}/100\n"
+        "A 4-week improvement plan has been auto-generated and will execute automatically.\n"
+        "Run brand_strategy(action='progress') anytime to check progress."
+    )

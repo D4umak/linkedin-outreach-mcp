@@ -389,10 +389,15 @@ async def analyze_brand_profile(
     expertise: dict[str, Any],
     icp_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Full brand profile audit. Returns scored areas with specific issues."""
+    """Full brand profile audit. Returns scored areas with specific issues.
+
+    Raises ``brand_analysis.BrandAnalysisFailed`` when the call produced no
+    analysis; nothing is returned for a caller to store.
+    """
 
     # Route through backend if in backend mode and no local LLM key
     from ..config import has_local_llm_key, is_backend_mode
+    from ..services import brand_analysis
     from ..services.brand_service import format_icp_context
 
     if is_backend_mode() and not has_local_llm_key():
@@ -400,12 +405,15 @@ async def analyze_brand_profile(
 
         client = get_linkedin_client()
         try:
-            return await client.analyze_brand_strategy(
+            analysis = await client.analyze_brand_strategy(
                 profile, posts, ssi_data, campaign_stats,
                 icp_context=icp_context,
             )
         finally:
             await client.close()
+        if brand_analysis.is_failed(analysis):
+            raise brand_analysis.BrandAnalysisFailed(brand_analysis.NOT_AN_ANALYSIS)
+        return analysis
 
     # Build pillar string
     ssi_pillars = ssi_data.get("pillars", [])
@@ -442,13 +450,16 @@ async def analyze_brand_profile(
     llm = LLMClient()
     raw = await llm.generate(prompt, system=_ANALYSIS_SYSTEM, temperature=0.4, max_tokens=3000)
 
-    default = {
-        "overall_score": 0,
-        "areas": {},
-        "top_3_actions": ["Could not analyze — check your LLM configuration"],
-    }
-
-    return parse_json(raw, fallback=default)
+    # No data-shaped default: a reply that is no analysis is a failure the
+    # caller hears about, never a score of 0 to store (api #5838). The error
+    # carries a reason code and none of the reply, which can echo the profile.
+    try:
+        analysis = parse_json(raw)
+    except ValueError:
+        raise brand_analysis.BrandAnalysisFailed(brand_analysis.UNPARSED) from None
+    if brand_analysis.is_failed(analysis):
+        raise brand_analysis.BrandAnalysisFailed(brand_analysis.NOT_AN_ANALYSIS)
+    return analysis
 
 
 async def generate_brand_plan(

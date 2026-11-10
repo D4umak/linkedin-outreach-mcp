@@ -30,6 +30,7 @@ from ..db.queries import (
 )
 from ..formatter import progress_bar, stars, table
 from ..linkedin import get_account_id, get_linkedin_client, UnipileError
+from ..services.brand_analysis import BrandAnalysisFailed
 from ..services.brand_service import (
     capture_baseline,
     compute_progress,
@@ -104,7 +105,10 @@ async def run_brand_strategy(
             return await _handle_execute_hosted()
 
     if action == "analyze":
-        return await _handle_analyze(account_id, focus)
+        try:
+            return await _handle_analyze(account_id, focus)
+        except BrandAnalysisFailed:
+            return await _audit_did_not_finish(focus)
     elif action == "plan":
         return await _handle_plan(account_id, focus)
     elif action == "execute":
@@ -158,8 +162,35 @@ async def run_brand_strategy(
 # ──────────────────────────────────────────────
 
 
+async def _audit_did_not_finish(focus: str) -> str:
+    """What the tool says when the audit produced no analysis (api #5838)."""
+    last = await run_db(load_brand_analysis)
+    if not last:
+        return (
+            "The audit did not finish this time, and nothing was saved. "
+            'Try again in a few minutes: brand_strategy(action="analyze")'
+        )
+    lines = [
+        "The new audit did not finish, so your last audit is unchanged. Try again later to refresh it.",
+        "",
+    ]
+    try:
+        when = _time.gmtime(int(last.get("analyzed_at") or 0))
+    except (TypeError, ValueError, OverflowError, OSError):
+        when = None
+    if when and last.get("analyzed_at"):
+        lines += [f"Your last audit, from {when.tm_mday} {_time.strftime('%b %Y', when)}:", ""]
+    lines.append(_format_analysis(last, focus))
+    return "\n".join(lines)
+
+
 async def _handle_analyze(account_id: str, focus: str) -> str:
-    """Full profile audit with scored areas."""
+    """Full profile audit with scored areas.
+
+    Raises ``BrandAnalysisFailed`` when the call produced no analysis: nothing
+    is stored, and each caller (the tool, first-run setup, the daemon's job)
+    says so in its own words instead of reading a returned line as success.
+    """
 
     from ..ai.brand_strategist import analyze_brand_profile
     from ..services.brand_service import get_active_icp_context

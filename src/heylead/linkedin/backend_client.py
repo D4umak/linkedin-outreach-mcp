@@ -4671,8 +4671,12 @@ class BackendClient:
             raise _wrap_connection_error(e, self.base_url)
         if resp.status_code == 401:
             raise UnipileAuthError("Backend JWT expired or invalid.")
-        if resp.status_code == 503:
-            raise UnipileError("Backend LLM service unavailable.")
+        if resp.status_code in (502, 503):
+            # The cloud's model call failed (502 since api #5784) or has no
+            # model (503): no analysis either way, and the same words (#5838).
+            from ..services.brand_analysis import PROXY, BrandAnalysisFailed
+
+            raise BrandAnalysisFailed(PROXY)
         resp.raise_for_status()
         data = _ensure_dict(resp.json())
         return data.get("analysis", data)
