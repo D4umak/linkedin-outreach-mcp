@@ -227,41 +227,6 @@ def log_event(event: str, *, log: logging.Logger | None = None, **fields: Any) -
     (log or logger).info(" ".join(parts), extra=extra)
 
 
-@asynccontextmanager
-async def tool_span(tool: str, **ids: Any):
-    """Correlate one MCP tool call: set CID if missing, log start/end."""
-    existing = get_correlation_id()
-    owned = not existing
-    cid = existing or new_correlation_id()
-    started = time.monotonic()
-    log_event("tool_start", tool=tool, request_id=cid, **ids)
-    try:
-        yield cid
-    except Exception as exc:
-        log_event(
-            "tool_end",
-            tool=tool,
-            request_id=cid,
-            outcome="error",
-            error_type=type(exc).__name__,
-            duration_ms=int((time.monotonic() - started) * 1000),
-            **ids,
-        )
-        raise
-    else:
-        log_event(
-            "tool_end",
-            tool=tool,
-            request_id=cid,
-            outcome="success",
-            duration_ms=int((time.monotonic() - started) * 1000),
-            **ids,
-        )
-    finally:
-        if owned:
-            clear_correlation_id()
-
-
 def record_inbound_enrol_failure(
     *,
     campaign_id: str = "",

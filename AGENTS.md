@@ -182,3 +182,9 @@ claude mcp add heylead -- heylead
 
 - **stdio** — `heylead` (installed via `uv tool install heylead`); update with `uv tool upgrade heylead`
 - **streamable-http** — `heylead --transport streamable-http` for self-hosted HTTP serving
+
+## Build on heylead-dev, not on the Mac (api #5565)
+If `uname` is Darwin and you are about to run tests, scans, a worktree or a Cloud SQL proxy for a
+HeyLead change: stop and tell the user to reopen this task on the `heylead-dev` VM (Cursor:
+Remote-SSH to `heylead-dev`; Codex: `ssh heylead-dev` then `codex` in ~/Developer/<repo>).
+Chrome-only work (UI QA, LinkedIn, Mail) stays on the Mac.

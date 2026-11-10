@@ -7,49 +7,6 @@ from typing import Any
 from .textutil import evidence_hit_is_meaningful
 
 
-def tree(items: list[tuple[str, str]], title: str = "") -> str:
-    """Format a list of (label, value) as a tree.
-
-    Example output:
-        Title
-        ├── Label 1: Value 1
-        ├── Label 2: Value 2
-        └── Label 3: Value 3
-    """
-    lines = []
-    if title:
-        lines.append(title)
-    for i, (label, value) in enumerate(items):
-        is_last = i == len(items) - 1
-        prefix = "└──" if is_last else "├──"
-        lines.append(f"{prefix} {label}: {value}")
-    return "\n".join(lines)
-
-
-def tree_nested(data: dict[str, Any], title: str = "", indent: int = 0) -> str:
-    """Format nested dict as a tree."""
-    lines = []
-    if title:
-        lines.append(title)
-    keys = list(data.keys())
-    for i, key in enumerate(keys):
-        is_last = i == len(keys) - 1
-        prefix = "└──" if is_last else "├──"
-        pad = "    " * indent
-        value = data[key]
-        if isinstance(value, dict):
-            lines.append(f"{pad}{prefix} {key}:")
-            sub_keys = list(value.keys())
-            for j, sk in enumerate(sub_keys):
-                sub_last = j == len(sub_keys) - 1
-                sub_prefix = "└──" if sub_last else "├──"
-                cont = "    " if is_last else "│   "
-                lines.append(f"{pad}{cont}{sub_prefix} {sk}: {value[sk]}")
-        else:
-            lines.append(f"{pad}{prefix} {key}: {value}")
-    return "\n".join(lines)
-
-
 def table(headers: list[str], rows: list[list[str]]) -> str:
     """Format a simple markdown-style table."""
     if not rows:
@@ -86,20 +43,6 @@ def stars(score: float, max_score: float = 1.0) -> str:
     normalized = min(score / max_score, 1.0) if max_score > 0 else 0
     full = int(normalized * 5)
     return "★" * full + "☆" * (5 - full)
-
-
-def health_rating(acceptance_rate: float) -> str:
-    """Account health based on acceptance rate."""
-    if acceptance_rate >= 0.30:
-        return "★★★★★ Excellent"
-    elif acceptance_rate >= 0.25:
-        return "★★★★☆ Good"
-    elif acceptance_rate >= 0.15:
-        return "★★★☆☆ Fair"
-    elif acceptance_rate > 0:
-        return "★★☆☆☆ Low"
-    else:
-        return "☆☆☆☆☆ No data"
 
 
 def funnel_bar(label: str, count: int, max_count: int, width: int = 20) -> str:

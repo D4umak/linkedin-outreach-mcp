@@ -68,6 +68,49 @@ def _parse_linkedin_accounts(accounts: list[dict]) -> list[dict]:
     return linkedin_accounts
 
 
+def _signed_in_email() -> str:
+    """The email in the pasted HeyLead token (its ``email`` claim), or "".
+
+    Read only to name the account (heylead-api #5471); the signature is the
+    backend's to check, so it is not verified here, and nothing is decided
+    from it.
+    """
+    import base64
+    import json
+
+    from ..config import get_backend_config
+
+    try:
+        token = get_backend_config()[1] or ""
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        email = claims.get("email") if isinstance(claims, dict) else ""
+        return email if isinstance(email, str) else ""
+    except Exception:  # noqa: BLE001 - no token or not a JWT: say nothing about an account
+        return ""
+
+
+def no_linkedin_account_reply() -> str:
+    """The no-account reply in backend mode (heylead-api #5471, designer S6).
+
+    In backend mode the pasted token decides the HeyLead account, so the
+    reply names that account and gives the step that changes it: a fresh
+    setup message from the account that has LinkedIn. On 8 Nov 2026 a person
+    connected LinkedIn with one Google account and signed in to their
+    assistant with another; "Run setup_profile()" could not tell them that.
+    """
+    from ..dashboard_links import dashboard_url
+
+    email = _signed_in_email()
+    who = f" ({email})" if email else ""
+    return (
+        f"No LinkedIn account is connected to the HeyLead account this app is signed in to{who}.\n"
+        f"Connect one at {dashboard_url('settings/accounts')}.\n"
+        "Connected LinkedIn with another Google account? Sign in to heylead.dev with that account, "
+        f"copy the setup message from {dashboard_url('settings/integrations')}, and paste it here."
+    )
+
+
 async def run_switch_account() -> str:
     """List all LinkedIn accounts and let the user pick one."""
     if not is_backend_mode():
@@ -83,6 +126,8 @@ async def run_switch_account() -> str:
         linkedin_accounts = _parse_linkedin_accounts(accounts)
 
         if not linkedin_accounts:
+            if is_backend_mode():
+                return no_linkedin_account_reply()
             return (
                 "❌ No LinkedIn accounts found.\n\n"
                 "Run setup_profile() to connect your LinkedIn account."
@@ -133,6 +178,8 @@ async def run_list_linkedin_accounts() -> str:
         linkedin_accounts = _parse_linkedin_accounts(accounts)
 
         if not linkedin_accounts:
+            if is_backend_mode():
+                return no_linkedin_account_reply()
             return (
                 "No LinkedIn accounts connected.\n\n"
                 "Run setup_profile() to connect your LinkedIn account."

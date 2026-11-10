@@ -47,6 +47,9 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.502 (2026-11-10)
+- Fix: a provider 5xx on the follow warm-up is a skip, not a retry (#5293)
+
 ## v0.10.501 (2026-11-09)
 - Start CI again on a new head (night fixer)
 - Revert "fix: drift test tolerates an open twin on any outcome if the file matches origin/main"
@@ -2087,7 +2090,7 @@ _CHANGELOG = """\
 - Engagement mode: auto (30/70 react/comment), comment_only, or react_only
 - Follow-up customization: max_followups (1-5), followup_delay_days (custom schedule)
 - Send timing: send_in_business_hours (on/off), active_days (choose which days to send)
-- Invite settings: invite_note (on/off: invitations carry a note, default on), withdraw_stale_invites (on/off), stale_invite_days (7-60)
+- Invite settings: invite_note (on/off: invitations carry a note, default on), withdraw_stale_invites (on/off: withdraws an invitation on LinkedIn once it is unanswered past stale_invite_days, default on), stale_invite_days (7-60)
 - show_status now displays non-default campaign settings
 - All settings stored in config_json with backwards-compatible defaults
 
@@ -3875,7 +3878,8 @@ async def edit_campaign(
         invite_note: Invitations carry a note: "on" (default) or "off". Off sends
             the bare invitation; the first words are the DM a working day after
             they accept.
-        withdraw_stale_invites: Auto-withdraw stale invites: "on" or "off".
+        withdraw_stale_invites: Withdraw an unanswered invitation on LinkedIn after
+            stale_invite_days: "on" (default) or "off".
         stale_invite_days: Days before withdrawing stale invites (7-60). 0 to keep current.
         inmail_fallback: Escalate quiet invitations with one InMail: "on" or "off".
             Free tier sends only to Open Profile members (zero credits).

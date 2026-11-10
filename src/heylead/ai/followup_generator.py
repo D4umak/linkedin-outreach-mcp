@@ -42,7 +42,6 @@ from .prompt_loader import (
     get_prompt_temperature,
     has_prompt,
     load_expertise_map,
-    load_fragment,
     render_prompt,
 )
 from .voice_block import voice_prompt_block

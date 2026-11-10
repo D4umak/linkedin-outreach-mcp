@@ -16,7 +16,7 @@ from typing import Any
 from .length_fixer import shorten_to_limit
 from .llm import LLMClient
 from ..services.language import keep_draft_language_instruction, with_language_rule
-from .prompt_loader import get_prompt_temperature, has_prompt, load_fragment, render_prompt
+from .prompt_loader import get_prompt_temperature, has_prompt, render_prompt
 from .voice_block import voice_prompt_block
 from .copywriter import channel_for_message_type, rules_for
 

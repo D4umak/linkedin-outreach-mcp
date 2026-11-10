@@ -152,7 +152,8 @@ async def run_edit_campaign(
         invite_note: Invitations carry a note: "on" (default) or "off". Off sends
             the bare invitation; the first words are the DM a working day after
             they accept.
-        withdraw_stale_invites: Auto-withdraw stale invites: "on" or "off".
+        withdraw_stale_invites: Withdraw an unanswered invitation on LinkedIn after
+            stale_invite_days: "on" (default) or "off".
         stale_invite_days: Days before withdrawing stale invites (7-60). 0 to keep current.
         inmail_fallback: Escalate quiet invitations with one InMail: "on" or "off".
             Free tier sends only to Open Profile members (zero credits).
@@ -300,7 +301,7 @@ async def run_edit_campaign(
             "\n"
             "  Invites:\n"
             "  invite_note: on or off\n"
-            "  withdraw_stale_invites: on or off\n"
+            "  withdraw_stale_invites: on (default) or off\n"
             "  stale_invite_days: 7-60\n"
             "\n"
             "  InMail escalation:\n"

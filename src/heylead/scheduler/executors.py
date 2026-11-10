@@ -296,6 +296,12 @@ _HTTP_STATUS_RE = re.compile(
     r"(?:http|status|returned|unipile|linkedin|code)[^\d]{0,10}(4\d{2})\b", re.IGNORECASE,
 )
 
+# A provider 5xx on the follow warm-up, as follow_profile words it
+# ("Unipile returned 500: ..."). Follow only warms the invitation up, so a
+# route that answers 5xx is a skip of the step for a day, never a retry of
+# it on every pass (D4umak/heylead-api#5293).
+_PROVIDER_ERROR_RE = re.compile(r"\breturned (5\d{2})\b", re.IGNORECASE)
+
 # Cooldown durations for engagement failures (seconds)
 _COOLDOWN_PERMANENT_FAIL = 24 * 3600  # 24h — retry next day
 _COOLDOWN_ENDORSE_FAIL = 7 * 24 * 3600  # 7d — skills unlikely to change fast
@@ -1480,6 +1486,23 @@ async def _execute_follow(job: dict[str, Any]) -> str:
                 outreach_id,
             )
             return JobResult("deferred", f"Deferred: Voyager unavailable — {result[:100]}")
+
+        provider_error = _PROVIDER_ERROR_RE.search(result)
+        if provider_error:
+            code = int(provider_error.group(1))
+            if outreach_id:
+                await run_db(_set_engagement_cooldown, outreach_id, _COOLDOWN_PERMANENT_FAIL)
+                await db.log_action(
+                    "follow_cooldown",
+                    outreach_id=outreach_id,
+                    result="cooldown_24h",
+                    details={"status_code": code, "reason": "provider_error"},
+                )
+            logger.warning(
+                "Follow got %d from the provider for outreach %s — warm-up skipped, cooldown 24h",
+                code, outreach_id,
+            )
+            return JobResult("permanent_failure", f"provider_error {code}")
 
         status_code = _extract_status_code(result)
 

@@ -37,17 +37,6 @@ _PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 _prompt_cache: dict[str, dict] = {}
 
 
-class SafeDict(dict):
-    """Dict subclass that returns '{key}' for missing keys in str.format_map().
-
-    This prevents KeyError when a prompt template has variables that aren't
-    provided — they're left as-is in the output.
-    """
-
-    def __missing__(self, key: str) -> str:
-        return "{" + key + "}"
-
-
 def load_prompt(name: str) -> dict:
     """Load a prompt template from JSON file.
 
@@ -147,18 +136,6 @@ def render_prompt(name: str, variables: dict[str, Any]) -> str:
 _fragment_cache: dict[str, str] = {}
 
 
-def load_fragment(name: str) -> str:
-    """Load a shared prompt fragment from prompts/fragments/{name}.txt."""
-    if name in _fragment_cache:
-        return _fragment_cache[name]
-    path = _PROMPTS_DIR / "fragments" / f"{name}.txt"
-    if not path.exists():
-        raise FileNotFoundError(f"Prompt fragment not found: {path}")
-    text = path.read_text(encoding="utf-8")
-    _fragment_cache[name] = text
-    return text
-
-
 def get_prompt_temperature(name: str) -> float:
     """Get the recommended temperature for a prompt.
 
@@ -176,22 +153,6 @@ def get_prompt_temperature(name: str) -> float:
         return float(data.get("temperature", 0.7))
     except FileNotFoundError:
         return 0.7
-
-
-def get_prompt_response_limit(name: str) -> int:
-    """Get the response symbol limit for a prompt.
-
-    Args:
-        name: Prompt name
-
-    Returns:
-        Response limit in characters
-    """
-    try:
-        data = load_prompt(name)
-        return int(data.get("response_limit", 200))
-    except FileNotFoundError:
-        return 200
 
 
 def has_prompt(name: str) -> bool:

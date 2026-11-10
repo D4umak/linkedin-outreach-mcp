@@ -637,6 +637,24 @@ async def plan_text_for(campaign_id: str, campaign: dict[str, Any] | None = None
     return text or await _local_plan_text(campaign_id, campaign)
 
 
+async def first_send_line_for(campaign_id: str) -> str:
+    """The api's sentence for when this campaign starts finding people and sending.
+
+    Hosted only: GET /campaigns/{id}/plan carries ``first_send`` (heylead-api
+    #5518), the same fact the hosted launch, /resume and the dashboard toast
+    print. On 9 Nov 2026 an owner launched at 00:05 Toronto time, inside the
+    night pause, where HeyLead runs no LinkedIn call; this launch said only
+    "is now live", so the quiet hours read as a broken campaign. '' when the
+    api sent none (not hosted, an older api, a campaign not running) - this
+    machine never recomputes the clock.
+    """
+    payload = await _hosted_plan(campaign_id)
+    first = payload.get("first_send")
+    if not isinstance(first, dict):
+        return ""
+    return str(first.get("line") or "").strip()
+
+
 async def plan_and_checkpoint_for(
     campaign_id: str,
     campaign: dict[str, Any] | None = None,

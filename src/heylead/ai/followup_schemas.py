@@ -127,39 +127,3 @@ class FollowUpReasoning(BaseModel):
 # ── JSON schema for LLM prompt injection ──
 
 FOLLOWUP_REASONING_SCHEMA = FollowUpReasoning.model_json_schema()
-
-
-def get_schema_hint() -> str:
-    """Return a compact JSON schema description for prompt injection.
-
-    Used when the LLM doesn't support native structured output —
-    we inject the schema into the prompt so the LLM knows what
-    JSON structure to produce.
-    """
-    return """{
-  "decisions": {
-    "structure_change": "string — what changes vs last SDR message",
-    "fresh_hook": "string — opening idea, 6-12 words",
-    "phrase_rewrites": ["string — phrases to avoid, 3-6 items"],
-    "new_context": "string — new benefit/challenge, 1 sentence",
-    "pain_to_use": "string — concrete symptom, plain English",
-    "solve_clause": "string — how-we-solve clause",
-    "micro_proof": "string|null — anonymized outcome",
-    "cta_choice": "string — from CTA LIBRARY",
-    "greeting_variant": "string — greeting or empty",
-    "signoff_variant": "string — signoff",
-    "length_style": "one_liner|short|medium",
-    "allow_bullets": true/false,
-    "allow_link": true/false,
-    "human_tell": "string — human signal",
-    "first_sentence_words_to_avoid": ["words from last first sentence"],
-    "banned_word_scan": ["risky words found"]
-  },
-  "message_skeleton": {
-    "opening": "string — one sentence from fresh_hook",
-    "symptom": "string — one sentence with chosen pain",
-    "solve": "string — one clause with solve_clause",
-    "proof": "string|null — short metric or mechanism",
-    "cta": "string — CTA as a question"
-  }
-}"""

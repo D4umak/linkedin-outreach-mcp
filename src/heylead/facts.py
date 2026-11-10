@@ -105,18 +105,6 @@ INCOMPLETE_GOALS_SENTENCE = (
 )
 
 
-def use_cases_markdown() -> str:
-    """The list as Markdown bullets, for the listing files."""
-    return "\n".join(
-        f"- **{label}**: {line}" + ("" if complete else " Works with a custom brief.")
-        for _, label, line, complete in USE_CASES
-    )
-
-
-def use_cases_block() -> str:
-    """The whole block a listing carries: sentence, bullets, caveat."""
-    return f"{USE_CASES_SENTENCE}\n\n{use_cases_markdown()}\n\n{INCOMPLETE_GOALS_SENTENCE}"
-
 # The pace, as what HeyLead does. Built from the ceilings the hosted scheduler
 # enforces (constants.HOSTED_*_INVITE_CAP*) and the default sending window
 # (heylead-api working_hours.DEFAULT_SENDING_WINDOW: Mon-Fri 08:00-22:00 in

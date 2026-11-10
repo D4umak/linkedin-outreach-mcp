@@ -80,16 +80,6 @@ class UnipileApiMetrics:
             result[ep] = entry
         return result
 
-    def failure_rate(self, endpoint: str, *, min_calls: int = 5) -> float | None:
-        """Return failure rate for *endpoint*, or None if insufficient data."""
-        m = self._endpoints.get(endpoint)
-        if not m:
-            return None
-        total = m.success + m.fail
-        if total < min_calls:
-            return None
-        return m.fail / total
-
     def reset(self) -> None:
         """Clear all tracked data (call after flushing to scheduler_events)."""
         self._endpoints.clear()

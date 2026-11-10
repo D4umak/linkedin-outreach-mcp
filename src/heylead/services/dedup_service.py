@@ -387,13 +387,6 @@ def get_enrolled_people() -> list[tuple[frozenset[str], str]]:
     return people
 
 
-def person_already_enrolled(prospect: dict) -> bool:
-    mine = _person_identity(prospect)
-    if not mine[0] and not mine[1]:
-        return False
-    return any(_is_same_person(mine, other) for other in get_enrolled_people())
-
-
 def dedup_prospects(
     prospects: list[dict],
     known_ids: set[str],
@@ -466,60 +459,6 @@ def dedup_prospects(
             continue
 
         stats["passed"] += 1
-        filtered.append(prospect)
-
-    return filtered, stats
-
-
-def filter_to_connections_only(
-    prospects: list[dict],
-    connection_ids: set[str],
-    known_ids: set[str] | None = None,
-) -> tuple[list[dict], dict[str, int]]:
-    """Keep ONLY existing connections (inverse of dedup_prospects).
-
-    For DM-only / connections-only campaigns: include only 1st-degree
-    connections. Optionally removes cross-campaign duplicates via *known_ids*.
-
-    Returns:
-        (filtered_prospects, stats) with counts.
-    """
-    known = known_ids or set()
-    stats = {
-        "total_before": len(prospects),
-        "company_profile": 0,
-        "connected": 0,
-        "not_connected": 0,
-        "cross_campaign_duplicate": 0,
-    }
-
-    filtered: list[dict] = []
-
-    for prospect in prospects:
-        # Skip company/business profiles
-        if is_company_profile(prospect):
-            stats["company_profile"] += 1
-            continue
-
-        pub_id = (prospect.get("public_id") or "").lower().strip()
-        prov_id = (prospect.get("provider_id") or "").lower().strip()
-        url = (prospect.get("linkedin_url") or "").lower().strip()
-
-        identifiers = {x for x in (pub_id, prov_id, url) if x}
-        if pub_id:
-            identifiers.add(f"https://www.linkedin.com/in/{pub_id}")
-
-        # Must be an existing connection
-        if not (identifiers & connection_ids):
-            stats["not_connected"] += 1
-            continue
-
-        # Skip cross-campaign duplicates
-        if identifiers & known:
-            stats["cross_campaign_duplicate"] += 1
-            continue
-
-        stats["connected"] += 1
         filtered.append(prospect)
 
     return filtered, stats

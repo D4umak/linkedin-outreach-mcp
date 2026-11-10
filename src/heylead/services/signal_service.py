@@ -185,15 +185,6 @@ def _extract_keywords_from_phrases(phrases: list[str], max_words: int = 4) -> li
 # Signal lifecycle
 # ──────────────────────────────────────────────
 
-def expire_stale_signals() -> str:
-    """Expire signals past their TTL. Returns summary."""
-    from ..db.signal_queries import expire_old_signals
-    count = expire_old_signals()
-    if count:
-        logger.info("Expired %d stale signals", count)
-    return f"Expired {count} stale signals." if count else "No signals expired."
-
-
 def run_decay_cycle() -> str:
     """Run full signal decay cycle: expire → recompute → expire intent events.
 

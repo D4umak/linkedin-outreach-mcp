@@ -754,11 +754,15 @@ async def run_launch_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
     # promised timings no scheduler kept (Outcome api#1138). Then the day the
     # first week shows something, so the quiet days before it read as the plan
     # working (Outcome api#1140).
-    from ..services.campaign_plan import plan_and_checkpoint_for
+    from ..services.campaign_plan import first_send_line_for, plan_and_checkpoint_for
 
     plan_text, checkpoint = await plan_and_checkpoint_for(campaign_id, campaign)
+    # When it starts finding people and sending, in the owner's time: inside
+    # the night pause nothing happens until morning (heylead-api#5518).
+    first_send_line = await first_send_line_for(campaign_id)
     lines = [
         f"🚀 Campaign '{campaign['name']}' is now live.",
+        *([first_send_line] if first_send_line else []),
         _language.launched_language_line(_cfg),
         "",
         plan_text,

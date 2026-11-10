@@ -27,7 +27,7 @@ from ..constants import LLM_TIER_FAST
 from . import schemas
 from .llm import LLMClient
 from .message_validator import ValidationResult
-from .prompt_loader import get_prompt_temperature, has_prompt, load_fragment, render_prompt
+from .prompt_loader import get_prompt_temperature, has_prompt, render_prompt
 from .copywriter import channel_for_message_type, rules_for
 
 logger = logging.getLogger(__name__)

@@ -147,35 +147,6 @@ def select_channel(
     return CHANNEL_LINKEDIN
 
 
-def should_email_fallback(outreach_id: str) -> bool:
-    """Check if an outreach should fall back to email.
-
-    Returns True if:
-    - Email account is connected
-    - Outreach was sent via LinkedIn 14+ days ago
-    - No reply received
-    """
-    if not has_email_channel():
-        return False
-
-    outreach = get_outreach(outreach_id)
-    if not outreach:
-        return False
-
-    channel = outreach.get("channel") or CHANNEL_LINKEDIN
-    if channel != CHANNEL_LINKEDIN:
-        return False
-
-    invited_at = outreach.get("invited_at") or 0
-    status = outreach.get("status", "")
-
-    # Only fall back if invited but no response
-    if invited_at and status == "invited":
-        return (time.time() - invited_at) > EMAIL_FALLBACK_SECONDS
-
-    return False
-
-
 def _extract_email(prospect: dict) -> str:
     """Try to extract email from prospect profile data."""
     from .prospect_email import extract_profile_email

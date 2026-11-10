@@ -28,7 +28,7 @@ from ..db.queries import (
     log_action,
     save_engagement,
 )
-from ..formatter import progress_bar, stars, table, tree
+from ..formatter import progress_bar, stars, table
 from ..linkedin import get_account_id, get_linkedin_client, UnipileError
 from ..services.brand_service import (
     capture_baseline,

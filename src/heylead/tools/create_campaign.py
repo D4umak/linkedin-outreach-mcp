@@ -902,7 +902,6 @@ async def run_create_campaign(
         from ..services.dedup_service import (
             dedup_prospects,
             fetch_connection_ids,
-            filter_to_connections_only,
             format_dedup_summary,
             get_all_known_linkedin_ids,
             get_enrolled_people,
