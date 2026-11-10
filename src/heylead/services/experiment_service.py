@@ -65,12 +65,6 @@ _PILLAR_ICONS = {
     "data": "\U0001f4ca",
 }
 
-_PRIORITY_LABELS = {
-    "high": "[HIGH]",
-    "medium": "[MED]",
-    "low": "[LOW]",
-}
-
 _EXPERIMENT_SYSTEM = (
     "You are a product manager analyzing LinkedIn outreach campaign data.\n"
     "Your job: identify patterns, generate experiment hypotheses, recommend next steps.\n\n"
@@ -170,11 +164,6 @@ def get_experiment_summary(campaign_id: str = "") -> str:
         parts.append(f"Next: {do_next}")
 
     return " | ".join(parts)
-
-
-def format_experiment_report(analysis: dict[str, Any]) -> str:
-    """Format the LLM analysis into a displayable report."""
-    return _format_report(analysis)
 
 
 def get_voice_format_for_outreach(
@@ -451,11 +440,6 @@ async def finish_headline_tests() -> str:
     if latest and latest.get("status") == "completed" and winner in ("A", "B"):
         return await _finish_headline_test(winner, latest)
     return await _finish_headline_test("restore", latest)
-
-
-async def restore_headline_after_ab_test() -> str:
-    """Put the pre-test headline back, or apply the winner if one was chosen."""
-    return await finish_headline_tests()
 
 
 async def persist_invite_headline_variant(
@@ -980,188 +964,3 @@ async def _run_analysis(snapshot: str) -> dict[str, Any] | None:
         logger.error(f"Experiment analysis failed: {e}", exc_info=True)
         return None
 
-
-# ──────────────────────────────────────────────
-# Output Formatting
-# ──────────────────────────────────────────────
-
-
-def _format_report(analysis: dict[str, Any]) -> str:
-    """Format the LLM analysis into a displayable report."""
-    today = datetime.now(timezone.utc).strftime("%b %d")
-    out = [f"\U0001f52c **Experiment Analysis** ({today})\n"]
-
-    # Health check
-    health = analysis.get("health_check", "")
-    if health:
-        out.append(f"**Health:** {health}\n")
-
-    # Hypotheses
-    hypotheses = analysis.get("hypotheses", [])
-    if hypotheses:
-        out.append("**Hypotheses:**\n")
-        for i, hyp in enumerate(hypotheses, 1):
-            pillar = hyp.get("pillar", "data").lower()
-            icon = _PILLAR_ICONS.get(pillar, "\U0001f4ca")
-            priority = hyp.get("priority", "medium").lower()
-            plabel = _PRIORITY_LABELS.get(priority, "[MED]")
-            title = hyp.get("title", "")
-            evidence = hyp.get("evidence", "")
-            test = hyp.get("suggested_test", "")
-
-            out.append(f"{i}. {plabel} {icon} **{pillar.title()}:** {title}")
-            if evidence:
-                out.append(f"   Evidence: {evidence}")
-            if test:
-                out.append(f"   Test: {test}")
-            out.append("")
-    else:
-        out.append("No hypotheses generated — try again with more data.\n")
-
-    # Do this next
-    do_next = analysis.get("do_this_next", "")
-    if do_next:
-        out.append(f"\u2192 **Do this next:** {do_next}\n")
-
-    # A/B test section
-    ab_section = _format_ab_tests()
-    if ab_section:
-        out.append(ab_section)
-
-    # Signal vs Cold section
-    signal_section = _format_signal_vs_cold()
-    if signal_section:
-        out.append(signal_section)
-
-    out.append("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
-    out.append("Experiment insights appear in campaign_report.")
-
-    return "\n".join(out)
-
-
-def _format_ab_tests() -> str:
-    """Format running and recent completed A/B tests."""
-    running = list_ab_tests(status="running")
-    completed = list_ab_tests(status="completed")
-    if not running and not completed:
-        return ""
-
-    lines = ["\n**A/B Tests:**\n"]
-
-    for t in running:
-        camp_id = t["campaign_id"]
-        v_stats = get_variant_stats(camp_id)
-        va = v_stats.get("A", {})
-        vb = v_stats.get("B", {})
-        a_n = va.get("invited", 0)
-        b_n = vb.get("invited", 0)
-        lines.append(f"\U0001f9ea {t['name']} (running)")
-        lines.append(f"   A: {t['variant_a']} \u2014 {a_n} invited, {va.get('acceptance_rate', 0)}% accept, {va.get('reply_rate', 0)}% reply")
-        lines.append(f"   B: {t['variant_b']} \u2014 {b_n} invited, {vb.get('acceptance_rate', 0)}% accept, {vb.get('reply_rate', 0)}% reply")
-        if a_n >= _MIN_PER_VARIANT and b_n >= _MIN_PER_VARIANT:
-            lines.append("   \u2705 Enough data to evaluate \u2014 A/B tests are auto-evaluated by the scheduler.")
-        else:
-            needed = max(0, _MIN_PER_VARIANT - min(a_n, b_n))
-            lines.append(f"   \u23f3 Need ~{needed} more prospects per variant for significance")
-        lines.append("")
-
-    for t in completed[:3]:
-        winner = t.get("winner", "?")
-        lines.append(f"\u2705 {t['name']} \u2014 Winner: Variant {winner}")
-        if t.get("result_json"):
-            try:
-                res = json.loads(t["result_json"])
-                if res.get("reason"):
-                    lines.append(f"   {res['reason']}")
-            except (json.JSONDecodeError, TypeError):
-                pass
-        lines.append("")
-
-    return "\n".join(lines)
-
-
-def _format_signal_vs_cold() -> str:
-    """Format signal vs cold comparison for experiment reports."""
-    try:
-        from ..db.signal_queries import get_signal_performance
-
-        perf = get_signal_performance()
-        sig = perf["signal"]
-        cold = perf["cold"]
-
-        if sig["total"] == 0:
-            return ""
-
-        lines = ["\n**Signal vs Cold Outreach:**\n"]
-
-        sig_invited = sig.get("invited", 0)
-        cold_invited = cold.get("invited", 0)
-        sig_acc = sig.get("acceptance_rate", 0)
-        cold_acc = cold.get("acceptance_rate", 0)
-        sig_reply = sig.get("reply_rate", 0)
-        cold_reply = cold.get("reply_rate", 0)
-
-        lines.append(
-            f"\U0001f4e1 Signal-triggered: {sig['total']} outreaches, "
-            f"{sig_invited} invited, "
-            f"{sig_acc:.0%} accept, "
-            f"{sig_reply:.0%} reply, "
-            f"{sig.get('won', 0)} won"
-        )
-        lines.append(
-            f"\u2744\ufe0f Cold outreach: {cold['total']} outreaches, "
-            f"{cold_invited} invited, "
-            f"{cold_acc:.0%} accept, "
-            f"{cold_reply:.0%} reply, "
-            f"{cold.get('won', 0)} won"
-        )
-
-        # Lift calculation
-        lift = perf.get("signal_lift", {})
-        acc_lift = lift.get("acceptance")
-        reply_lift = lift.get("reply")
-        lift_parts = []
-        if acc_lift is not None and acc_lift != 0:
-            direction = "\u2191" if acc_lift > 0 else "\u2193"
-            lift_parts.append(f"acceptance {direction}{abs(acc_lift):.0%}")
-        if reply_lift is not None and reply_lift != 0:
-            direction = "\u2191" if reply_lift > 0 else "\u2193"
-            lift_parts.append(f"reply {direction}{abs(reply_lift):.0%}")
-        if lift_parts:
-            lines.append(f"Signal lift: {', '.join(lift_parts)}")
-
-        # Enough data verdict
-        if sig_invited >= _MIN_PER_VARIANT and cold_invited >= _MIN_PER_VARIANT:
-            winner = _determine_signal_winner(
-                sig_acc, cold_acc, sig_reply, cold_reply, acc_lift, reply_lift,
-            )
-            lines.append(f"\u2705 {winner}")
-        else:
-            sig_needed = max(0, _MIN_PER_VARIANT - sig_invited)
-            cold_needed = max(0, _MIN_PER_VARIANT - cold_invited)
-            lines.append(
-                f"\u23f3 Need more data: signal needs ~{sig_needed} more, "
-                f"cold needs ~{cold_needed} more invited"
-            )
-
-        # Best signal type
-        by_type = perf.get("by_signal_type", {})
-        if by_type:
-            best_type = None
-            best_rate = 0.0
-            for sig_type, stats in by_type.items():
-                total = stats.get("total", 0)
-                replied = stats.get("replied", 0)
-                if total >= 3:
-                    rate = replied / total
-                    if rate > best_rate:
-                        best_rate = rate
-                        best_type = sig_type
-            if best_type:
-                label = best_type.replace("_", " ").title()
-                lines.append(f"\U0001f947 Best converting signal: {label} ({best_rate:.0%} reply rate)")
-
-        lines.append("")
-        return "\n".join(lines)
-    except Exception:
-        return ""

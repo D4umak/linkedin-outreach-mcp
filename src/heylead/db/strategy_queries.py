@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from .schema import get_db
+from .queries import invite_sent_sql, invite_accepted_sql
 
 
 # ──────────────────────────────────────────────
@@ -211,15 +212,14 @@ def get_segment_performance() -> list[dict[str, Any]]:
     Also computes average estimated_revenue per segment.
     """
     db = get_db()
-    rows = db.execute("""
+    rows = db.execute(f"""
         SELECT
             c.company AS segment_company,
             c.title AS segment_title,
             COUNT(DISTINCT o.id) AS total,
-            SUM(CASE WHEN o.status IN ('invited','withdrawn','connected','messaged','replied',
-                'hot_lead','closed_happy','closed_unhappy','opted_out') THEN 1 ELSE 0 END) AS invited,
-            SUM(CASE WHEN o.status IN ('connected','messaged','replied',
-                'hot_lead','closed_happy','closed_unhappy','opted_out') THEN 1 ELSE 0 END) AS connected,
+            SUM(CASE WHEN {invite_sent_sql('o')} OR o.status = 'withdrawn' THEN 1 ELSE 0 END) AS invited,
+            SUM(CASE WHEN {invite_accepted_sql('o')} THEN 1 ELSE 0 END) AS accepted,
+            SUM(CASE WHEN o.accepted_at IS NOT NULL OR o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) AS connected,
             SUM(CASE WHEN o.status IN ('replied','hot_lead',
                 'closed_happy','closed_unhappy') THEN 1 ELSE 0 END) AS replied,
             SUM(CASE WHEN o.status = 'hot_lead' THEN 1 ELSE 0 END) AS hot_leads,
@@ -242,10 +242,12 @@ def get_segment_performance() -> list[dict[str, Any]]:
     results = []
     for r in rows:
         d = dict(r)
-        invited = d["invited"] or 1
-        connected = d["connected"] or 0
-        d["acceptance_rate"] = round(connected / invited * 100, 1) if invited > 0 else 0
-        d["reply_rate"] = round(d["replied"] / connected * 100, 1) if connected > 0 else 0
+        invited = d["invited"]
+        accepted = d["accepted"]
+        connected = d["connected"]
+        d["acceptance_rate"] = round(accepted / invited * 100, 1) if invited > 0 else 0
+        reply_denom = accepted if invited > 0 else connected
+        d["reply_rate"] = round(d["replied"] / reply_denom * 100, 1) if reply_denom > 0 else 0
         d["conversion_rate"] = round(
             d["won"] / (d["won"] + d["lost"]) * 100, 1
         ) if (d["won"] + d["lost"]) > 0 else 0
@@ -259,15 +261,14 @@ def get_campaign_segment_performance(campaign_id: str) -> list[dict[str, Any]]:
     Groups by company + title to identify underperforming segments.
     """
     db = get_db()
-    rows = db.execute("""
+    rows = db.execute(f"""
         SELECT
             c.company AS segment_company,
             c.title AS segment_title,
             COUNT(DISTINCT o.id) AS total,
-            SUM(CASE WHEN o.status IN ('invited','withdrawn','connected','messaged','replied',
-                'hot_lead','closed_happy','closed_unhappy','opted_out') THEN 1 ELSE 0 END) AS invited,
-            SUM(CASE WHEN o.status IN ('connected','messaged','replied',
-                'hot_lead','closed_happy','closed_unhappy','opted_out') THEN 1 ELSE 0 END) AS connected,
+            SUM(CASE WHEN {invite_sent_sql('o')} OR o.status = 'withdrawn' THEN 1 ELSE 0 END) AS invited,
+            SUM(CASE WHEN {invite_accepted_sql('o')} THEN 1 ELSE 0 END) AS accepted,
+            SUM(CASE WHEN o.accepted_at IS NOT NULL OR o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) AS connected,
             SUM(CASE WHEN o.status IN ('replied','hot_lead',
                 'closed_happy','closed_unhappy') THEN 1 ELSE 0 END) AS replied,
             SUM(CASE WHEN o.status = 'closed_happy' THEN 1 ELSE 0 END) AS won,
@@ -285,10 +286,12 @@ def get_campaign_segment_performance(campaign_id: str) -> list[dict[str, Any]]:
     results = []
     for r in rows:
         d = dict(r)
-        invited = d["invited"] or 1
-        connected = d["connected"] or 0
-        d["acceptance_rate"] = round(connected / invited * 100, 1) if invited > 0 else 0
-        d["reply_rate"] = round(d["replied"] / connected * 100, 1) if connected > 0 else 0
+        invited = d["invited"]
+        accepted = d["accepted"]
+        connected = d["connected"]
+        d["acceptance_rate"] = round(accepted / invited * 100, 1) if invited > 0 else 0
+        reply_denom = accepted if invited > 0 else connected
+        d["reply_rate"] = round(d["replied"] / reply_denom * 100, 1) if reply_denom > 0 else 0
         results.append(d)
     return results
 
@@ -299,14 +302,14 @@ def get_timing_heatmap() -> list[dict[str, Any]]:
     Returns rows with dow (0=Sun), hour, count, accepted, acceptance_rate.
     """
     db = get_db()
-    rows = db.execute("""
+    rows = db.execute(f"""
         SELECT
             CAST(strftime('%w', datetime(o.invited_at, 'unixepoch')) AS INTEGER) AS dow,
             CAST(strftime('%H', datetime(o.invited_at, 'unixepoch')) AS INTEGER) AS hour,
             COUNT(*) AS invites,
-            SUM(CASE WHEN o.accepted_at IS NOT NULL THEN 1 ELSE 0 END) AS accepted
+            SUM(CASE WHEN {invite_accepted_sql('o')} THEN 1 ELSE 0 END) AS accepted
         FROM outreaches o
-        WHERE o.invited_at IS NOT NULL
+        WHERE {invite_sent_sql('o')}
         GROUP BY dow, hour
         HAVING invites >= 3
         ORDER BY dow, hour
@@ -338,8 +341,9 @@ def get_engagement_strategy_correlation() -> list[dict[str, Any]]:
                 ELSE 'no_engagement'
             END AS strategy,
             COUNT(DISTINCT o.id) AS total,
-            SUM(CASE WHEN o.status IN ('connected','messaged','replied',
-                'hot_lead','closed_happy','closed_unhappy','opted_out') THEN 1 ELSE 0 END) AS connected,
+            SUM(CASE WHEN {invite_sent_sql('o')} OR o.status = 'withdrawn' THEN 1 ELSE 0 END) AS invited,
+            SUM(CASE WHEN {invite_accepted_sql('o')} THEN 1 ELSE 0 END) AS accepted,
+            SUM(CASE WHEN o.accepted_at IS NOT NULL OR o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) AS connected,
             SUM(CASE WHEN o.status IN ('replied','hot_lead',
                 'closed_happy','closed_unhappy') THEN 1 ELSE 0 END) AS replied,
             SUM(CASE WHEN o.status = 'closed_happy' THEN 1 ELSE 0 END) AS won,
@@ -361,9 +365,12 @@ def get_engagement_strategy_correlation() -> list[dict[str, Any]]:
     for r in rows:
         d = dict(r)
         total = d["total"] or 1
-        connected = d["connected"] or 0
-        d["acceptance_rate"] = round(connected / total * 100, 1) if total > 0 else 0
-        d["reply_rate"] = round(d["replied"] / connected * 100, 1) if connected > 0 else 0
+        invited = d["invited"]
+        accepted = d["accepted"]
+        connected = d["connected"]
+        d["acceptance_rate"] = round(accepted / invited * 100, 1) if invited > 0 else 0
+        reply_denom = accepted if invited > 0 else connected
+        d["reply_rate"] = round(d["replied"] / reply_denom * 100, 1) if reply_denom > 0 else 0
         d["conversion_rate"] = round(
             d["won"] / (d["won"] + total - d["won"]) * 100, 1
         ) if total > 0 else 0
@@ -377,14 +384,14 @@ def get_revenue_weighted_funnel() -> dict[str, Any]:
     Returns total pipeline value at each stage.
     """
     db = get_db()
-    row = db.execute("""
+    row = db.execute(f"""
         SELECT
             SUM(c.estimated_revenue) AS total_pipeline,
-            SUM(CASE WHEN o.status IN ('invited','withdrawn','connected','messaged','replied',
-                'hot_lead','closed_happy','closed_unhappy','opted_out')
+            SUM(CASE WHEN {invite_sent_sql('o')}
                 THEN c.estimated_revenue ELSE 0 END) AS invited_value,
-            SUM(CASE WHEN o.status IN ('connected','messaged','replied',
-                'hot_lead','closed_happy','closed_unhappy','opted_out')
+            SUM(CASE WHEN {invite_accepted_sql('o')}
+                THEN c.estimated_revenue ELSE 0 END) AS accepted_value,
+            SUM(CASE WHEN o.accepted_at IS NOT NULL
                 THEN c.estimated_revenue ELSE 0 END) AS connected_value,
             SUM(CASE WHEN o.status IN ('replied','hot_lead','closed_happy','closed_unhappy','reverse_pitch','opted_out')
                 THEN c.estimated_revenue ELSE 0 END) AS replied_value,
@@ -409,7 +416,7 @@ def get_fit_score_outcome_correlation() -> list[dict[str, Any]]:
     Groups by fit_score buckets (0-0.2, 0.2-0.4, etc.) and shows conversion rates.
     """
     db = get_db()
-    rows = db.execute("""
+    rows = db.execute(f"""
         SELECT
             CASE
                 WHEN c.fit_score < 0.2 THEN '0.0-0.2'
@@ -419,8 +426,9 @@ def get_fit_score_outcome_correlation() -> list[dict[str, Any]]:
                 ELSE '0.8-1.0'
             END AS fit_bucket,
             COUNT(DISTINCT o.id) AS total,
-            SUM(CASE WHEN o.status IN ('connected','messaged','replied',
-                'hot_lead','closed_happy','closed_unhappy','opted_out') THEN 1 ELSE 0 END) AS connected,
+            SUM(CASE WHEN {invite_sent_sql('o')} OR o.status = 'withdrawn' THEN 1 ELSE 0 END) AS invited,
+            SUM(CASE WHEN {invite_accepted_sql('o')} THEN 1 ELSE 0 END) AS accepted,
+            SUM(CASE WHEN o.accepted_at IS NOT NULL OR o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) AS connected,
             SUM(CASE WHEN o.status IN ('replied','hot_lead',
                 'closed_happy','closed_unhappy') THEN 1 ELSE 0 END) AS replied,
             SUM(CASE WHEN o.status = 'closed_happy' THEN 1 ELSE 0 END) AS won,
@@ -437,12 +445,16 @@ def get_fit_score_outcome_correlation() -> list[dict[str, Any]]:
     results = []
     for r in rows:
         d = dict(r)
+        invited = d["invited"]
+        accepted = d["accepted"]
+        connected = d["connected"]
         d["acceptance_rate"] = round(
-            d["connected"] / d["total"] * 100, 1
-        ) if d["total"] > 0 else 0
+            accepted / invited * 100, 1
+        ) if invited > 0 else 0
+        reply_denom = accepted if invited > 0 else connected
         d["reply_rate"] = round(
-            d["replied"] / d["connected"] * 100, 1
-        ) if d["connected"] > 0 else 0
+            d["replied"] / reply_denom * 100, 1
+        ) if reply_denom > 0 else 0
         d["conversion_rate"] = round(
             d["won"] / (d["won"] + d["lost"]) * 100, 1
         ) if (d["won"] + d["lost"]) > 0 else 0

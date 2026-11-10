@@ -3,6 +3,10 @@
 
 HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard. Connect: https://heylead.dev/mcp (OAuth; works in Claude Code, in claude.ai as a custom connector, in Cursor, and in ChatGPT as a custom MCP app — tested on ChatGPT Pro on 29 September 2026; custom MCP apps depend on your ChatGPT plan and settings). Website: [heylead.dev](https://heylead.dev) · Agent setup and docs: [heylead.dev/llms.txt](https://heylead.dev/llms.txt)
 
+[![GitHub stars](https://img.shields.io/github/stars/D4umak/linkedin-outreach-mcp?style=social)](https://github.com/D4umak/linkedin-outreach-mcp)
+
+If HeyLead finds people for you, [star the repo](https://github.com/D4umak/linkedin-outreach-mcp) so the next founder can find it.
+
 ## Use cases
 
 A campaign has one of six goals, and the ICP, the fit check and the messages follow it: Sell a product or service, Find a job, Hire people, Find partners or investors, Find a vendor and Research interviews.

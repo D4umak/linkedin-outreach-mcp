@@ -89,7 +89,7 @@ def stamp_rows(outreach_ids: Iterable[str], decision_id: str) -> int:
 
 
 def _touched_rows(db: Any, decision: dict[str, Any]) -> list[dict[str, Any]]:
-    cols = "o.id, o.accepted_at, o.first_reply_at, o.status, o.updated_at"
+    cols = "o.id, o.accepted_at, o.invited_at, o.first_reply_at, o.status, o.updated_at"
     if decision.get("scope") == SCOPE_CAMPAIGN:
         if not decision.get("campaign_id"):
             return []
@@ -130,9 +130,19 @@ def _counts(db: Any, rows: list[dict[str, Any]], start: int, end: int) -> dict[s
         except (TypeError, ValueError):
             return False
 
+    def is_accepted(r: dict[str, Any]) -> bool:
+        invited_at = int(r.get("invited_at") or 0)
+        accepted_at = int(r.get("accepted_at") or 0)
+        status = str(r.get("status") or "")
+        # Match heylead.db.queries.invite_accepted_sql() logic
+        is_sent = status != 'skipped' and (invited_at > 0 or (invited_at == 0 and accepted_at == 0 and status not in ('', 'pending', 'review_pending')))
+        if not is_sent:
+            return False
+        return (accepted_at > 0 and invited_at > 0 and accepted_at >= invited_at) or (accepted_at == 0 and status in ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out'))
+
     return {
         "touched": len(rows),
-        "accepted_delta": sum(1 for r in rows if within(r.get("accepted_at"))),
+        "accepted_delta": sum(1 for r in rows if is_accepted(r) and within(r.get("accepted_at"))),
         "reply_delta": sum(1 for r in rows if within(r.get("first_reply_at"))),
         "closed_delta": sum(
             1 for r in rows if r.get("status") in _CLOSED_STATUSES and within(r.get("updated_at"))

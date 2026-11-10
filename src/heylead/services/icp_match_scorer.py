@@ -140,7 +140,7 @@ def compute_icp_match(
         # No ICP data — return neutral score
         return {"icp_match_score": UNKNOWN_SCORE, "breakdown": {}}
 
-    title_score = _score_title_match(contact.get("title", ""), icp)
+    title_score = _score_title_match(contact.get("title", ""), icp, contact)
     industry_score = _score_industry_match(contact, icp, campaign_icp_json)
     seniority_score = _score_seniority_match(contact.get("title", ""), icp)
     size_score = _score_company_size(contact, icp, campaign_icp_json)
@@ -383,7 +383,29 @@ def _expand_product_leader_terms(include: list[str]) -> list[str]:
     return include
 
 
-def _score_title_match(title: str, icp: dict) -> float:
+_EVIDENCE_KEYS = ("title", "headline", "company", "industry", "summary", "about")
+
+
+def _evidence_text(contact: dict[str, Any] | None) -> str:
+    """Title, headline, company, industry, summary and about of a contact and
+    its profile_json: heylead-api fit_rules.prospect_evidence_text, the text
+    the #5751 rule reads for the segment's role."""
+    if not contact:
+        return ""
+    parts = [str(contact.get(k) or "") for k in _EVIDENCE_KEYS]
+    raw = contact.get("profile_json")
+    profile: Any = raw
+    if isinstance(raw, str):
+        try:
+            profile = json.loads(raw) if raw.strip() else {}
+        except (json.JSONDecodeError, TypeError):
+            profile = {}
+    if isinstance(profile, dict):
+        parts.extend(str(profile.get(k) or "") for k in _EVIDENCE_KEYS)
+    return " ".join(p for p in parts if p)
+
+
+def _score_title_match(title: str, icp: dict, contact: dict[str, Any] | None = None) -> float:
     """Score title match against ICP job_titles (0.0-1.0)."""
     if not title:
         return UNKNOWN_SCORE
@@ -421,6 +443,19 @@ def _score_title_match(title: str, icp: dict) -> float:
     # names "Chief Technology Officer" must meet the "CTO" a headline says
     # (profile_signals.role_hit, tests/test_one_title_matcher.py).
     if role_hit(title_lower, include):
+        # A generic title ("Founder") alone, in an ICP that also names a role
+        # ("Principal Coach"), with nothing about the person naming it, is a
+        # level, not the role: no title credit, not even word overlap
+        # (heylead-api #5751; generic_titles, the same file as the backend's).
+        from .generic_titles import generic_only_title_hit
+        from .icp_vocabulary import is_investor_segment
+
+        # The headline is in the evidence text, so a role named there counts.
+        if generic_only_title_hit(
+            title_lower, include, evidence=_evidence_text(contact),
+            investor=is_investor_segment({"titles": include}),
+        ):
+            return 0.1
         return 1.0
 
     # Partial word overlap: check individual words from include terms. An ICP

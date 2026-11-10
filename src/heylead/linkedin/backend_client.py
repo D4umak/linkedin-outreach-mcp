@@ -606,10 +606,6 @@ class BackendClient:
         """
         pass
 
-    async def _real_close(self) -> None:
-        """Actually close the underlying httpx client (for shutdown only)."""
-        await self._client.aclose()
-
     # ── Voyager Health Check ──
 
     _voyager_available: bool | None = None
@@ -3575,60 +3571,6 @@ class BackendClient:
 
     # ── Company Search ──
 
-    async def search_companies(
-        self,
-        account_id: str,
-        keywords: str,
-        limit: int = 25,
-        *,
-        cursor: str | None = None,
-    ) -> tuple[list[dict[str, Any]], str | None]:
-        """Search LinkedIn companies by keywords via the backend proxy."""
-        url = f"{self.base_url}/api/v1/linkedin/search/companies"
-        payload: dict[str, Any] = {
-            "keywords": keywords,
-            "limit": min(limit, 50),
-        }
-        if cursor:
-            payload["cursor"] = cursor
-        try:
-            resp = await self._post(url, json=payload, headers=self._headers())
-            if resp.status_code != 200:
-                return [], None
-            data = resp.json()
-
-            if isinstance(data, list):
-                items = data
-            elif isinstance(data, dict):
-                items = data.get("items") or data.get("results") or data.get("data") or []
-            else:
-                items = []
-
-            next_cursor = None
-            if isinstance(data, dict):
-                next_cursor = data.get("cursor") or data.get("next_cursor") or data.get("paging", {}).get("cursor")
-
-            companies: list[dict[str, Any]] = []
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                companies.append({
-                    "company_id": item.get("id") or item.get("company_id") or "",
-                    "name": item.get("name") or item.get("title") or "",
-                    "industry": item.get("industry") or "",
-                    "size": item.get("size") or item.get("company_size") or "",
-                    "employee_count": item.get("employee_count") or item.get("employeeCount") or 0,
-                    "description": item.get("description") or item.get("tagline") or "",
-                    "website": item.get("website") or "",
-                    "logo_url": item.get("logo_url") or item.get("logo") or "",
-                    "linkedin_url": item.get("url") or item.get("linkedin_url") or item.get("public_profile_url") or "",
-                    "location": item.get("location") or item.get("headquarters") or "",
-                })
-            return companies, next_cursor
-        except Exception as e:
-            logger.warning(f"Backend company search error: {e}")
-            return [], None
-
     # ── Job Search (Intent Signals) ──
 
     async def search_jobs(
@@ -3792,22 +3734,6 @@ class BackendClient:
         except Exception as e:
             logger.debug(f"list_emails failed: {e}")
             return []
-
-    async def get_email(
-        self,
-        account_id: str,
-        email_id: str,
-    ) -> dict[str, Any]:
-        """Get a single email by ID (backend proxy)."""
-        url = f"{self.base_url}/api/v1/email/{email_id}"
-        try:
-            resp = await self._client.get(url, headers=self._headers())
-            if resp.status_code != 200:
-                return {}
-            return resp.json()
-        except Exception as e:
-            logger.debug(f"get_email failed: {e}")
-            return {}
 
     async def set_brand_engagement(self, enabled: bool) -> dict[str, Any]:
         """Turn this workspace's brand engagement on or off in the cloud (api #2221).
@@ -4040,26 +3966,6 @@ class BackendClient:
         if about:
             body["about"] = about
         return await self._cloud_call("POST", "/brand/optimize-about", body)
-
-    async def mark_email(
-        self,
-        account_id: str,
-        email_id: str,
-        action: str = "setRead",
-    ) -> dict[str, Any]:
-        """Mark an email as read/unread/archived (backend proxy)."""
-        url = f"{self.base_url}/api/v1/email/{email_id}/mark"
-        payload = {"action": action}
-        result: dict[str, Any] = {"success": False, "error": ""}
-        try:
-            resp = await self._client.patch(url, json=payload, headers=self._headers())
-            if resp.status_code in (200, 204):
-                result["success"] = True
-            else:
-                result["error"] = f"Backend returned {resp.status_code}"
-        except Exception as e:
-            result["error"] = f"Mark email failed: {e}"
-        return result
 
     # ── Search Parameters ──
 
@@ -5806,16 +5712,6 @@ class BackendClient:
         except (httpx.ConnectError, httpx.TimeoutException) as e:
             raise _wrap_connection_error(e, self.base_url) from e
 
-    async def backfill_published_posts(self) -> dict[str, Any]:
-        """Record posts that predate published_posts so they can be monitored."""
-        url = f"{self.base_url}/api/v1/posts/backfill"
-        try:
-            resp = await self._post(url, json={}, headers=self._headers())
-            resp.raise_for_status()
-            return _ensure_dict(resp.json())
-        except (httpx.ConnectError, httpx.TimeoutException) as e:
-            raise _wrap_connection_error(e, self.base_url) from e
-
     async def reply_to_comment(
         self,
         account_id: str,
@@ -6069,38 +5965,6 @@ class BackendClient:
             payload["min_confidence"] = min_confidence
         try:
             resp = await self._post(url, json=payload, headers=self._headers())
-            _raise_if_pool_denied(resp)
-            resp.raise_for_status()
-            return resp.json()
-        except (httpx.ConnectError, httpx.TimeoutException) as e:
-            raise _wrap_connection_error(e, self.base_url) from e
-
-    async def network_insights_summary(self) -> dict[str, Any]:
-        """Get insight dashboard summary.
-
-        Pool members only: raises NetworkPoolNotMemberError when this
-        workspace is not an active member of the reciprocal pool.
-        """
-        url = f"{self.base_url}/api/v1/network/insights/summary"
-        try:
-            resp = await self._client.get(url, headers=self._headers())
-            _raise_if_pool_denied(resp)
-            resp.raise_for_status()
-            return resp.json()
-        except (httpx.ConnectError, httpx.TimeoutException) as e:
-            raise _wrap_connection_error(e, self.base_url) from e
-
-    async def network_insights_refresh(self) -> dict[str, Any]:
-        """Admin: trigger manual insight extraction cycle.
-
-        Pool members only: raises NetworkPoolNotMemberError when this
-        workspace is not an active member of the reciprocal pool.
-        """
-        url = f"{self.base_url}/api/v1/network/insights/refresh"
-        try:
-            resp = await self._post(
-                url, json={}, headers=self._headers(), timeout=300.0,
-            )
             _raise_if_pool_denied(resp)
             resp.raise_for_status()
             return resp.json()

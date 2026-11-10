@@ -183,17 +183,6 @@ class KbCard:
             bits.append("value: " + ", ".join(self.value_drivers[:3]))
         return bits
 
-    def as_prompt_evidence(self) -> str:
-        """The card's content only — nothing that identifies where it came from.
-
-        What a copy prompt may see. ``as_evidence_line`` opens with a header
-        naming the persona id, the stage and the real book, author and
-        chapter. A draft that echoed that header named a book the sender
-        never mentioned, in a bracket shape no guardrail regex matched.
-        Prompts get this; the tagged line stays for logs, ICP and debugging.
-        """
-        return " | ".join(self._content_bits(for_prompt=True))
-
     def as_evidence_line(self) -> str:
         """One prompt line. Persona/stage/source first so the LLM can cite it."""
         if self.family == FAMILY_METHODOLOGY:
@@ -389,15 +378,6 @@ def _load_corpus() -> _Corpus:
     return _Corpus(cards, token_sets, idf, {c.id: i for i, c in enumerate(cards)})
 
 
-def load_kb_cards(family: str | None = None) -> list[KbCard]:
-    """Every shipped card of a family (all when None), unranked."""
-    return [c for c in _load_corpus().cards if family is None or c.family == family]
-
-
-def kb_card_count(family: str | None = None) -> int:
-    return len(load_kb_cards(family))
-
-
 def personas_for_titles(titles: list[str]) -> list[str]:
     """Persona keys covering a list of ICP job titles."""
     from .persona_cards import archive_personas_for_title
@@ -463,8 +443,7 @@ def retrieve_kb(
         stage: one of connect / discovery / objection / close.
         top_k: how many cards to return.
         family: "persona" (the default — what the ICP and goal-match callers
-            read), "methodology", or None for both. Copy drafting uses
-            :func:`retrieve_for_copy`.
+            read), "methodology", or None for both.
         channel: excludes methodology cards written for other channels.
         objection_type: ranks up cards that answer this objection.
 
@@ -521,77 +500,6 @@ def retrieve_kb(
 
     scored.sort(key=lambda c: (not c.answers_objection, -c.score, c.id))
     return scored[:top_k]
-
-
-def retrieve_for_copy(
-    query: str,
-    *,
-    personas: list[str] | None = None,
-    stage: str | None = None,
-    channel: str | None = None,
-    objection_type: str | None = None,
-    max_cards: int = 3,
-) -> list[KbCard]:
-    """The cards a drafting prompt gets: one persona card, then methodology.
-
-    The persona card for this buyer and stage comes first. Its linked
-    methodology cards follow (those written for this channel, the ones
-    answering this objection first), and the lexical best matches fill any
-    room left. Without a recognisable persona it is methodology only.
-    Render them with :meth:`KbCard.as_prompt_evidence`, never the tagged
-    evidence line, so a draft cannot echo a book title.
-    """
-    if max_cards <= 0:
-        return []
-    corpus = _load_corpus()
-    out: list[KbCard] = []
-    wanted = _canonical_personas(personas) or set(personas_for_titles(_persona_phrases(query)))
-    persona_hits = (
-        retrieve_kb(query, personas=sorted(wanted), stage=stage, top_k=1, family=FAMILY_PERSONA)
-        if wanted else []
-    )
-    if persona_hits:
-        out.append(persona_hits[0])
-
-    # Methodology: lexical ranking for this stage/channel/objection, with the
-    # persona card's linked cards ranked up rather than placed first — a
-    # link says "fits this buyer", the query says "fits this message".
-    linked_ids = set(persona_hits[0].methodology_ids) if persona_hits else set()
-    ranked = retrieve_kb(
-        query, personas=sorted(wanted) or None, stage=stage, top_k=max_cards * 6,
-        family=FAMILY_METHODOLOGY, channel=channel, objection_type=objection_type,
-    )
-    seen_ranked = {c.id for c in ranked}
-    for mid in linked_ids - seen_ranked:
-        idx = corpus.by_id.get(mid)
-        if idx is None:
-            continue
-        card = corpus.cards[idx]
-        if stage and not card.matches_stage(stage):
-            continue
-        if channel and card.channels and channel not in card.channels:
-            continue
-        hit = KbCard()
-        hit.__dict__.update(card.__dict__)
-        hit.score = 0.0
-        hit.answers_objection = bool(objection_type) and objection_type in card.objection_types
-        ranked.append(hit)
-    for card in ranked:
-        if card.id in linked_ids:
-            card.score += 1.0
-    ranked.sort(key=lambda c: (not c.answers_objection, -c.score, c.id))
-
-    seen = {c.id for c in out}
-    books: set[str] = set()
-    for card in ranked:
-        if len(out) >= max_cards:
-            break
-        if card.id in seen or card.source_title in books:
-            continue  # two techniques from one book read as one voice
-        seen.add(card.id)
-        books.add(card.source_title)
-        out.append(card)
-    return out
 
 
 def format_kb_evidence(cards: list[KbCard], max_cards: int = 8) -> str:

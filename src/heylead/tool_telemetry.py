@@ -48,14 +48,33 @@ FLUSH_AFTER_SECONDS = 2.0
 
 # First match wins: Cursor's handshake says "cursor-vscode", Codex is an
 # OpenAI client, so each is asked before the name it contains.
-_CLIENT_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("cursor", ("cursor",)),
-    ("codex", ("codex",)),
-    ("chatgpt", ("chatgpt", "openai")),
-    ("gemini", ("gemini",)),
-    ("vscode", ("vscode", "visual studio code", "copilot")),
-    ("claude", ("claude", "anthropic")),
+#: The MCP host in the words the api's mcp.connected uses
+#: (heylead-api product_events._MCP_CLIENT_NAMES, api #5473): until then this
+#: said "claude" for both Claude apps, so a join on client read 0. First match
+#: wins: an editor that names the model it fronts ("ZCode for Claude") and
+#: Codex, an OpenAI client, are read before the name they contain.
+_CLIENT_NAMES: tuple[tuple[str, str], ...] = (
+    ("zcode", "zcode"),
+    ("lm studio", "lm_studio"),
+    ("lmstudio", "lm_studio"),
+    ("gemini", "gemini"),
+    ("claude code", "claude_code"),
+    ("cursor", "cursor"),
+    ("codex", "codex"),
+    ("chatgpt", "chatgpt"),
+    ("openai", "chatgpt"),
+    ("visual studio code", "vscode"),
+    ("vs code", "vscode"),
+    ("vscode", "vscode"),
+    ("copilot", "vscode"),
+    ("windsurf", "windsurf"),
+    ("codeium", "windsurf"),
+    ("claude", "claude_ai"),
+    ("anthropic", "claude_ai"),
 )
+#: Every value classify_client returns; a subset of the api's TOOL_CALL_CLIENTS
+#: (a batch with one value outside it is refused whole).
+CLIENT_VALUES = frozenset({c for _, c in _CLIENT_NAMES} | {"other"})
 _ACTION = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 _TOOL = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _ERROR_CLASS = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,79}$")
@@ -66,12 +85,12 @@ _timer: asyncio.TimerHandle | None = None
 
 
 def classify_client(name: str | None) -> str:
-    """The MCP host as one word from a closed list, never the raw string."""
-    text = str(name or "").strip()
-    if not text:
+    """The MCP host as one word from CLIENT_VALUES, never the raw string."""
+    words = re.sub(r"[^a-z0-9]+", " ", str(name or "").lower()).strip()
+    if not words:
         return "other"
-    for client, terms in _CLIENT_TERMS:
-        if any(contains_term(text, term) for term in terms):
+    for phrase, client in _CLIENT_NAMES:
+        if contains_term(words, phrase):
             return client
     return "other"
 

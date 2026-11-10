@@ -1,6 +1,6 @@
 """A way to meet that only a person can finish: a number, or their own link.
 
-``hot_lead_closer.booking_is_grounded`` answers one question — can I write a
+heylead-api's ``hot_lead_closer.booking_is_grounded`` answers one question — can I write a
 calendar event? — and it needs an attendee email AND an ISO-8601 timestamp.
 Until 22 Sep 2026 the product read that single answer as "is a meeting
 arranged?" (the hosted twin carries the same module), so every yes that arrived in another shape was filed as a failure

@@ -375,16 +375,6 @@ _CLOUD_STATE_SETTING = "cloud_scheduler_state"
 # yesterday cannot silence today's outreach.
 CLOUD_STATE_TTL_SECONDS = 3600
 
-# A healthy pull that writes nothing is not proof the host is sending.
-# After this quiet stretch, local takes the campaign back if anyone is waiting.
-CLOUD_OUTBOUND_QUIET_SECONDS = 3 * 3600
-
-# A restamp of the push log is not a send. If nobody has been contacted and
-# people are waiting, local takes the campaign back after this shorter window
-# — the 3-hour clock above is for a host that *was* producing and then went
-# quiet, not for a handover that never started.
-CLOUD_ZERO_SEND_SECONDS = 15 * 60
-
 # What the backend sends, mirrored from its own gate rather than from the
 # sentence in toggle_cloud_scheduler, which lists four families and undersells
 # it. Read off heylead-api send_gate.CAMPAIGN_SEND_JOB_TYPES, each one
@@ -643,66 +633,6 @@ def _campaign_has_sendable_work(campaign_id: str) -> bool:
         or _campaign_has_unmessaged_connected(campaign_id)
         or _campaign_has_due_followup(campaign_id)
     )
-
-
-def _last_campaign_outbound_ts(campaign_id: str) -> int:
-    """Latest evidence that the *host* sent an invite, InMail, DM, or follow-up.
-
-    Failures do not count: a 422 InMail is not the host sending.
-    Local failover sends do not count either — treating them as production
-    reset the quiet clock and stood this machine down for another 3 hours.
-    Only actions_log rows the pull wrote with source=cloud refresh the clock
-    (log_cloud_executed_send, including invited_at reconcile).
-    """
-    from ..db.schema import get_db
-
-    db = get_db()
-    row = db.execute(
-        """SELECT MAX(al.timestamp) AS ts FROM actions_log al
-             LEFT JOIN outreaches o ON o.id = al.outreach_id
-            WHERE (al.campaign_id = ? OR o.campaign_id = ?)
-              AND al.result = 'success'
-              AND al.action_type IN (
-                  'invitation_sent', 'inmail_sent', 'followup_sent',
-                  'dm_sent', 'email_sent'
-              )
-              AND json_extract(al.details_json, '$.source') = 'cloud'""",
-        (campaign_id, campaign_id),
-    ).fetchone()
-    db.close()
-    ts = row["ts"] if row else None
-    return int(ts) if ts else 0
-
-
-def _handover_started_ts(campaign_id: str) -> int:
-    """When this campaign was first handed to the host, not the last restamp."""
-    log = get_push_log()
-    raw = (log.get("handover") or {}).get(campaign_id)
-    if raw:
-        try:
-            return int(raw)
-        except (TypeError, ValueError):
-            return 0
-    return int(log["campaigns"].get(campaign_id) or 0)
-
-
-def _cloud_still_producing_for_campaign(campaign_id: str) -> bool:
-    """False when someone is waiting and the host has gone quiet."""
-    if not campaign_id:
-        return False
-    if not _campaign_has_sendable_work(campaign_id):
-        return True
-    host = _host_campaign(campaign_id)
-    if host is not None and "last_outbound_at" in host:
-        last = int(host.get("last_outbound_at") or 0)
-    else:
-        last = _last_campaign_outbound_ts(campaign_id)
-    if last > 0:
-        return int(time.time()) - last <= CLOUD_OUTBOUND_QUIET_SECONDS
-    started = _handover_started_ts(campaign_id)
-    if started == 0:
-        return True
-    return int(time.time()) - started <= CLOUD_ZERO_SEND_SECONDS
 
 
 def outbound_ownership_predicates(campaign_id: str) -> dict[str, bool]:
@@ -970,31 +900,6 @@ def cloud_owns_account_sending() -> bool:
 
     log = get_push_log()
     return bool(log["ts"] > 0 or log["campaigns"])
-
-
-def _cloud_is_sending_for_this_account() -> bool:
-    """The account-level half of both ownership questions.
-
-    A recent "enabled" from the backend, and results still arriving from it.
-    See cloud_owns_outbound for why each failure hands sending back.
-    """
-    state = get_cloud_scheduler_state()
-    if not state["enabled"]:
-        return False
-    if state.get("sending_allowed") is False:
-        return False
-
-    now = int(time.time())
-    if now - state["ts"] > CLOUD_STATE_TTL_SECONDS:
-        return False
-
-    pull = get_pull_log()
-    if pull["error"]:
-        return False
-    if pull["ts"] and now - pull["ts"] > PULL_STALE_AFTER_SECONDS:
-        return False
-
-    return True
 
 
 def _ago(seconds: int) -> str:
@@ -4004,12 +3909,6 @@ def _response_reason(resp: Any) -> str:
         return ""
 
 
-async def _campaign_scope_request(method: str, path: str) -> tuple[str, str]:
-    """_campaign_scope_request_full without the status code."""
-    outcome, detail, _status = await _campaign_scope_request_full(method, path)
-    return outcome, detail
-
-
 async def _campaign_scope_request_full(
     method: str, path: str, *, json_body: dict | None = None,
 ) -> tuple[str, str, int | None]:
@@ -4244,17 +4143,6 @@ def hosted_queue_refusal(action: str) -> str:
         "sends from its own copy of the queue, and there is no route yet for "
         "this client to change it there. Nothing was changed."
     )
-
-
-async def sync_campaign_archive(campaign_id: str) -> bool:
-    """Push a campaign archive to the backend.
-
-    Returns True when no workspace holds the campaign un-archived.
-    """
-    if not config.is_backend_mode():
-        return False
-    kind, _detail = await hosted_campaign_lifecycle("archive", campaign_id)
-    return kind in ("done", "absent")
 
 
 # One entry per campaign whose backend delete has not landed yet:

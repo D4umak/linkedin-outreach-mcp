@@ -9,6 +9,7 @@ from typing import Any, Optional
 
 from ..constants import SIGNAL_STATUS_NEW
 from .schema import get_db
+from .queries import invite_sent_sql, invite_accepted_sql
 from ..textutil import contains_term
 
 
@@ -967,8 +968,9 @@ def get_signal_performance(campaign_id: str = "") -> dict[str, Any]:
     signal_row = db.execute(
         f"""SELECT
             COUNT(*) as total,
-            SUM(CASE WHEN o.status NOT IN ('pending', 'review_pending') THEN 1 ELSE 0 END) as invited,
-            SUM(CASE WHEN o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
+            SUM(CASE WHEN {invite_sent_sql('o')} THEN 1 ELSE 0 END) as invited,
+            SUM(CASE WHEN {invite_accepted_sql('o')} THEN 1 ELSE 0 END) as accepted,
+            SUM(CASE WHEN o.accepted_at IS NOT NULL OR o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
             SUM(CASE WHEN o.status IN ('replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as replied,
             SUM(CASE WHEN o.status = 'closed_happy' THEN 1 ELSE 0 END) as won
         FROM outreaches o
@@ -980,8 +982,9 @@ def get_signal_performance(campaign_id: str = "") -> dict[str, Any]:
     cold_row = db.execute(
         f"""SELECT
             COUNT(*) as total,
-            SUM(CASE WHEN o.status NOT IN ('pending', 'review_pending') THEN 1 ELSE 0 END) as invited,
-            SUM(CASE WHEN o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
+            SUM(CASE WHEN {invite_sent_sql('o')} THEN 1 ELSE 0 END) as invited,
+            SUM(CASE WHEN {invite_accepted_sql('o')} THEN 1 ELSE 0 END) as accepted,
+            SUM(CASE WHEN o.accepted_at IS NOT NULL OR o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
             SUM(CASE WHEN o.status IN ('replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as replied,
             SUM(CASE WHEN o.status = 'closed_happy' THEN 1 ELSE 0 END) as won
         FROM outreaches o
@@ -992,17 +995,22 @@ def get_signal_performance(campaign_id: str = "") -> dict[str, Any]:
     def _build_stats(row: Any) -> dict[str, Any]:
         total = row["total"] or 0
         invited = row["invited"] or 0
+        accepted = row["accepted"] or 0
         connected = row["connected"] or 0
         replied = row["replied"] or 0
         won = row["won"] or 0
+        acceptance_rate = accepted / invited if invited > 0 else 0
+        reply_denom = accepted if invited > 0 else connected
+        reply_rate = replied / reply_denom if reply_denom > 0 else 0
         return {
             "total": total,
             "invited": invited,
+            "accepted": accepted,
             "connected": connected,
             "replied": replied,
             "won": won,
-            "acceptance_rate": connected / invited if invited > 0 else 0,
-            "reply_rate": replied / connected if connected > 0 else 0,
+            "acceptance_rate": acceptance_rate,
+            "reply_rate": reply_rate,
         }
 
     signal_stats = _build_stats(signal_row)
@@ -1026,7 +1034,7 @@ def get_signal_performance(campaign_id: str = "") -> dict[str, Any]:
         f"""SELECT
             s.signal_type,
             COUNT(*) as total,
-            SUM(CASE WHEN o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
+            SUM(CASE WHEN o.accepted_at IS NOT NULL OR o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
             SUM(CASE WHEN o.status IN ('replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as replied,
             SUM(CASE WHEN o.status = 'closed_happy' THEN 1 ELSE 0 END) as won
         FROM outreaches o
@@ -1135,7 +1143,7 @@ def get_signal_to_conversion_funnel(
         f"""SELECT
             COUNT(*) as total,
             SUM(CASE WHEN o.status NOT IN ('pending', 'review_pending') THEN 1 ELSE 0 END) as invited,
-            SUM(CASE WHEN o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
+            SUM(CASE WHEN o.accepted_at IS NOT NULL OR o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
             SUM(CASE WHEN o.status IN ('replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as replied,
             SUM(CASE WHEN o.status = 'hot_lead' THEN 1 ELSE 0 END) as hot_leads,
             SUM(CASE WHEN o.status = 'closed_happy' THEN 1 ELSE 0 END) as won,
@@ -1162,7 +1170,7 @@ def get_signal_to_conversion_funnel(
             COUNT(DISTINCT s.id) as signals,
             SUM(CASE WHEN s.status = 'actioned' THEN 1 ELSE 0 END) as actioned_signals,
             COUNT(DISTINCT o.id) as outreaches,
-            SUM(CASE WHEN o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
+            SUM(CASE WHEN o.accepted_at IS NOT NULL OR o.status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
             SUM(CASE WHEN o.status IN ('replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as replied,
             SUM(CASE WHEN o.status = 'closed_happy' THEN 1 ELSE 0 END) as won
         FROM signals s

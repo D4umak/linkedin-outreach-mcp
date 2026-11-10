@@ -1486,7 +1486,7 @@ async def run_check_replies() -> str:
     ]
     if calendar_replies:
         try:
-            from ..services.calendar_booker import book_meeting, format_booking_result
+            from ..services.calendar_booker import book_meeting
 
             # Get user's name, email, and timezone for booking
             booker_name = ""
@@ -1827,7 +1827,6 @@ async def run_check_replies() -> str:
             output.append(f"🔥 {hot_count} hot lead{'s' if hot_count > 1 else ''}! Reply to them ASAP.")
     if calendar_count > 0:
         if auto_booked:
-            from ..services.calendar_booker import format_booking_result
             booked_ok = [b for b in auto_booked if b["result"].get("success")]
             booked_fail = [b for b in auto_booked if not b["result"].get("success")]
             if booked_ok:

@@ -1701,20 +1701,6 @@ def _extract_topic(content: str, _retry: bool = False) -> str:
     return _clean_topic(content[:50])
 
 
-def _boost_existing_contact(
-    contact: dict[str, Any],
-    signal_context: dict[str, Any],
-    composite_score: float,
-    now: int,
-) -> None:
-    """Legacy wrapper — prefer _apply_existing_contact_signal."""
-    _apply_existing_contact_signal(
-        contact, {"id": "", "signal_type": ""}, signal_context, composite_score, now,
-    )
-
-
-
-
 def _extract_company(signal: dict[str, Any]) -> str:
     """Extract company name from signal metadata or content."""
     metadata = _parse_metadata(signal)

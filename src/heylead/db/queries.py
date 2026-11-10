@@ -33,6 +33,42 @@ FIT_SENDABLE_SQL = (
     "OR COALESCE(c.fit_score, 0) >= ?)"
 )
 
+
+_CONNECTED_STATUSES = (
+    "connected",
+    "messaged",
+    "replied",
+    "hot_lead",
+    "closed_happy",
+    "closed_unhappy",
+    "reverse_pitch",
+    "opted_out",
+)
+
+
+def invite_sent_sql(alias: str = "") -> str:
+    """SQL predicate for 'an invitation was sent'."""
+    p = f"{alias}." if alias else ""
+    return (
+        f"(COALESCE({p}status, '') != 'skipped' AND ("
+        f"({p}invited_at IS NOT NULL AND {p}invited_at > 0) OR "
+        f"({p}invited_at IS NULL AND {p}accepted_at IS NULL AND COALESCE({p}status, '') NOT IN ('', 'pending', 'review_pending'))"
+        f"))"
+    )
+
+
+def invite_accepted_sql(alias: str = "") -> str:
+    """SQL predicate for 'our invitation was accepted'."""
+    p = f"{alias}." if alias else ""
+    conn_statuses = ",".join(f"'{s}'" for s in _CONNECTED_STATUSES)
+    return (
+        f"({invite_sent_sql(alias)} AND ("
+        f"({p}accepted_at IS NOT NULL AND {p}invited_at IS NOT NULL AND {p}accepted_at >= {p}invited_at) OR "
+        f"({p}accepted_at IS NULL AND {p}status IN ({conn_statuses}))"
+        f"))"
+    )
+
+
 # Invitation notes are stored as role='sdr'. Tagged rows carry
 # format='invite_note'; older notes sit on invited_at. A real opening DM is
 # anything else — pickers, orphan rescue and the stall watchdog share this.
@@ -3031,7 +3067,7 @@ def get_outreach_changes(hours: int = 24, campaign_id: str = "") -> dict[str, An
 
     # Acceptances (accepted_at in window)
     row = db.execute(
-        f"SELECT COUNT(*) as cnt FROM outreaches WHERE accepted_at >= ?{campaign_filter}",
+        f"SELECT COUNT(*) as cnt FROM outreaches WHERE accepted_at >= ? AND {invite_accepted_sql()}{campaign_filter}",
         params_base,
     ).fetchone()
     accepted = row["cnt"] if row else 0
@@ -3280,7 +3316,7 @@ def get_warmup_effectiveness(campaign_id: str = "") -> dict:
     """
     db = get_db()
     # Get all outreaches that were invited
-    sql = """
+    sql = f"""
         SELECT
             o.id as outreach_id,
             o.invited_at,
@@ -3290,7 +3326,7 @@ def get_warmup_effectiveness(campaign_id: str = "") -> dict:
              WHERE e.outreach_id = o.id
                AND e.created_at < o.invited_at) as warmup_count
         FROM outreaches o
-        WHERE o.invited_at IS NOT NULL
+        WHERE {invite_sent_sql('o')}
     """
     params: list[Any] = []
     if campaign_id:
@@ -3301,8 +3337,8 @@ def get_warmup_effectiveness(campaign_id: str = "") -> dict:
     db.close()
 
     groups: dict[str, dict] = {
-        "warmed_up": {"total": 0, "accepted": 0, "replied": 0, "days_sum": 0, "warmup_actions_sum": 0},
-        "direct_invite": {"total": 0, "accepted": 0, "replied": 0, "days_sum": 0},
+        "warmed_up": {"total": 0, "accepted": 0, "replied": 0, "days_sum": 0, "warmup_actions_sum": 0, "connected": 0},
+        "direct_invite": {"total": 0, "accepted": 0, "replied": 0, "days_sum": 0, "connected": 0},
     }
 
     for r in rows:
@@ -3311,9 +3347,11 @@ def get_warmup_effectiveness(campaign_id: str = "") -> dict:
         g = groups[group]
         g["total"] += 1
         if r["accepted_at"]:
-            g["accepted"] += 1
-            days = (r["accepted_at"] - r["invited_at"]) / 86400
-            g["days_sum"] += days
+            g["connected"] += 1
+            if r["accepted_at"] >= r["invited_at"]:
+                g["accepted"] += 1
+                days = (r["accepted_at"] - r["invited_at"]) / 86400
+                g["days_sum"] += days
         if r["first_reply_at"]:
             g["replied"] += 1
         if group == "warmed_up":
@@ -3324,12 +3362,14 @@ def get_warmup_effectiveness(campaign_id: str = "") -> dict:
         total = g["total"]
         accepted = g["accepted"]
         replied = g["replied"]
+        connected = g["connected"]
         result[group_name] = {
             "total": total,
             "accepted": accepted,
+            "connected": connected,
             "acceptance_rate": round(accepted / total * 100, 1) if total else 0,
             "replied": replied,
-            "reply_rate": round(replied / total * 100, 1) if total else 0,
+            "reply_rate": round(replied / accepted * 100, 1) if accepted else 0,
             "avg_days_to_accept": round(g["days_sum"] / accepted, 1) if accepted else None,
         }
         if group_name == "warmed_up":
@@ -4063,11 +4103,12 @@ def get_campaign_stats(campaign_id: str) -> dict:
 
     seven_days_ago = int(_time.time()) - (7 * 86400)
     row = db.execute(
-        """SELECT
+        f"""SELECT
                SUM(CASE WHEN status != 'skipped' THEN 1 ELSE 0 END) as total,
-               SUM(CASE WHEN status NOT IN ('pending', 'skipped') THEN 1 ELSE 0 END) as invited,
-               SUM(CASE WHEN status NOT IN ('pending', 'skipped', 'opted_out') THEN 1 ELSE 0 END) as invited_excl_optout,
-               SUM(CASE WHEN status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
+               SUM(CASE WHEN {invite_sent_sql()} THEN 1 ELSE 0 END) as invited,
+               SUM(CASE WHEN {invite_sent_sql()} AND status != 'opted_out' THEN 1 ELSE 0 END) as invited_excl_optout,
+               SUM(CASE WHEN {invite_accepted_sql()} THEN 1 ELSE 0 END) as accepted,
+               SUM(CASE WHEN accepted_at IS NOT NULL OR status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
                SUM(CASE WHEN status IN ('replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as replied,
                SUM(CASE WHEN status = 'hot_lead' THEN 1 ELSE 0 END) as hot_leads,
                SUM(CASE WHEN status = 'invited' THEN 1 ELSE 0 END) as pending_invitations,
@@ -4075,9 +4116,10 @@ def get_campaign_stats(campaign_id: str) -> dict:
                SUM(CASE WHEN status = 'closed_happy' THEN 1 ELSE 0 END) as closed_happy,
                SUM(CASE WHEN status = 'closed_unhappy' THEN 1 ELSE 0 END) as closed_unhappy,
                SUM(CASE WHEN status = 'opted_out' THEN 1 ELSE 0 END) as opted_out,
-               SUM(CASE WHEN status NOT IN ('pending', 'skipped')
+               SUM(CASE WHEN {invite_sent_sql()}
                     AND COALESCE(invited_at, updated_at) < ? THEN 1 ELSE 0 END) as mature_invited,
-               SUM(CASE WHEN status = 'pending' AND COALESCE(invite_attempts, 0) > 0 THEN 1 ELSE 0 END) as invite_failed
+               SUM(CASE WHEN status = 'pending' AND COALESCE(invite_attempts, 0) > 0 THEN 1 ELSE 0 END) as invite_failed,
+               AVG(CASE WHEN {invite_accepted_sql()} THEN accepted_at - invited_at END) as avg_hours_to_accept
            FROM outreaches
            WHERE campaign_id = ?""",
         (seven_days_ago, campaign_id),
@@ -4089,26 +4131,32 @@ def get_campaign_stats(campaign_id: str) -> dict:
     total = r.get("total", 0) or 0
     invited = r.get("invited", 0) or 0
     invited_excl_optout = r.get("invited_excl_optout", 0) or 0
+    accepted = r.get("accepted", 0) or 0
     connected = r.get("connected", 0) or 0
     replied = r.get("replied", 0) or 0
     mature_invited = r.get("mature_invited", 0) or 0
 
     # Primary rate: only count invitations that have had time to respond (7d+).
     # Falls back to all invitations if no mature invitations yet.
-    # Cap at 1.0 — connected can exceed invited when inbound connections are included.
+    # Cap at 1.0.
     if mature_invited > 0:
-        acceptance_rate = min(1.0, connected / mature_invited)
+        acceptance_rate = min(1.0, accepted / mature_invited)
     elif invited_excl_optout > 0:
-        acceptance_rate = min(1.0, connected / invited_excl_optout)
+        acceptance_rate = min(1.0, accepted / invited_excl_optout)
     else:
         acceptance_rate = 0.0
 
-    raw_acceptance_rate = min(1.0, connected / invited) if invited > 0 else 0.0
-    reply_rate = replied / connected if connected > 0 else 0.0
+    raw_acceptance_rate = min(1.0, accepted / invited) if invited > 0 else 0.0
+
+    # Reply rate: denominator is accepted if we sent invitations, connected
+    # if it's a DM-only campaign (no invites sent).
+    reply_denom = accepted if invited > 0 else connected
+    reply_rate = replied / reply_denom if reply_denom > 0 else 0.0
 
     return {
         "total_prospects": total,
         "invited": invited,
+        "accepted": accepted,
         "connected": connected,
         "replied": replied,
         "hot_leads": r.get("hot_leads", 0) or 0,
@@ -4121,6 +4169,7 @@ def get_campaign_stats(campaign_id: str) -> dict:
         "acceptance_rate": acceptance_rate,
         "raw_acceptance_rate": raw_acceptance_rate,
         "reply_rate": reply_rate,
+        "avg_hours_to_accept": round(r.get("avg_hours_to_accept", 0) / 3600, 1) if r.get("avg_hours_to_accept") else None,
     }
 
 
@@ -4284,7 +4333,8 @@ def get_campaign_velocity(campaign_id: str) -> dict:
            WHERE campaign_id = ?
              AND invited_at IS NOT NULL
              AND accepted_at IS NOT NULL
-             AND status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out')""",
+             AND accepted_at >= invited_at
+             AND COALESCE(status, '') != 'skipped'""",
         (campaign_id,),
     ).fetchone()
 
@@ -4327,6 +4377,8 @@ def get_campaign_velocity(campaign_id: str) -> dict:
            WHERE o.campaign_id = ?
              AND o.status IN ('closed_happy', 'closed_unhappy', 'hot_lead')
              AND o.invited_at IS NOT NULL
+             AND COALESCE(o.accepted_at, 0) >= o.invited_at
+             AND COALESCE(o.status, '') != 'skipped'
            ORDER BY o.updated_at DESC
            LIMIT 10""",
         (campaign_id,),
@@ -6335,11 +6387,11 @@ def get_variant_stats(campaign_id: str) -> dict:
     """
     db = get_db()
     rows = db.execute(
-        """SELECT variant,
+        f"""SELECT variant,
                   COUNT(*) as total,
-                  SUM(CASE WHEN status NOT IN ('pending', 'skipped') THEN 1 ELSE 0 END) as invited,
-                  SUM(CASE WHEN status IN ('connected','messaged','replied','hot_lead',
-                       'closed_happy','closed_unhappy') THEN 1 ELSE 0 END) as connected,
+                  SUM(CASE WHEN {invite_sent_sql()} THEN 1 ELSE 0 END) as invited,
+                  SUM(CASE WHEN {invite_accepted_sql()} THEN 1 ELSE 0 END) as accepted,
+                  SUM(CASE WHEN accepted_at IS NOT NULL OR status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
                   SUM(CASE WHEN status IN ('replied','hot_lead',
                        'closed_happy','closed_unhappy') THEN 1 ELSE 0 END) as replied,
                   SUM(CASE WHEN status = 'hot_lead' THEN 1 ELSE 0 END) as hot_leads,
@@ -6356,9 +6408,11 @@ def get_variant_stats(campaign_id: str) -> dict:
         d = dict(r)
         variant = d.pop("variant")
         invited = d.get("invited", 0)
+        accepted = d.get("accepted", 0)
         connected = d.get("connected", 0)
-        d["acceptance_rate"] = round(connected / invited * 100, 1) if invited else 0
-        d["reply_rate"] = round(d.get("replied", 0) / connected * 100, 1) if connected else 0
+        d["acceptance_rate"] = round(accepted / invited * 100, 1) if invited else 0
+        reply_denom = accepted if invited > 0 else connected
+        d["reply_rate"] = round(d.get("replied", 0) / reply_denom * 100, 1) if reply_denom else 0
         result[variant] = d
     return result
 
@@ -6367,11 +6421,11 @@ def get_headline_variant_stats(campaign_id: str) -> dict:
     """Per-headline-variant funnel stats. Does not read outreaches.variant."""
     db = get_db()
     rows = db.execute(
-        """SELECT headline_variant,
+        f"""SELECT headline_variant,
                   COUNT(*) as total,
-                  SUM(CASE WHEN status NOT IN ('pending', 'skipped') THEN 1 ELSE 0 END) as invited,
-                  SUM(CASE WHEN status IN ('connected','messaged','replied','hot_lead',
-                       'closed_happy','closed_unhappy') THEN 1 ELSE 0 END) as connected,
+                  SUM(CASE WHEN {invite_sent_sql()} THEN 1 ELSE 0 END) as invited,
+                  SUM(CASE WHEN {invite_accepted_sql()} THEN 1 ELSE 0 END) as accepted,
+                  SUM(CASE WHEN accepted_at IS NOT NULL OR status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
                   SUM(CASE WHEN status IN ('replied','hot_lead',
                        'closed_happy','closed_unhappy') THEN 1 ELSE 0 END) as replied,
                   SUM(CASE WHEN status = 'hot_lead' THEN 1 ELSE 0 END) as hot_leads,
@@ -6388,9 +6442,11 @@ def get_headline_variant_stats(campaign_id: str) -> dict:
         d = dict(r)
         variant = d.pop("headline_variant")
         invited = d.get("invited", 0)
+        accepted = d.get("accepted", 0)
         connected = d.get("connected", 0)
-        d["acceptance_rate"] = round(connected / invited * 100, 1) if invited else 0
-        d["reply_rate"] = round(d.get("replied", 0) / connected * 100, 1) if connected else 0
+        d["acceptance_rate"] = round(accepted / invited * 100, 1) if invited else 0
+        reply_denom = accepted if invited > 0 else connected
+        d["reply_rate"] = round(d.get("replied", 0) / reply_denom * 100, 1) if reply_denom else 0
         result[variant] = d
     return result
 
@@ -6452,19 +6508,16 @@ def get_cohort_analysis(campaign_id: str) -> list[dict]:
     """
     db = get_db()
     rows = db.execute(
-        """SELECT
+        f"""SELECT
                CASE
-                   WHEN invited_at IS NOT NULL
+                   WHEN {invite_sent_sql()}
                    THEN strftime('%Y-W%W', invited_at, 'unixepoch')
                    ELSE 'Not invited'
                END as cohort,
                COUNT(*) as total,
-               SUM(CASE WHEN status IN ('invited','connected','replied','hot_lead',
-                    'messaged','closed_happy','closed_unhappy','opted_out','reverse_pitch')
-                    THEN 1 ELSE 0 END) as invited,
-               SUM(CASE WHEN status IN ('connected','replied','hot_lead',
-                    'messaged','closed_happy','closed_unhappy','reverse_pitch','opted_out')
-                    THEN 1 ELSE 0 END) as connected,
+               SUM(CASE WHEN {invite_sent_sql()} THEN 1 ELSE 0 END) as invited,
+               SUM(CASE WHEN {invite_accepted_sql()} THEN 1 ELSE 0 END) as accepted,
+               SUM(CASE WHEN accepted_at IS NOT NULL OR status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connected,
                SUM(CASE WHEN status IN ('replied','hot_lead','closed_happy','closed_unhappy','reverse_pitch','opted_out')
                     THEN 1 ELSE 0 END) as replied,
                SUM(CASE WHEN status = 'hot_lead' THEN 1 ELSE 0 END) as hot_lead,
@@ -6482,9 +6535,11 @@ def get_cohort_analysis(campaign_id: str) -> list[dict]:
     for r in rows:
         d = dict(r)
         invited = d.get("invited", 0)
+        accepted = d.get("accepted", 0)
         connected = d.get("connected", 0)
-        d["acceptance_rate"] = round(connected / invited * 100, 1) if invited else 0
-        d["reply_rate"] = round(d.get("replied", 0) / connected * 100, 1) if connected else 0
+        d["acceptance_rate"] = round(accepted / invited * 100, 1) if invited else 0
+        reply_denom = accepted if invited > 0 else connected
+        d["reply_rate"] = round(d.get("replied", 0) / reply_denom * 100, 1) if reply_denom else 0
         cohorts.append(d)
     return cohorts
 
@@ -6498,12 +6553,11 @@ def get_time_series_stats(campaign_id: str) -> list[dict]:
     cutoff = int(time.time()) - (30 * 86400)
 
     rows = db.execute(
-        """SELECT
+        f"""SELECT
                date(created_at, 'unixepoch') as date,
-               SUM(CASE WHEN status NOT IN ('pending', 'skipped') THEN 1 ELSE 0 END) as invites,
-               SUM(CASE WHEN status IN ('connected','replied','hot_lead',
-                    'messaged','closed_happy','closed_unhappy','reverse_pitch','opted_out')
-                    THEN 1 ELSE 0 END) as connections,
+               SUM(CASE WHEN {invite_sent_sql()} THEN 1 ELSE 0 END) as invites,
+               SUM(CASE WHEN {invite_accepted_sql()} THEN 1 ELSE 0 END) as accepted,
+               SUM(CASE WHEN accepted_at IS NOT NULL OR status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out') THEN 1 ELSE 0 END) as connections,
                SUM(CASE WHEN status IN ('replied','hot_lead','closed_happy','closed_unhappy','reverse_pitch','opted_out')
                     THEN 1 ELSE 0 END) as replies
            FROM outreaches
@@ -7147,7 +7201,7 @@ def get_prospect_timeline(outreach_id: str, days: int = 30) -> list[dict]:
                 "details": "Invitation sent",
                 "source": "outreaches",
             })
-        if o.get("accepted_at") and o["accepted_at"] >= since:
+        if (o.get("invited_at") or 0) > 0 and o.get("status") != "skipped" and (o.get("accepted_at") or 0) >= (o.get("invited_at") or 0) and o["accepted_at"] >= since:
             timeline.append({
                 "event_type": "milestone",
                 "action": "accepted",
@@ -7199,13 +7253,13 @@ def get_metric_trend_data(days: int = 14) -> dict[str, list[dict]]:
 
         # Acceptance rate: accepted today / invited in last 7 days
         accepted_today = db.execute(
-            "SELECT COUNT(*) as c FROM outreaches WHERE accepted_at >= ? AND accepted_at < ?",
+            f"SELECT COUNT(*) as c FROM outreaches WHERE accepted_at >= ? AND accepted_at < ? AND {invite_accepted_sql()}",
             (day_start, day_end),
         ).fetchone()["c"]
         # Mature invites: sent 7+ days before this day
         mature_cutoff = day_start - (7 * 86400)
         mature_invited = db.execute(
-            "SELECT COUNT(*) as c FROM outreaches WHERE invited_at IS NOT NULL AND invited_at < ?",
+            f"SELECT COUNT(*) as c FROM outreaches WHERE {invite_sent_sql()} AND invited_at < ?",
             (mature_cutoff,),
         ).fetchone()["c"]
         acc_rate = round(accepted_today / mature_invited, 4) if mature_invited else None
@@ -7217,7 +7271,7 @@ def get_metric_trend_data(days: int = 14) -> dict[str, list[dict]]:
             (day_start, day_end),
         ).fetchone()["c"]
         connected_total = db.execute(
-            "SELECT COUNT(*) as c FROM outreaches WHERE accepted_at IS NOT NULL AND accepted_at < ?",
+            f"SELECT COUNT(*) as c FROM outreaches WHERE (accepted_at IS NOT NULL OR status IN ('connected', 'messaged', 'replied', 'hot_lead', 'closed_happy', 'closed_unhappy', 'reverse_pitch', 'opted_out')) AND COALESCE(accepted_at, updated_at) < ?",
             (day_start,),
         ).fetchone()["c"]
         rep_rate = round(replied_today / connected_total, 4) if connected_total else None

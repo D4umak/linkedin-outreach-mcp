@@ -47,6 +47,9 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.504 (2026-11-10)
+- Release version bump
+
 ## v0.10.503 (2026-11-10)
 - Fix: heylead-ci never starts a run for a head the PR has moved past
 - Fix: heylead-ci confirms a PR's head before it runs or cancels anything (WIP: guard, incident, suite)

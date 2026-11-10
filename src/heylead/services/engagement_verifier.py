@@ -108,58 +108,6 @@ async def verify_comment(
     return result
 
 
-async def verify_dm(
-    client: Any,
-    account_id: str,
-    chat_id: str,
-    message_text: str,
-    sent_at: int,
-    outreach_id: str = "",
-) -> dict[str, Any]:
-    """Verify a DM was sent by fetching chat messages and matching.
-
-    Matches by first 100 chars of text AND timestamp within 300 seconds.
-
-    Returns:
-        {"verified": bool, "error": str}
-    """
-    result: dict[str, Any] = {"verified": False, "error": ""}
-
-    if not chat_id:
-        result["error"] = "No chat_id to verify"
-        return result
-
-    try:
-        await asyncio.sleep(ENGAGEMENT_VERIFY_DELAY_SECONDS)
-
-        messages = await client.get_chat_messages(account_id, chat_id, limit=10)
-        if not messages:
-            result["error"] = "No messages returned for chat"
-            return result
-
-        snippet = message_text[:100].strip() if message_text else ""
-        for msg in messages:
-            msg_text = (msg.get("text") or "")[:100].strip()
-            msg_ts = msg.get("timestamp", 0)
-            # Match by text similarity and timestamp proximity (5 min window)
-            if snippet and msg_text and snippet in msg_text:
-                if not sent_at or not msg_ts or abs(msg_ts - sent_at) < 300:
-                    result["verified"] = True
-                    return result
-
-        result["error"] = "Message not found in chat history"
-    except Exception as e:
-        if getattr(getattr(e, "response", None), "status_code", None) == 404:
-            # A gone chat holds no message of ours: unverified, as before,
-            # with the cause named instead of the transport's wording.
-            result["error"] = "Chat no longer exists (404)"
-            return result
-        logger.debug("verify_dm failed: %s", e)
-        result["error"] = str(e)
-
-    return result
-
-
 # ──────────────────────────────────────────────
 # Post-send DM verification + auto-delete safety net
 # ──────────────────────────────────────────────

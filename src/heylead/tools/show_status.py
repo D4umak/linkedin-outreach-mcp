@@ -1684,7 +1684,13 @@ async def _show_campaign_detail(campaign_id: str) -> str:
     raw = stats.get('raw_acceptance_rate', 0)
     if raw > 0 and abs(raw - stats['acceptance_rate']) > 0.01:
         acc_str += f" (raw: {raw:.0%})"
-    output.append(f"├── Accepted: {connected} ({acc_str})" if invited > 0 else f"├── Accepted: {connected}")
+
+    if _is_dm_only_detail:
+        output.append(f"├── Connected: {connected}")
+    else:
+        accepted = stats.get("accepted", connected)
+        output.append(f"├── Accepted: {accepted} ({acc_str})")
+
     output.append(f"├── Replies: {replied} ({stats['reply_rate']:.0%})" if connected > 0 else f"├── Replies: {replied}")
     output.append(f"├── Hot leads: {hot} 🔥" if hot > 0 else f"├── Hot leads: {hot}")
     if skipped > 0:

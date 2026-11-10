@@ -12,7 +12,6 @@ Key functions:
 - get_sync_age(): Seconds since any row was last stamped
 - get_last_full_sync_age(): Seconds since the last completed relations walk
   (not the same thing — mark_connected() stamps single rows)
-- audit_campaign_connections(): Batch audit for existing campaigns
 """
 
 from __future__ import annotations
@@ -1254,102 +1253,6 @@ async def enrich_prospects(
 
     logger.info("Enriched %d/%d prospects with full profiles", enriched, len(to_enrich))
     return enriched
-
-
-async def audit_campaign_connections(
-    client: Any,
-    account_id: str,
-    campaign_id: str,
-    time_budget: float | None = _UNSET,  # type: ignore[assignment]
-) -> dict[str, Any]:
-    """Audit a campaign's pending outreaches against current 1st-degree connections.
-
-    1. Ensure connections are synced
-    2. Get all pending outreaches for the campaign
-    3. Cross-reference against local connections
-    4. For matches: update outreach to 'connected'
-    5. Return audit report
-
-    Args:
-        time_budget: Passed to ensure_synced(). No production caller reaches
-            this from a scheduler tick today; the parameter is here so that the
-            next one that does has somewhere to put its budget.
-
-    Returns:
-        {"total_pending": int, "already_connected": int, "updated": list[str]}
-    """
-    from ..db.schema import get_db as _get_db
-
-    # Step 1: Ensure fresh connections
-    await ensure_synced(client, account_id, time_budget=time_budget)
-    connection_ids = await run_db(get_local_connection_ids, account_id)
-
-    # Step 2: Get pending outreaches
-    def _get_pending_outreaches(cid):
-        db = _get_db()
-        try:
-            return db.execute(
-                """SELECT o.id, o.contact_id, c.linkedin_id, c.name, c.linkedin_url,
-                          c.profile_json
-                   FROM outreaches o
-                   JOIN contacts c ON o.contact_id = c.id
-                   WHERE o.campaign_id = ? AND o.status = 'pending'""",
-                (cid,),
-            ).fetchall()
-        finally:
-            db.close()
-
-    rows = await run_db(_get_pending_outreaches, campaign_id)
-
-    report = {
-        "total_pending": len(rows),
-        "already_connected": 0,
-        "updated": [],
-    }
-
-    if not rows:
-        return report
-
-    # Step 3 & 4: Cross-reference and update
-    import json
-
-    for row in rows:
-        outreach_id = row[0]
-        linkedin_id = (row[2] or "").lower().strip()
-        name = row[3] or ""
-        linkedin_url = (row[4] or "").lower().strip()
-        profile_json_str = row[5] or "{}"
-
-        # Extract provider_id from profile_json
-        provider_id = ""
-        try:
-            profile = json.loads(profile_json_str)
-            provider_id = (profile.get("provider_id") or "").lower().strip()
-        except Exception:
-            pass
-
-        # Build identifier set for this prospect
-        identifiers = {x for x in (linkedin_id, provider_id, linkedin_url) if x}
-        if linkedin_id:
-            identifiers.add(f"https://www.linkedin.com/in/{linkedin_id}")
-
-        # Check against local connections
-        if identifiers & connection_ids:
-            # Through update_outreach, not raw SQL: it logs the transition.
-            # accepted_at is stamped explicitly — the audit is observing the
-            # connection right now; a bare status flip no longer infers one.
-            from ..db.queries import update_outreach
-
-            await run_db(
-                update_outreach, outreach_id,
-                status="connected", accepted_at=int(time.time()),
-            )
-
-            report["already_connected"] += 1
-            report["updated"].append(name or outreach_id)
-            logger.info("Audit: %s is already 1st-degree connected — marked as 'connected'", outreach_id[:8])
-
-    return report
 
 
 def get_connection_count(account_id: str) -> int:

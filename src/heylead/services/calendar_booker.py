@@ -714,31 +714,3 @@ async def book_meeting(
             "error": f"Unsupported calendar provider. Book manually: {calendar_url}",
             "url": calendar_url,
         }
-
-
-def format_booking_result(result: dict[str, Any]) -> str:
-    """Format a booking result for display to the user."""
-    if result.get("success"):
-        booked = result.get("booked_time", "")
-        provider = result.get("provider", "")
-        duration = result.get("duration_minutes", 30)
-        try:
-            dt = datetime.fromisoformat(booked.replace("Z", "+00:00"))
-            time_str = dt.strftime("%A, %B %d at %I:%M %p %Z")
-        except (ValueError, TypeError):
-            time_str = booked
-        return (
-            f"Meeting booked on {provider.title()}!\n"
-            f"   When: {time_str} ({duration} min)\n"
-            f"   Confirmation sent to your email."
-        )
-    else:
-        error = result.get("error", "Unknown error")
-        url = result.get("url", "")
-        attempted = result.get("attempted_time", "")
-        msg = f"Could not auto-book: {error}"
-        if url:
-            msg += f"\n   Book manually: {url}"
-        if attempted:
-            msg += f"\n   Attempted slot: {attempted}"
-        return msg

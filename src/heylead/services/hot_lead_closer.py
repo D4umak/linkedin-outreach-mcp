@@ -35,12 +35,6 @@ from ..services.prospect_email import extract_profile_email
 logger = logging.getLogger(__name__)
 
 _ISO = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?")
-_AFFIRM = re.compile(
-    r"\b(yes|yeah|yep|yup|ok|okay|sure|confirmed|confirm|works|perfect|"
-    r"sounds good|let'?s do (?:it|that)|book it|that works|that'?s fine|"
-    r"go ahead)\b",
-    re.I,
-)
 CloserKind = Literal["continue", "hold", "not_yet"]
 
 # The kernel words that mean "I could not finish my step this turn".
@@ -88,63 +82,6 @@ def hot_lead_closer_mode(config: dict[str, Any] | None) -> Literal["off", "obser
     if "enable_hot_lead_closer" in cfg and cfg.get("enable_hot_lead_closer") not in (None, ""):
         return "act" if flag_enabled(cfg, "enable_hot_lead_closer", default=False) else "off"
     return "observe"
-
-
-def booking_is_grounded(
-    email: str,
-    start: str,
-    evidence: str,
-    known_emails: list[str] | tuple[str, ...] = (),
-    *,
-    messages: list[dict[str, Any]] | None = None,
-    reply_text: str = "",
-) -> bool:
-    """True when the email is known or in the thread, and the ISO is a prospect's."""
-    addr = (email or "").strip().lower()
-    start_n = (start or "").strip()
-    blob = evidence or ""
-    if not addr or "@" not in addr:
-        return False
-    known = {e.strip().lower() for e in known_emails if e and "@" in e}
-    if addr not in known and addr not in blob.lower():
-        return False
-    match = _ISO.search(start_n)
-    if not match:
-        return False
-    token = match.group(0)
-    if messages is None:
-        return token in blob or token[:16] in blob
-    return _iso_grounded_in_prospect(token, messages, reply_text)
-
-
-def _iso_grounded_in_prospect(
-    token: str, messages: list[dict[str, Any]], reply_text: str,
-) -> bool:
-    """ISO must appear in a prospect line, or a later affirmative after our ISO."""
-    short = token[:16]
-
-    def has_iso(text: str) -> bool:
-        body = text or ""
-        return token in body or short in body
-
-    if has_iso(reply_text):
-        return True
-    last_sdr_iso = -1
-    for i, message in enumerate(messages or []):
-        role = (message.get("role") or "").lower()
-        text = message.get("text") or ""
-        if role == "prospect" and has_iso(text):
-            return True
-        if role == "sdr" and has_iso(text):
-            last_sdr_iso = i
-    if last_sdr_iso < 0:
-        return False
-    for message in (messages or [])[last_sdr_iso + 1:]:
-        if (message.get("role") or "").lower() != "prospect":
-            continue
-        if _AFFIRM.search(message.get("text") or ""):
-            return True
-    return bool(reply_text and _AFFIRM.search(reply_text))
 
 
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")

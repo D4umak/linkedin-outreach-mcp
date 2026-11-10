@@ -37,11 +37,6 @@ def first_touch_inmail_enabled(config: dict[str, Any] | None) -> bool:
     return raw not in (False, "off", "false", "0", 0)
 
 
-def fallback_inmail_enabled(config: dict[str, Any] | None) -> bool:
-    raw = (config or {}).get("inmail_fallback", True)
-    return raw not in (False, "off", "false", "0", 0)
-
-
 def choose_first_touch(
     *,
     is_first_degree: bool,

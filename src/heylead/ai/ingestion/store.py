@@ -113,32 +113,3 @@ def get_chunks_for_source(source_id: str) -> list[dict[str, Any]]:
     ).fetchall()
     db.close()
     return [dict(r) for r in rows]
-
-
-def get_chunks_for_icp(icp_id: str) -> list[dict[str, Any]]:
-    """Get all chunks across all sources for an ICP."""
-    from ...db.schema import get_db
-
-    db = get_db()
-    rows = db.execute(
-        """SELECT c.* FROM icp_chunks c
-           JOIN icp_sources s ON c.source_id = s.id
-           WHERE s.icp_id = ?
-           ORDER BY c.source_id, c.position""",
-        (icp_id,),
-    ).fetchall()
-    db.close()
-    return [dict(r) for r in rows]
-
-
-def get_sources_for_icp(icp_id: str) -> list[dict[str, Any]]:
-    """Get all sources for an ICP."""
-    from ...db.schema import get_db
-
-    db = get_db()
-    rows = db.execute(
-        "SELECT * FROM icp_sources WHERE icp_id = ? ORDER BY created_at",
-        (icp_id,),
-    ).fetchall()
-    db.close()
-    return [dict(r) for r in rows]

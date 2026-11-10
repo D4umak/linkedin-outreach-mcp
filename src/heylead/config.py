@@ -665,11 +665,6 @@ def embeddings_path() -> Path:
     return _heylead_home() / constants.EMBEDDINGS_DIR
 
 
-def kb_path() -> Path:
-    """Return the knowledge base directory (~/.heylead/knowledge-base/)."""
-    return _heylead_home() / constants.KB_DIR
-
-
 def get_firecrawl_api_key() -> str:
     """Return the Firecrawl API key from config, or empty string."""
     return _secret("firecrawl_api_key")
@@ -776,35 +771,6 @@ def set_scheduler_mode(
     }
     save_config(cfg)
     return was_mode
-
-
-def set_scheduler_enabled(
-    enabled: bool,
-    *,
-    caller: str = "unknown",
-    reason: str = "",
-) -> None:
-    """Enable or disable the autonomous scheduler with attribution.
-
-    Thin wrapper over :func:`set_scheduler_mode`: True means "full", False
-    means "off". It writes the mode as well as the boolean deliberately —
-    writing only ``scheduler_enabled`` while ``scheduler_mode`` said something
-    else left the two disagreeing, so ``set_scheduler_enabled(True)`` could be
-    followed by ``is_scheduler_enabled()`` returning False.
-
-    Note that disabling from "observe" therefore lands in "off", which stops
-    signal collection too. Call ``set_scheduler_mode`` directly when the
-    distinction matters.
-
-    Args:
-        enabled: Whether to enable or disable.
-        caller: Who triggered this change (e.g., "mcp_tool", "auto_campaign",
-                "always_on_guard", "config_edit").
-        reason: Human-readable reason for the change.
-    """
-    set_scheduler_mode(
-        "full" if enabled else "off", caller=caller, reason=reason,
-    )
 
 
 SENDING_HOSTS = ("cloud", "local")

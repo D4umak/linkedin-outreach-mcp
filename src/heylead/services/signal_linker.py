@@ -685,10 +685,7 @@ def _fit_score_from_signal(signal: dict[str, Any]) -> float:
 
 
 def _boosted_fit(current_fit: float, best_score: float) -> float:
-    """Raise a fit_score by a fraction of a signal's score, staying within 0-1.
-
-    The fraction mirrors signal_activator._boost_existing_contact.
-    """
+    """Raise a fit_score by a fraction of a signal's score, staying within 0-1."""
     return min((current_fit or 0.0) + (best_score or 0.0) * 0.2, 1.0)
 
 
@@ -696,10 +693,7 @@ def _boost_contact_with_signals(
     contact_id: str,
     signals: list[dict[str, Any]],
 ) -> None:
-    """Boost a contact's fit_score and inject signal context.
-
-    Mirrors ``_boost_existing_contact`` from ``signal_activator.py``.
-    """
+    """Boost a contact's fit_score and inject signal context."""
     from ..db.queries import get_contact_analysis, save_contact_analysis, update_contact
     from ..services.signal_scorer import compute_signal_score
 

@@ -178,19 +178,9 @@ def stored_link(config: Any) -> str:
 
 
 
-def has_booking_link(config: Any) -> bool:
-    return bool(stored_link(config))
-
-
 def page_confirmed(config: Any) -> bool:
     """The owner kept this campaign's link though it reads as a website."""
     return config_of(config).get(CONFIRMED_KEY) is True
-
-
-def stored_link_kind(config: Any) -> str:
-    """``link_kind`` of the stored link, or "" with none."""
-    link = stored_link(config)
-    return link_kind(link) if link else ""
 
 
 def offered_link(
@@ -260,15 +250,6 @@ def workspace_page_confirmed(
     return profile.get(CONFIRMED_KEY) is True
 
 
-def workspace_stored_link_kind(
-    org_id: str | None = None, *, user_id: str | None = None,
-    state: Mapping[str, Any] | None = None,
-) -> str:
-    """``link_kind`` of the workspace link, or "" with none."""
-    link = workspace_stored_link(org_id, user_id=user_id, state=state)
-    return link_kind(link) if link else ""
-
-
 def workspace_offered_link(
     org_id: str | None = None, *, user_id: str | None = None,
     state: Mapping[str, Any] | None = None,
@@ -304,18 +285,6 @@ def save_workspace_booking_link_if_unset(link: str, confirmed: bool) -> bool:
     finally:
         db.close()
     return True
-
-
-def booking_link_source(
-    config: Any, org_id: str | None = None, *,
-    user_id: str | None = None, state: Mapping[str, Any] | None = None,
-) -> str:
-    """"campaign" if the campaign has its own link, "workspace" if it inherits one, else "none"."""
-    if stored_link(config):
-        return "campaign"
-    if workspace_stored_link(org_id, user_id=user_id, state=state):
-        return "workspace"
-    return "none"
 
 
 def booking_context(
