@@ -81,8 +81,8 @@ async def run_skip_prospect(
                    WHERE o.campaign_id = ?
                      AND o.status = 'pending'
                    -- DESC, matching every other definition of "the next prospect":
-                   -- generate_send's queue read, get_next_pending_outreach,
-                   -- and this function's own "Next up" hint below. This was
+                   -- generate_send's queue read and this function's own
+                   -- "Next up" hint below. This was
                    -- ASC, so skipping with no id terminally skipped the
                    -- WORST-fit prospect while the one the user was looking at
                    -- stayed in the queue -- and was then printed as "Next up".

@@ -11,7 +11,7 @@ Takes a target description like "Find me fintech CTOs" and:
 from __future__ import annotations
 
 from .. import facts
-from ..services.campaign_naming import cut_at_word
+from ..services.campaign_naming import cut_at_word, name_for_new_campaign
 
 import re
 
@@ -1139,7 +1139,9 @@ async def run_create_campaign(
     )
 
     # ── Step 6: Create campaign in DB ──
-    final_name = campaign_name or icp.get("campaign_name", cut_at_word(target_description, 40))
+    # A typed name, else the ICP's, else the target default: an empty or
+    # placeholder ICP name is no name (api #3022, the hosted twin's rule).
+    final_name = name_for_new_campaign(campaign_name, icp, target_description)
 
     # Build config — connections-only disables invitations + all warm-up
     is_connections_only = connections_only == "on"

@@ -417,26 +417,6 @@ def _normalised_profile_json(value: Any) -> str | None:
     return value
 
 
-def _campaign_contact_by_email(campaign_id: str, email: str) -> str:
-    """Existing campaign contact that already carries this address."""
-    from ..services.prospect_email import extract_profile_email
-
-    email_l = extract_profile_email(email).strip().lower()
-    if not email_l:
-        return ""
-    db = get_db()
-    rows = db.execute(
-        "SELECT id, profile_json FROM contacts WHERE campaign_id = ?",
-        (campaign_id,),
-    ).fetchall()
-    db.close()
-    for row in rows:
-        stored = extract_profile_email(dict(row)).strip().lower()
-        if stored == email_l:
-            return row["id"]
-    return ""
-
-
 def _profile_blob(profile_json: str | None) -> dict[str, Any]:
     if not profile_json:
         return {}
@@ -1429,8 +1409,15 @@ def skip_pending_outreaches(campaign_id: str, *, reason: str) -> int:
     return count
 
 
-def close_withdrawn_invitation(provider_id: str, public_id: str) -> str | None:
-    """Close the outreach behind an invitation just withdrawn on LinkedIn.
+def match_invitation_outreach(provider_id: str, public_id: str) -> list[dict[str, Any]]:
+    """Every ``invited`` HeyLead outreach for the person a sent invitation names.
+
+    Empty means HeyLead has no ``invited`` row for this person: the user sent
+    the invitation by hand, or another tool did, and HeyLead must not withdraw
+    it (heylead-api#5601). Each dict carries the row ``id``, ``recorded_at``
+    (``invited_at``, else the row's ``created_at``) and its campaign's
+    ``campaign_status`` and ``config_json``, so ``linkedin.withdraw_scope`` can
+    check the invitation dates from the row and the campaign allows withdrawal.
 
     `outreaches` carries no invitation_id, so the row is reached through the
     contact. Unipile names the invitee twice on a sent invitation — the ACoAA
@@ -1439,25 +1426,24 @@ def close_withdrawn_invitation(provider_id: str, public_id: str) -> str | None:
     All three routes are tried; the same member arriving under two id forms is
     the standing hazard here.
 
-    Without this the row keeps status='invited' after the invitation is gone:
-    it can never escalate (the InMail window shuts at 35 days) and every rollup
-    keeps counting it as outstanding. 'withdrawn' stays inside the funnel's
-    invited bucket, so closing the row does not erase the send.
-
     The json_valid guard is load-bearing: json_extract raises on '', which 1685
     of 5860 production contacts store, and the raise takes down the whole
     statement rather than skipping the row.
     """
     ids = [v.lower() for v in (provider_id, public_id) if v]
     if not ids:
-        return None
+        return []
 
     db = get_db()
     slots = ",".join("?" for _ in ids)
-    row = db.execute(
-        f"""SELECT o.id
+    rows = db.execute(
+        f"""SELECT o.id, o.campaign_id,
+                   COALESCE(o.invited_at, o.created_at, 0) AS recorded_at,
+                   COALESCE(ca.status, '') AS campaign_status,
+                   COALESCE(ca.config_json, '') AS config_json
             FROM outreaches o
             JOIN contacts c ON c.id = o.contact_id
+            LEFT JOIN campaigns ca ON ca.id = o.campaign_id
             WHERE o.status = 'invited'
               AND (
                 LOWER(COALESCE(c.linkedin_id, '')) IN ({slots})
@@ -1468,42 +1454,20 @@ def close_withdrawn_invitation(provider_id: str, public_id: str) -> str | None:
                   )) IN ({slots})
                 )
               )
-            ORDER BY o.invited_at
-            LIMIT 1""",
+            ORDER BY recorded_at, o.id""",
         (*ids, *ids),
-    ).fetchone()
-    db.close()
-    if not row:
-        return None
-
-    update_outreach(row["id"], status="withdrawn")
-    return row["id"]
-
-
-def find_followup_count_mismatches() -> list[dict]:
-    """Find outreaches where followup_count doesn't match actual sdr message count.
-
-    Returns list of dicts with outreach_id, followup_count, actual_msgs, name.
-    Used by daily health check to detect and auto-correct data inconsistencies.
-    """
-    db = get_db()
-    rows = db.execute(
-        """SELECT o.id as outreach_id, o.followup_count, o.status,
-                  c.name,
-                  (SELECT COUNT(*) FROM messages m
-                   WHERE m.outreach_id = o.id AND m.role = 'sdr') as actual_msgs
-           FROM outreaches o
-           JOIN contacts c ON o.contact_id = c.id
-           WHERE o.status NOT IN ('pending', 'skipped')
-             AND o.followup_count != (
-                 SELECT COUNT(*) FROM messages m
-                 WHERE m.outreach_id = o.id AND m.role = 'sdr'
-             )
-           ORDER BY c.name
-           LIMIT 50"""
     ).fetchall()
     db.close()
-    return [dict(r) for r in rows]
+    return [
+        {
+            "id": row["id"],
+            "campaign_id": row["campaign_id"],
+            "recorded_at": int(row["recorded_at"] or 0),
+            "campaign_status": row["campaign_status"],
+            "config_json": row["config_json"],
+        }
+        for row in rows
+    ]
 
 
 # When we last said something to this person — the clock the follow-up
@@ -1726,47 +1690,6 @@ def count_outreaches_by_status(campaign_id: str, status: str) -> int:
     ).fetchone()
     db.close()
     return row["cnt"] if row else 0
-
-
-def get_next_pending_outreach(campaign_id: str, exclude_job_type: str = "") -> Optional[dict]:
-    """Get the next pending outreach for a campaign, ordered by fit_score DESC.
-
-    Used by the planner to bind scheduler jobs to specific outreaches,
-    preventing duplicate sends when multiple schedulers are active.
-
-    If *exclude_job_type* is given, outreaches that already have a
-    pending/running job of that type are skipped so the planner doesn't
-    get stuck on the same top-ranked prospect every tick.
-    """
-    db = get_db()
-    if exclude_job_type:
-        row = db.execute(
-            f"""SELECT o.id, o.contact_id, c.fit_score
-               FROM outreaches o
-               JOIN contacts c ON o.contact_id = c.id
-               WHERE o.campaign_id = ? AND o.status = 'pending'
-                 AND o.id NOT IN (
-                     SELECT sj.outreach_id FROM scheduler_jobs sj
-                     WHERE sj.outreach_id IS NOT NULL
-                       AND sj.job_type = ?
-                       AND sj.status IN ('pending', 'running')
-                 )
-               ORDER BY {accept_signal.INVITE_ORDER_SQL}
-               LIMIT 1""",
-            (campaign_id, exclude_job_type),
-        ).fetchone()
-    else:
-        row = db.execute(
-            f"""SELECT o.id, o.contact_id, c.fit_score
-               FROM outreaches o
-               JOIN contacts c ON o.contact_id = c.id
-               WHERE o.campaign_id = ? AND o.status = 'pending'
-               ORDER BY {accept_signal.INVITE_ORDER_SQL}
-               LIMIT 1""",
-            (campaign_id,),
-        ).fetchone()
-    db.close()
-    return dict(row) if row else None
 
 
 def get_next_dm_candidate(
@@ -3275,18 +3198,6 @@ def increment_accepted() -> None:
     db.close()
 
 
-def update_daily_limit(new_limit: int) -> None:
-    from datetime import date
-    today = date.today().isoformat()
-    db = get_db()
-    db.execute(
-        "UPDATE rate_limits SET daily_limit = ?, updated_at = ? WHERE date = ?",
-        (new_limit, int(time.time()), today),
-    )
-    db.commit()
-    db.close()
-
-
 def get_rate_limit_budget() -> dict[str, dict]:
     """Get today's budget remaining per action type.
 
@@ -3439,44 +3350,6 @@ def get_warmup_effectiveness(campaign_id: str = "") -> dict:
     }
 
     return result
-
-
-def sync_rate_limits_from_outreaches() -> None:
-    """Reconcile rate_limits.sent with actual outreach counts.
-
-    Cloud scheduler sends invitations that don't increment the local
-    rate_limits.sent counter. This syncs the counter from the outreaches
-    table (source of truth) to prevent desync.
-    """
-    from datetime import date, datetime
-
-    today = date.today().isoformat()
-    start_of_day = int(datetime.combine(date.today(), datetime.min.time()).timestamp())
-
-    db = get_db()
-    # Count actual invitations sent today from outreaches table
-    row = db.execute(
-        """SELECT COUNT(*) as cnt FROM outreaches
-           WHERE status = 'invited' AND invited_at >= ?""",
-        (start_of_day,),
-    ).fetchone()
-    actual_sent = row["cnt"] if row else 0
-
-    # Update rate_limits if actual count is higher (cloud sent some)
-    current = db.execute(
-        "SELECT sent FROM rate_limits WHERE date = ?", (today,)
-    ).fetchone()
-    if current and actual_sent > current["sent"]:
-        db.execute(
-            "UPDATE rate_limits SET sent = ?, updated_at = ? WHERE date = ?",
-            (actual_sent, int(time.time()), today),
-        )
-        db.commit()
-        logger.info(
-            "Rate limit sync: sent %d → %d (cloud scheduler catchup)",
-            current["sent"], actual_sent,
-        )
-    db.close()
 
 
 def get_weekly_invitation_sum() -> int:
@@ -4994,38 +4867,6 @@ def get_profile_view_candidates(campaign_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_daily_engagement_count() -> int:
-    """Count engagements sent today."""
-    import datetime
-    today = datetime.date.today()
-    today_start = int(time.mktime(today.timetuple()))
-    db = get_db()
-    row = db.execute(
-        "SELECT COUNT(*) as c FROM engagements WHERE created_at >= ?",
-        (today_start,),
-    ).fetchone()
-    db.close()
-    return row["c"] if row else 0
-
-
-def get_daily_engagement_count_by_type(action_type: str) -> int:
-    """Count engagements of a specific type sent today.
-
-    Enables independent daily limits per action type (comment, react,
-    profile_view, follow, endorse).
-    """
-    import datetime
-    today = datetime.date.today()
-    today_start = int(time.mktime(today.timetuple()))
-    db = get_db()
-    row = db.execute(
-        "SELECT COUNT(*) as c FROM engagements WHERE action_type = ? AND created_at >= ?",
-        (action_type, today_start),
-    ).fetchone()
-    db.close()
-    return row["c"] if row else 0
-
-
 def get_daily_engagement_counts_all() -> dict:
     """Count verified engagements by action_type for today.
 
@@ -5215,22 +5056,6 @@ def get_account_engaged_post_ids(account_id: str) -> set[str]:
     return {row["post_id"] for row in rows}
 
 
-def is_post_already_engaged(post_id: str, account_id: str = "") -> bool:
-    """Check if this post has already been engaged by this account (any outreach).
-
-    Lightweight single-post check used as a pre-send race condition guard.
-    """
-    if not post_id or not account_id:
-        return False
-    db = get_db()
-    row = db.execute(
-        "SELECT 1 FROM engagements WHERE post_id = ? AND account_id = ? LIMIT 1",
-        (post_id, account_id),
-    ).fetchone()
-    db.close()
-    return row is not None
-
-
 # ──────────────────────────────────────────────
 # Engagement Anomaly Detection
 # ──────────────────────────────────────────────
@@ -5270,18 +5095,6 @@ def get_engagement_burst_count(minutes: int = 30) -> int:
     row = db.execute(
         "SELECT COUNT(*) as c FROM engagements WHERE created_at >= ?",
         (since,),
-    ).fetchone()
-    db.close()
-    return row["c"] if row else 0
-
-
-def get_engagement_burst_count_by_type(minutes: int = 30, action_type: str = "react") -> int:
-    """Count engagements of a specific action_type in the last N minutes."""
-    db = get_db()
-    since = int(time.time()) - (minutes * 60)
-    row = db.execute(
-        "SELECT COUNT(*) as c FROM engagements WHERE created_at >= ? AND action_type = ?",
-        (since, action_type),
     ).fetchone()
     db.close()
     return row["c"] if row else 0
@@ -6417,17 +6230,6 @@ def list_experiments(limit: int = 5) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def update_experiment_status(exp_id: str, status: str) -> None:
-    """Update experiment status: pending/tested/validated/dismissed."""
-    db = get_db()
-    db.execute(
-        "UPDATE experiments SET status = ? WHERE id = ?",
-        (status, exp_id),
-    )
-    db.commit()
-    db.close()
-
-
 def get_deal_profiles(
     campaign_id: str, status: str, limit: int = 3,
 ) -> list[dict]:
@@ -6946,25 +6748,6 @@ def get_inbound_signal_by_sender(
         ).fetchone()
     db.close()
     return dict(row) if row else None
-
-
-def count_inbound_signals(status: str = "", signal_type: str = "") -> int:
-    """Count inbound signals, optionally filtered."""
-    db = get_db()
-    q = "SELECT COUNT(*) as c FROM inbound_signals"
-    params: list[Any] = []
-    clauses: list[str] = []
-    if status:
-        clauses.append("status = ?")
-        params.append(status)
-    if signal_type:
-        clauses.append("signal_type = ?")
-        params.append(signal_type)
-    if clauses:
-        q += " WHERE " + " AND ".join(clauses)
-    row = db.execute(q, params).fetchone()
-    db.close()
-    return row["c"] if row else 0
 
 
 def count_inbound_dms_today() -> int:
@@ -7530,21 +7313,6 @@ def mark_connection_scanned(provider_id: str, when: int | None = None) -> None:
     db.execute(
         "UPDATE connections SET last_scanned_at = ? WHERE provider_id = ?",
         (when if when is not None else int(time.time()), provider_id),
-    )
-    db.commit()
-    db.close()
-
-
-def set_connection_watch_priority(provider_id: str, priority: bool) -> None:
-    """Put a connection on the tier-1 watch list, or take them off it.
-
-    Tier-1 connections are scanned every cycle instead of rotating, so a
-    time-sensitive post from someone who matters is seen within the hour.
-    """
-    db = get_db()
-    db.execute(
-        "UPDATE connections SET watch_priority = ? WHERE provider_id = ?",
-        (1 if priority else 0, provider_id),
     )
     db.commit()
     db.close()

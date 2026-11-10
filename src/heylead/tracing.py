@@ -29,9 +29,6 @@ class _NoOpSpan:
     def set_attribute(self, key: str, value: Any) -> None:
         pass
 
-    def set_status(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
     def record_exception(self, exception: BaseException) -> None:
         pass
 

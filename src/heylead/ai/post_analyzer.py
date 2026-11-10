@@ -294,33 +294,3 @@ async def analyze_post(
     except Exception as e:
         logger.warning("Post analysis LLM failed: %s", e)
         return PostAnalysis(topic="unknown")
-
-
-async def analyze_posts_batch(
-    posts: list[dict[str, Any]],
-    batch_size: int = 5,
-) -> list[tuple[str, PostAnalysis]]:
-    """Batch-analyze multiple posts. Returns list of (post_id, analysis) tuples."""
-    results: list[tuple[str, PostAnalysis]] = []
-
-    for post in posts[:batch_size]:
-        post_id = post.get("post_id", post.get("id", ""))
-        text = post.get("text", "")
-        author_name = post.get("author_name", post.get("author", ""))
-        author_headline = post.get("author_headline", "")
-        author_company = post.get("author_company", "")
-
-        if not text or not post_id:
-            continue
-
-        analysis = await analyze_post(
-            post_text=text,
-            author_name=author_name,
-            author_headline=author_headline,
-            author_company=author_company,
-        )
-        results.append((post_id, analysis))
-
-    if results:
-        logger.info("Analyzed %d posts (LLM)", len(results))
-    return results

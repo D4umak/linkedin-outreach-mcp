@@ -16,12 +16,6 @@ def _today_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-def _yesterday_str() -> str:
-    """Return yesterday's date as YYYY-MM-DD string (UTC)."""
-    yesterday = int(time.time()) - 86400
-    return datetime.fromtimestamp(yesterday, tz=timezone.utc).strftime("%Y-%m-%d")
-
-
 # ──────────────────────────────────────────────
 # CRUD
 # ──────────────────────────────────────────────

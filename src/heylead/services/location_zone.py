@@ -365,13 +365,3 @@ def location_zone(location: str | None) -> str | None:
         if len(name) > 3 and _has(flat, name):
             return _country_zone(names[name], text)
     return None
-
-
-def names_a_single_zone_country(location: str | None) -> bool:
-    """Whether some comma part of ``location`` is the name of a one-zone country."""
-    names, zones = _tables()
-    for part in _norm(location or "").split(","):
-        code = names.get(re.sub(r"\s+", " ", _DECOR.sub(" ", part)).strip())
-        if code and len(zones.get(code) or []) == 1:
-            return True
-    return False

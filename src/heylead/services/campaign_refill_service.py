@@ -1276,20 +1276,6 @@ async def _enroll_unenrolled_campaign_contacts(
     return await _save_prospects(campaign_id, prospects)
 
 
-def _count_pending_outreaches(campaign_id: str) -> int:
-    """How many outreaches this campaign can still send. Sync: via run_db."""
-    from ..db.schema import get_db
-
-    conn = get_db()
-    row = conn.execute(
-        "SELECT COUNT(*) AS n FROM outreaches "
-        "WHERE campaign_id = ? AND status = 'pending'",
-        (campaign_id,),
-    ).fetchone()
-    conn.close()
-    return int(row["n"] if row else 0)
-
-
 def _parse_meta(sig: dict[str, Any]) -> dict[str, Any]:
     """Parse metadata_json from a signal row."""
     raw = sig.get("metadata_json", "")

@@ -236,16 +236,6 @@ def update_post_analysis(post_id: str, topic: str, analysis_json: str) -> None:
     db.close()
 
 
-def is_post_known(post_id: str) -> bool:
-    """Check if a post_id exists in the posts table."""
-    db = get_db()
-    row = db.execute(
-        "SELECT 1 FROM posts WHERE post_id = ? LIMIT 1", (post_id,)
-    ).fetchone()
-    db.close()
-    return row is not None
-
-
 def get_posts_by_author(author_linkedin_id: str, limit: int = 20) -> list[dict]:
     """Get posts by a specific author."""
     db = get_db()
@@ -333,16 +323,6 @@ def _auto_link_contact(linkedin_id: str) -> None:
     db.close()
 
 
-def get_post_author(linkedin_id: str) -> Optional[dict]:
-    """Get a post author by LinkedIn ID."""
-    db = get_db()
-    row = db.execute(
-        "SELECT * FROM post_authors WHERE linkedin_id = ?", (linkedin_id,)
-    ).fetchone()
-    db.close()
-    return dict(row) if row else None
-
-
 def list_post_authors(
     *,
     company: str | None = None,
@@ -368,68 +348,9 @@ def list_post_authors(
     return [dict(r) for r in rows]
 
 
-def link_author_to_contact(linkedin_id: str, contact_id: str) -> None:
-    """Manually link a post author to a contact."""
-    db = get_db()
-    db.execute(
-        "UPDATE post_authors SET contact_id = ? WHERE linkedin_id = ?",
-        (contact_id, linkedin_id),
-    )
-    db.commit()
-    db.close()
-
-
-def update_author_topics(linkedin_id: str, topics: list[str]) -> None:
-    """Update the accumulated topics list for an author."""
-    db = get_db()
-    # Merge with existing topics
-    row = db.execute(
-        "SELECT topics_json FROM post_authors WHERE linkedin_id = ?",
-        (linkedin_id,),
-    ).fetchone()
-    if row:
-        existing = []
-        try:
-            existing = json.loads(row["topics_json"] or "[]")
-        except (json.JSONDecodeError, TypeError):
-            pass
-        merged = list(dict.fromkeys(existing + topics))[:20]  # Dedupe, cap at 20
-        db.execute(
-            "UPDATE post_authors SET topics_json = ? WHERE linkedin_id = ?",
-            (json.dumps(merged), linkedin_id),
-        )
-        db.commit()
-    db.close()
-
-
-def find_known_authors(linkedin_ids: list[str]) -> list[dict]:
-    """Batch check which authors are already tracked."""
-    if not linkedin_ids:
-        return []
-    placeholders = ",".join("?" for _ in linkedin_ids)
-    db = get_db()
-    rows = db.execute(
-        f"SELECT * FROM post_authors WHERE linkedin_id IN ({placeholders})",
-        linkedin_ids,
-    ).fetchall()
-    db.close()
-    return [dict(r) for r in rows]
-
-
 # ──────────────────────────────────────────────
 # Post Metric Snapshots
 # ──────────────────────────────────────────────
-
-def get_metric_snapshots(post_id: str, limit: int = 20) -> list[dict]:
-    """Get metric snapshots for a post, ordered by time."""
-    db = get_db()
-    rows = db.execute(
-        "SELECT * FROM post_metric_snapshots WHERE post_id = ? ORDER BY snapshot_at ASC LIMIT ?",
-        (post_id, limit),
-    ).fetchall()
-    db.close()
-    return [dict(r) for r in rows]
-
 
 def get_posts_with_metric_growth(
     min_snapshots: int = 2,

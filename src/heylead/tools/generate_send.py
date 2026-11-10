@@ -984,7 +984,7 @@ async def run_generate_and_send(
         prospect_co = prospect_data.get("company") or prospect.get("company", "")
         campaign_target = campaign_context.get("target_description", "")
         if prospect_co and campaign_target:
-            from ..services.intent_signals import search_job_intent, build_intent_context
+            from ..services.intent_signals import search_job_intent
             intent_companies = await search_job_intent(
                 client, account_id, campaign_target, limit=10,
             )

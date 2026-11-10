@@ -10,6 +10,8 @@ Phase 4 will add RAG pipeline integration when company_context is provided.
 
 from __future__ import annotations
 
+from ..services.campaign_naming import cut_at_word
+
 import json
 import logging
 import re
@@ -731,7 +733,7 @@ def _dict_to_icp_result(
     return IcpResult(
         icps=icps,
         summary=data.get("summary", f"Target: {target_description}"),
-        campaign_name=data.get("campaign_name", target_description[:30]),
+        campaign_name=data.get("campaign_name", cut_at_word(target_description, 30)),
         relevance_hook=data.get("relevance_hook", ""),
     )
 
@@ -775,7 +777,7 @@ def _convert_legacy_icp(
     return IcpResult(
         icps=icps,
         summary=old_icp.get("summary", f"Target: {target_description}"),
-        campaign_name=old_icp.get("campaign_name", target_description[:30]),
+        campaign_name=old_icp.get("campaign_name", cut_at_word(target_description, 30)),
         relevance_hook=old_icp.get("relevance_hook", ""),
     )
 
@@ -794,7 +796,7 @@ def _build_fallback(target_description: str) -> IcpResult:
             ),
         ],
         summary=f"Target: {target_description}",
-        campaign_name=target_description[:30],
+        campaign_name=cut_at_word(target_description, 30),
     )
 
 

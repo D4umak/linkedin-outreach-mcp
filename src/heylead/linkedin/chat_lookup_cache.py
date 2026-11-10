@@ -33,7 +33,3 @@ def store_cached_chat(account_id: str, provider_id: str, chat_id: Optional[str])
     if not key[1]:
         return
     _cache[key] = (time.monotonic(), chat_id)
-
-
-def clear_cached_chats() -> None:
-    _cache.clear()

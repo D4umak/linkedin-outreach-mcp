@@ -82,11 +82,6 @@ def _clean(text: Any) -> str:
     return " ".join(str(text or "").split())
 
 
-def offer_limits() -> dict[str, int]:
-    """The word limit of each field the owner writes, for the editors to show."""
-    return {"outcome": OUTCOME_MAX_WORDS, "how": HOW_MAX_WORDS, "ask": ASK_MAX_WORDS, "proof": PROOF_MAX_WORDS}
-
-
 def _too_many(over: int) -> str:
     return "1 word too many." if over == 1 else f"{over} words too many."
 
@@ -206,29 +201,6 @@ def card_is_stale(card: OfferCard | None, context: dict[str, Any] | None) -> boo
     if card is None:
         return False
     return bool(card.source_hash) and card.source_hash != source_hash(context)
-
-
-def render_offer_block(card: OfferCard, *, touch: str) -> str:
-    """The prompt section every generator reads.
-
-    ``touch`` is "first_touch" (note, first DM, InMail, email, any
-    follow-up) or "reply". A first touch sees the outcome and the ask only;
-    a reply may add how and proof. Never carries a bracketed token.
-    """
-    lines = [
-        "THE OFFER (what this message lands; the style rules below govern only how it sounds)",
-        f"For: {_clean(card.for_)}" if _clean(card.for_) else "",
-        f"What changes for them, in their words: {_clean(card.outcome)}",
-        f"The one question to ask: {_clean(card.ask)}",
-    ]
-    if touch == "reply":
-        if _clean(card.how):
-            lines.append(f"What the sender does (say it once, only now that they replied): {_clean(card.how)}")
-        if _clean(card.proof):
-            lines.append(f"Proof (at most once per thread): {_clean(card.proof)}")
-    else:
-        lines.append("Do not say what the sender builds, runs or leads. Do not name a product, platform or programme. The message is about them.")
-    return _PLACEHOLDER_RE.sub("", "\n".join(line for line in lines if line))
 
 
 # ── Distilling (one model call; the api holds the same prompt text) ──

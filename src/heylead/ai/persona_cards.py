@@ -514,15 +514,6 @@ def find_matching_persona(title: str) -> dict | None:
     return best_match
 
 
-def get_all_personas_summary() -> str:
-    """Get a concise summary of all persona cards for prompt injection."""
-    lines = []
-    for p in PERSONA_CARDS:
-        pains = "; ".join(p["pain_points"][:3])
-        lines.append(f"- **{p['role']}**: {pains}")
-    return "\n".join(lines)
-
-
 # ──────────────────────────────────────────────
 # Archive persona alias map (9 Sep 2026, KB v2 14 Sep 2026)
 # ──────────────────────────────────────────────

@@ -278,71 +278,6 @@ def compute_composite_lead_score(
 # Backfill
 # ──────────────────────────────────────────────
 
-async def backfill_icp_match_scores(limit: int = 500) -> int:
-    """Re-score contacts with ICP match instead of data completeness.
-
-    Targets contacts whose fit_score was set by the old heuristic
-    (typically rounded to 2 decimal places from the data-completeness formula).
-
-    Returns:
-        Number of contacts updated.
-    """
-    def _do_backfill():
-        from ..db.schema import get_db
-
-        db = get_db()
-        rows = db.execute("""
-            SELECT c.id, c.title, c.company, c.linkedin_id,
-                   c.profile_json, c.analysis_json, c.fit_score,
-                   c.estimated_revenue, c.campaign_id, camp.icp_json
-            FROM contacts c
-            LEFT JOIN campaigns camp ON c.campaign_id = camp.id
-            WHERE camp.icp_json IS NOT NULL AND camp.icp_json != ''
-            ORDER BY c.created_at DESC
-            LIMIT ?
-        """, (limit,)).fetchall()
-        db.close()
-
-        if not rows:
-            return 0
-
-        updated = 0
-        db = get_db()
-        for row in rows:
-            contact = dict(row)
-            icp_json = contact.get("icp_json")
-            if not icp_json:
-                continue
-
-            result = compute_icp_match(contact, icp_json)
-            new_score = result["icp_match_score"]
-            old_score = contact.get("fit_score", 0) or 0
-
-            if abs(new_score - old_score) > 0.01:
-                db.execute(
-                    "UPDATE contacts SET fit_score = ? WHERE id = ?",
-                    (new_score, contact["id"]),
-                )
-                updated += 1
-
-        if updated:
-            db.commit()
-            logger.info("ICP match scorer: backfilled %d contacts", updated)
-        db.close()
-        if updated:
-            from .fit_gate import restore_fit_skipped_for_campaign
-
-            touched = {
-                (dict(r).get("campaign_id") or "")
-                for r in rows
-            } - {""}
-            for cid in touched:
-                restore_fit_skipped_for_campaign(cid)
-        return updated
-
-    return await run_db(_do_backfill)
-
-
 # ──────────────────────────────────────────────
 # ICP Match — Dimension Scorers
 # ──────────────────────────────────────────────
@@ -786,24 +721,6 @@ def _distinctive_keywords(icp: dict) -> list[str]:
         ):
             out.append(kw)
     return out
-
-
-def _has_product_context(contact: dict[str, Any]) -> bool:
-    """Enough text to judge product fit — not a title-only stub."""
-    if contact.get("company"):
-        return True
-    if contact.get("headline"):
-        return True
-    if contact.get("research_summary"):
-        return True
-    profile = parse_json_field(contact.get("profile_json"))
-    if profile and (profile.get("headline") or profile.get("summary")):
-        return True
-    analysis = parse_json_field(contact.get("analysis_json"))
-    if analysis and (analysis.get("summary") or analysis.get("tone")):
-        return True
-    title = str(contact.get("title") or "")
-    return len(title) > 40
 
 
 def _product_keyword_veto_applies(contact: dict[str, Any], icp: dict) -> bool:

@@ -471,30 +471,6 @@ def batch_get_watchlist_campaigns(watchlist_ids: list[str]) -> dict[str, str]:
     return out
 
 
-def count_signals_by_type(
-    *,
-    days: int = 7,
-    campaign_id: str | None = None,
-) -> dict[str, int]:
-    """Count signals by type within the given time window."""
-    cutoff = int(time.time()) - (days * 86400)
-    conditions = ["detected_at >= ?"]
-    params: list[Any] = [cutoff]
-
-    if campaign_id:
-        conditions.append("campaign_id = ?")
-        params.append(campaign_id)
-
-    where = " AND ".join(conditions)
-    db = get_db()
-    rows = db.execute(
-        f"SELECT signal_type, COUNT(*) as cnt FROM signals WHERE {where} GROUP BY signal_type",
-        params,
-    ).fetchall()
-    db.close()
-    return {row["signal_type"]: row["cnt"] for row in rows}
-
-
 def get_signal_funnel_stats(days: int = 7) -> dict[str, Any]:
     """Get signal funnel stats for dashboard."""
     cutoff = int(time.time()) - (days * 86400)
@@ -686,19 +662,6 @@ def save_company_post_tracked(
     return row_id
 
 
-def get_tracked_posts_for_watchlist(watchlist_id: str) -> list[dict[str, Any]]:
-    """Get all tracked posts for a company watchlist."""
-    db = get_db()
-    rows = db.execute(
-        """SELECT * FROM company_posts_tracked
-           WHERE watchlist_id = ?
-           ORDER BY created_at DESC""",
-        (watchlist_id,),
-    ).fetchall()
-    db.close()
-    return [dict(r) for r in rows]
-
-
 def update_company_post_tracked(
     post_id: str,
     *,
@@ -880,37 +843,6 @@ def resolve_existing_contact(signal: dict[str, Any]) -> dict[str, Any] | None:
     if linkedin_id:
         return get_contact_by_linkedin_id(linkedin_id)
     return None
-
-
-def get_contact_by_provider_id(provider_id: str) -> dict[str, Any] | None:
-    """Find a contact by LinkedIn provider_id stored in profile_json.
-
-    contacts.linkedin_id stores public_id (slug format like 'john-doe-123')
-    but Unipile messages return provider_id (ACoAAA format). This function
-    searches the profile_json blob for the provider_id to bridge the gap.
-
-    The json_valid CASE is load-bearing. json_extract raises 'malformed JSON'
-    on the empty string, and the raise aborts the whole statement instead of
-    skipping the row — legacy contacts still store '', and this query has no
-    WHERE filter at all, so one of them anywhere in the table is enough. The
-    guard sits inside json_extract's argument rather than beside it as a
-    second WHERE term: SQLite is free to reorder conjuncts, and LIMIT 1 makes
-    whether the scan ever reaches the bad row a matter of row order.
-    """
-    if not provider_id:
-        return None
-    db = get_db()
-    row = db.execute(
-        """SELECT * FROM contacts
-           WHERE json_extract(
-                   CASE WHEN json_valid(profile_json) THEN profile_json ELSE '{}' END,
-                   '$.provider_id'
-                 ) = ?
-           LIMIT 1""",
-        (provider_id,),
-    ).fetchone()
-    db.close()
-    return dict(row) if row else None
 
 
 def batch_get_contacts_by_linkedin_ids(
@@ -1433,19 +1365,6 @@ def get_intent_event_stats(days: int = 30) -> dict[str, Any]:
         "by_type": by_type,
         "by_action": by_action,
     }
-
-
-def update_intent_event(event_id: str, **kwargs: Any) -> None:
-    """Update intent event fields."""
-    if not kwargs:
-        return
-    sets = ", ".join(f"{k} = ?" for k in kwargs)
-    vals = list(kwargs.values())
-    vals.append(event_id)
-    db = get_db()
-    db.execute(f"UPDATE intent_events SET {sets} WHERE id = ?", vals)
-    db.commit()
-    db.close()
 
 
 # ──────────────────────────────────────────────

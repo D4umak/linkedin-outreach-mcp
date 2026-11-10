@@ -1968,11 +1968,32 @@ async def _execute_recover_stuck_outreaches(job: dict[str, Any]) -> str:
     )
 
 
+def _left_pending_note(not_heylead: int, campaign_off: int) -> str:
+    """The run summary's tail for stale invitations HeyLead left pending.
+
+    The code knows only that no HeyLead invitation matched, not who sent the
+    invitation, so the words say exactly that (heylead-api#5601 designer-1-o1).
+    """
+    no_match = "with no matching HeyLead invitation"
+    held = "where the campaign is not active or Withdraw stale invites is off"
+    if not_heylead and campaign_off:
+        return (f", {not_heylead + campaign_off} left pending "
+                f"({not_heylead} {no_match}, {campaign_off} {held})")
+    if not_heylead:
+        return f", {not_heylead} left pending ({no_match.removeprefix('with ')})"
+    if campaign_off:
+        return f", {campaign_off} left pending ({held.removeprefix('where ')})"
+    return ""
+
+
 async def _execute_withdraw_stale_invites(job: dict[str, Any]) -> str:
-    """Withdraw sent invitations that are older than STALE_INVITE_DAYS.
+    """Withdraw HeyLead's sent invitations that are older than STALE_INVITE_DAYS.
 
     Fetches sent invitations from LinkedIn, finds those older than the
-    threshold, and withdraws them to free up invitation quota.
+    threshold, and withdraws them to free up invitation quota. Only an
+    invitation HeyLead sent is withdrawn, and only when its campaign's
+    ``withdraw_stale_invites`` is on (``linkedin.withdraw_scope``,
+    heylead-api#5601): one the user sent by hand stays pending and is counted.
 
     Withdrawals are paced and bounded: at most WITHDRAW_BATCH_PER_RUN per run,
     never more than the remaining daily withdrawal allowance, with a short
@@ -1991,6 +2012,7 @@ async def _execute_withdraw_stale_invites(job: dict[str, Any]) -> str:
     )
     from ..linkedin import UnipileError, get_account_id, get_linkedin_client
     from ..linkedin.rate_limiter import check_daily_cap
+    from ..linkedin.withdraw_scope import CAMPAIGN_OFF, withdrawal_target
 
     logger.info("Scheduler: checking for stale invitations to withdraw")
 
@@ -2034,7 +2056,9 @@ async def _execute_withdraw_stale_invites(job: dict[str, Any]) -> str:
     # withdraws the freshest stale invitation and leaves the oldest at the tail
     # — and the tail is never reached, because each day's sends cross the
     # threshold and land ahead of it about as fast as the daily cap drains.
-    candidates: list[tuple[int, int, str, int, dict]] = []
+    candidates: list[tuple[int, int, str, int, dict, str]] = []
+    not_heylead = 0
+    campaign_off = 0
     for inv in invitations:
         # Unipile sends invitations carry `date`; integer stamps may be millis.
         inv_time = to_epoch(
@@ -2052,6 +2076,17 @@ async def _execute_withdraw_stale_invites(job: dict[str, Any]) -> str:
         if not inv_id:
             continue
 
+        # HeyLead withdraws only what it sent, and only where the campaign
+        # allows it (heylead-api#5601). The sent list also holds invitations
+        # the user sent by hand; those are never ours to take back.
+        outreach_id, why = await run_db(withdrawal_target, inv)
+        if not outreach_id:
+            if why == CAMPAIGN_OFF:
+                campaign_off += 1
+            else:
+                not_heylead += 1
+            continue
+
         # Old invitations only carry a fuzzy "Sent 5 months ago" string, which
         # Unipile resolves against fetch time — good to the day, and no finer:
         # a whole cohort collapses onto one stamp whose sub-second part is
@@ -2061,12 +2096,12 @@ async def _execute_withdraw_stale_invites(job: dict[str, Any]) -> str:
         raw_id = str(inv_id)
         candidates.append(
             (inv_time // 86400, int(raw_id) if raw_id.isdigit() else 0,
-             inv_id, inv_time, inv)
+             inv_id, inv_time, inv, outreach_id)
         )
 
     candidates.sort(key=lambda c: (c[0], c[1]))  # oldest first
 
-    for _day, _seq, inv_id, inv_time, inv in candidates:
+    for _day, _seq, inv_id, inv_time, inv, outreach_id in candidates:
         if withdrawn >= budget:
             logger.info(
                 "Withdrawal budget for this run exhausted (%d) — %d/%d used today",
@@ -2087,18 +2122,14 @@ async def _execute_withdraw_stale_invites(job: dict[str, Any]) -> str:
                 withdrawn += 1
                 # The invitation is gone from LinkedIn; close the row behind it
                 # or it sits at 'invited' forever, unable to escalate and still
-                # counted as outstanding.
-                from ..db.queries import close_withdrawn_invitation
-                from ..linkedin.sent_invitations import invitee_provider_id, invitee_public_id
+                # counted as outstanding. 'withdrawn' stays inside the funnel's
+                # invited bucket, so closing the row does not erase the send.
+                from ..db.queries import update_outreach
 
-                closed = await run_db(
-                    close_withdrawn_invitation,
-                    invitee_provider_id(inv),
-                    invitee_public_id(inv),
-                )
+                closed = await run_db(update_outreach, outreach_id, status="withdrawn")
                 await db.log_action(
                     "stale_invite_withdrawn",
-                    outreach_id=closed or "",
+                    outreach_id=outreach_id,
                     result="success",
                     details={
                         "invitation_id": inv_id,
@@ -2126,6 +2157,7 @@ async def _execute_withdraw_stale_invites(job: dict[str, Any]) -> str:
     summary = f"Stale invitations: {withdrawn} withdrawn"
     if errors:
         summary += f", {errors} failed"
+    summary += _left_pending_note(not_heylead, campaign_off)
     logger.info("Scheduler: %s", summary)
     return summary
 

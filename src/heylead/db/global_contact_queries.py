@@ -506,26 +506,6 @@ def search_global_contacts(
     return [dict(r) for r in rows]
 
 
-def get_all_global_linkedin_ids() -> set[str]:
-    """Fast set of all linkedin_ids in global_contacts (for dedup)."""
-    db = get_db()
-    rows = db.execute(
-        """SELECT linkedin_id FROM global_contacts
-           WHERE linkedin_id IS NOT NULL AND linkedin_id != ''
-           UNION
-           SELECT linkedin_url FROM global_contacts
-           WHERE linkedin_url IS NOT NULL AND linkedin_url != ''"""
-    ).fetchall()
-    db.close()
-
-    ids: set[str] = set()
-    for row in rows:
-        val = row[0]
-        if val:
-            ids.add(val.lower().strip())
-    return ids
-
-
 # ──────────────────────────────────────────────
 # Lifecycle
 # ──────────────────────────────────────────────

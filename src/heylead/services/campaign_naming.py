@@ -55,3 +55,40 @@ def cut_at_word(text: str, limit: int = CAMPAIGN_NAME_MAX) -> str:
 def auto_campaign_name(target: str) -> str:
     """The name the strategy spawner gives a campaign it creates."""
     return AUTO_PREFIX + cut_at_word(plain_campaign_name(target), CAMPAIGN_NAME_MAX)
+
+
+FALLBACK_CAMPAIGN_NAME = "New campaign"
+
+# Names an ICP answer can carry that are not a name for this campaign (#3022).
+_PLACEHOLDER_ICP_NAMES = frozenset({"primary", "generated icp", FALLBACK_CAMPAIGN_NAME.casefold()})
+
+
+def default_campaign_name(target_description: str) -> str:
+    """Name a campaign from its target: its first sentence, cut on a word.
+
+    The hosted twin is heylead-api campaign_naming.default_campaign_name.
+    """
+    text = plain_campaign_name(target_description)
+    first = re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0].rstrip(".!?").strip()
+    if not first:
+        return FALLBACK_CAMPAIGN_NAME
+    return cut_at_word(first, CAMPAIGN_NAME_MAX)
+
+
+def name_for_new_campaign(explicit: str | None, icp: object, target_description: str) -> str:
+    """A typed name, else the ICP's ``campaign_name``, else the target default.
+
+    api #3022: a dashboard campaign was named from its cut-off target text
+    (e.g. "I want to reach founders of small logistics firms who…") while its
+    ICP carried a short name (e.g. "Nordic Logistics Founders"). The hosted twin is heylead-api
+    campaign_naming.name_for_new_campaign; an empty or placeholder ICP name
+    ("Primary", "Generated ICP") is no name.
+    """
+    typed = plain_campaign_name(explicit or "")
+    if typed:
+        return typed
+    raw = icp.get("campaign_name") if isinstance(icp, dict) else None
+    from_icp = plain_campaign_name(raw if isinstance(raw, str) else "")
+    if from_icp and from_icp.casefold() not in _PLACEHOLDER_ICP_NAMES:
+        return cut_at_word(from_icp, CAMPAIGN_NAME_MAX)
+    return default_campaign_name(target_description)

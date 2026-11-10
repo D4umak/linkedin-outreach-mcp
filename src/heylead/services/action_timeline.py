@@ -90,19 +90,6 @@ def format_action_timeline(
     return "\n".join(lines)
 
 
-def sequence_email_instructions(*, sender_name: str = "there") -> str:
-    """Email copy rules: next chapter, not a standalone cold blast."""
-    return (
-        "Generate the NEXT email in an existing outreach sequence "
-        "(NOT a cold first email unless PRIOR TOUCHES is empty). "
-        "Return JSON with 'subject' (max 60 chars, no emojis) and 'body' "
-        f"(max 800 chars, professional email with greeting and sign-off). "
-        f"Sign off as {sender_name}. "
-        "Use PRIOR TOUCHES: continue the same ask; mention LinkedIn once, "
-        "lightly; do not pretend you never contacted them."
-    )
-
-
 def email_is_legal(
     *,
     has_mailbox: bool,

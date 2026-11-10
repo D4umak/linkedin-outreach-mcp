@@ -844,18 +844,6 @@ def remember_hosted_invite_caps(rate_limits: dict[str, Any] | None) -> None:
         save_setting(constants.HOSTED_INVITE_CAPS_SETTING, merged)
 
 
-def hosted_weekly_invite_cap(rate_limits: dict[str, Any] | None) -> int:
-    """The payload's ``weekly_cap``, else the free-seat fallback.
-
-    Kept for callers holding a payload and no event loop. Anything rendering
-    for the operator wants ``invite_limits_for_display``, which also knows the
-    remembered ceilings and the seat's tier.
-    """
-    return hosted_caps_from_payload(rate_limits).get(
-        "weekly_cap", constants.HOSTED_WEEKLY_INVITE_CAP,
-    )
-
-
 def invite_limits_for_display_sync(
     rate_limits: dict[str, Any] | None = None,
 ) -> tuple[int, int]:
@@ -937,11 +925,6 @@ async def invite_limits_for_display(
     return await run_db(invite_limits_for_display_sync, rate_limits)
 
 
-async def _get_effective_caps() -> tuple[int, int]:
-    """``invite_limits_for_display`` for a caller with no payload in hand."""
-    return await invite_limits_for_display(None)
-
-
 # ──────────────────────────────────────────────
 # Pending invitation cache + withdrawal (utility, not rate limiting)
 # ──────────────────────────────────────────────
@@ -992,7 +975,13 @@ def invalidate_pending_cache() -> None:
 async def withdraw_oldest_to_free_spot(
     client: Any, account_id: str
 ) -> dict[str, Any]:
-    """Withdraw the oldest pending invitation to free a spot."""
+    """Withdraw HeyLead's oldest pending invitation to free a spot.
+
+    Only an invitation HeyLead sent, in a campaign whose
+    ``withdraw_stale_invites`` is on, is ever taken (``withdraw_scope``,
+    heylead-api#5601). The oldest invitation overall may be one the user sent
+    by hand; it stays pending.
+    """
     # Never on a hosted account: the cloud owns its invitations and its
     # withdrawals (heylead-api#2318).
     from ..hosted_writes import laptop_writes_refused
@@ -1040,7 +1029,24 @@ async def withdraw_oldest_to_free_spot(
         return {"success": False, "error": "No valid invitation candidates"}
 
     candidates.sort(key=lambda c: (c[0], c[1]))  # oldest first
-    _day, _seq, oldest_time, oldest_id, oldest_inv = candidates[0]
+
+    # The oldest invitation HeyLead may withdraw; hand-sent ones are skipped.
+    from .withdraw_scope import withdrawal_target
+
+    chosen = None
+    for cand in candidates:
+        outreach_id, _why = await run_db(withdrawal_target, cand[4])
+        if outreach_id:
+            chosen = (cand, outreach_id)
+            break
+    if chosen is None:
+        return {
+            "success": False,
+            "error": ("No pending invitation HeyLead may withdraw: none matches a "
+                      "HeyLead invitation in an active campaign with Withdraw "
+                      "stale invites on"),
+        }
+    (_day, _seq, oldest_time, oldest_id, oldest_inv), outreach_id = chosen
     days_old = (now_ts - oldest_time) // 86400
     name = oldest_inv.get("invited_user") or oldest_inv.get("name") or ""
 
@@ -1053,8 +1059,12 @@ async def withdraw_oldest_to_free_spot(
     if result.get("success"):
         invalidate_pending_cache()
         invalidate_daily_cache()
+        from ..db.queries import update_outreach
+
+        await run_db(update_outreach, outreach_id, status="withdrawn")
         await db.log_action(
             "invite_withdrawn_to_free_spot",
+            outreach_id=outreach_id,
             result="success",
             details={
                 "invitation_id": oldest_id,

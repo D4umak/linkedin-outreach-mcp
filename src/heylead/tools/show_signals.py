@@ -91,7 +91,7 @@ async def run_show_signals(
 
 def _format_signal_summary() -> str:
     """Format a summary bar with signal stats."""
-    from ..db.signal_queries import count_signals_by_type, get_signal_funnel_stats
+    from ..db.signal_queries import get_signal_funnel_stats
 
     stats = get_signal_funnel_stats(days=7)
     total = stats.get("total", 0)

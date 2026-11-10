@@ -97,11 +97,6 @@ class Polished:
     repaired: tuple[str, ...] = ()
     refused: str = ""
 
-    @property
-    def clean(self) -> bool:
-        return not self.refused
-
-
 def offences(draft: str, channel: str) -> tuple[str, ...]:
     """The ids of the rules this draft breaks, in the order they are checked.
 

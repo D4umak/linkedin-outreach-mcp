@@ -230,12 +230,6 @@ def uses_sales_kb(goal: str) -> bool:
     return goal in (SELL, PARTNER, BUY)
 
 
-def needs_brief(goal: str) -> bool:
-    """Goals that run on the project brief: job search names the role, and
-    the incomplete goals have no template of their own."""
-    return goal == JOB_SEARCH or not GOALS[goal].complete
-
-
 # What a first campaign's project brief needs, per goal: the twin of
 # heylead-api's goals.BRIEF_ASKS (#1859). One sentence for every goal asked
 # a Sell draft "what a vendor must confirm" (28 Sep 2026).
@@ -252,11 +246,6 @@ BRIEF_ASKS: dict[str, str] = {
 def brief_ask(goal: str) -> str:
     """What the brief needs for this goal; an unknown goal asks as sell."""
     return BRIEF_ASKS.get(normalize_goal(goal) or DEFAULT_GOAL, BRIEF_ASKS[SELL])
-
-
-def brief_asks_line() -> str:
-    """Every goal's ask on one line, for a tool description the model reads."""
-    return "; ".join(f"{key}: {ask}" for key, ask in BRIEF_ASKS.items())
 
 
 def fit_copy(goal: str) -> dict[str, str]:
@@ -313,16 +302,3 @@ def fit_copy(goal: str) -> dict[str, str]:
         "match": match, "partial": partial, "mismatch": mismatch,
         "unknown": "Not enough to judge yet", "coverage": coverage, "who": who,
     }
-
-
-def as_table() -> list[dict[str, Any]]:
-    """The whole table as plain data, for the cross-repo parity test."""
-    return [
-        {
-            "key": g.key, "label": g.label, "line": g.line, "persona": g.persona,
-            "noun": g.noun, "fit_question": g.fit_question, "complete": g.complete,
-            "campaign_type": g.campaign_type, "campaign_intent": g.campaign_intent,
-            "roles": list(g.roles), "moves": list(g.moves), "copy": fit_copy(g.key),
-        }
-        for g in GOALS.values()
-    ]

@@ -39,7 +39,6 @@ async def collect_company_page_signals() -> str:
     from ..db.async_bridge import run_db
     from ..db.signal_queries import (
         batch_signal_exists,
-        get_tracked_posts_for_watchlist,
         get_company_post_by_post_id,
         list_watchlists,
         save_company_post_tracked,

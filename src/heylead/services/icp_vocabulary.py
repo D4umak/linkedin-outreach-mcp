@@ -185,28 +185,6 @@ def enrich_investor_segment(
     return out
 
 
-def icp_brief(icp: dict[str, Any], brief: str | None = None) -> str:
-    """The brief an ICP was generated from: *brief* when given, else the
-    target description it stores, with the model's summary beside it."""
-    parts = [brief or icp.get("target_description") or "", icp.get("summary") or ""]
-    return " | ".join(str(p) for p in parts if p)
-
-
-def enrich_investor_icp(icp: Any, goal: str | None = None, brief: str | None = None) -> Any:
-    """Every persona (`icps`) or stored segment (`segments`) of an ICP through
-    enrich_investor_segment, judged against *brief* (or the ICP's own target
-    description and summary). Anything that is not a dict is returned as it came."""
-    if not isinstance(icp, dict):
-        return icp
-    out = dict(icp)
-    text = icp_brief(icp, brief)
-    for key in ("icps", "segments"):
-        personas = icp.get(key)
-        if isinstance(personas, list):
-            out[key] = [enrich_investor_segment(p, goal, text) for p in personas]
-    return out
-
-
 def enrich_investor_result(result: Any, goal: str | None = None, brief: str | None = None) -> Any:
     """The client's generator holds SingleIcp dataclasses, not dicts: each
     persona's titles, keywords and industries go through

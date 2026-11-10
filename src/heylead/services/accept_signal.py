@@ -46,22 +46,6 @@ def is_first_degree_profile(profile: Any) -> bool:
         return True
     return False
 
-def accept_inputs(profile: Any, analysis: Any = None, research_summary: Any = None) -> str:
-    p = _as_dict(profile)
-    a = _as_dict(analysis)
-    r = _as_dict(research_summary)
-
-    has_profile = any(p.get(k) is not None for k in _PROFILE_KEYS)
-    has_research = a.get("posts_crawled") is not None or r.get("total_posts_analyzed") is not None
-
-    if has_profile and has_research:
-        return "both"
-    if has_profile:
-        return "profile"
-    if has_research:
-        return "research"
-    return "none"
-
 def likely_to_accept(profile: Any, analysis: Any = None, research_summary: Any = None) -> float | None:
     p = _as_dict(profile)
     a = _as_dict(analysis)
@@ -100,14 +84,6 @@ def rank(fit_score: Any, accept_score: Any) -> float:
         return 0.0
     a = _num(accept_score)
     return round(FIT_WEIGHT * f + ACCEPT_WEIGHT * (ACCEPT_PRIOR if a is None else a), 4)
-
-def rank_band(rank_score: Any) -> str:
-    r = _num(rank_score) or 0.0
-    return f"t{max(0, min(9, int(r * 10)))}"
-
-def basis_points(score: Any) -> int | None:
-    s = _num(score)
-    return None if s is None else int(round(s * 10000))
 
 _SAFE_PROF = "CASE WHEN json_valid(c.profile_json) THEN c.profile_json ELSE '{}' END"
 _SAFE_ANAL = "CASE WHEN json_valid(c.analysis_json) THEN c.analysis_json ELSE '{}' END"

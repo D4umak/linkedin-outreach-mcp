@@ -148,10 +148,6 @@ def _words_run_together(text: str) -> bool:
     return letters >= 40 and spaces < max(3, letters // 12)
 
 
-class GuardrailViolation(Exception):
-    """Raised when a message breaks HeyLead's outgoing style rules."""
-
-
 def _has_emoji(text: str) -> bool:
     for ch in text:
         if unicodedata.category(ch) == "So":
@@ -174,10 +170,3 @@ def check_message(text: str) -> list[str]:
     if _words_run_together(text):
         violations.append("has words running together without spaces")
     return violations
-
-
-def assert_sendable(text: str) -> None:
-    """Raise GuardrailViolation if the message breaks any style rule."""
-    violations = check_message(text)
-    if violations:
-        raise GuardrailViolation("; ".join(violations))

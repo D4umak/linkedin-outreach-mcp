@@ -47,6 +47,17 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.503 (2026-11-10)
+- Fix: heylead-ci never starts a run for a head the PR has moved past
+- Fix: heylead-ci confirms a PR's head before it runs or cancels anything (WIP: guard, incident, suite)
+- Fix: check the dates before the campaigns, so the summary names the true reason
+- Fix: withdraw only an invitation that dates from its HeyLead row, in an active campaign
+- Start CI again on a new head (test (3.10) timing flake, D4umak/heylead-api#5664)
+- incident note for the local engine's hand-sent withdrawals
+- Fix: the local engine withdraws only invitations HeyLead sent, where the campaign allows it
+- Fix: the shepherd reads reviews through the queue's trusted-author filter
+- New: one command runs a branch's tests on the VM from any chat (api #5620)
+
 ## v0.10.502 (2026-11-10)
 - Fix: a provider 5xx on the follow warm-up is a skip, not a retry (#5293)
 

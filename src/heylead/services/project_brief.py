@@ -70,11 +70,6 @@ def campaign_has_project_brief(campaign: dict[str, Any] | None) -> bool:
     return is_real_project_brief(read_project_brief(campaign))
 
 
-def read_project_facts(campaign: dict[str, Any] | None) -> dict[str, Any]:
-    facts = parse_campaign_context(campaign).get("project_facts")
-    return facts if isinstance(facts, dict) else {}
-
-
 def refuse_without_project_brief(campaign: dict[str, Any] | None) -> str:
     """One-line refusal used by launch, resume, and auto-send."""
     if campaign_has_project_brief(campaign):
