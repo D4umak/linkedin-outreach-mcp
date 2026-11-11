@@ -134,13 +134,15 @@ and a 1st-degree connection guard before it goes out. HeyLead sends from your ow
 commissions cloud sending — in `observe` mode nothing is commissioned and
 nothing is sent, from either machine.
 
-**Approval mode (hosted):** a workspace that has not chosen otherwise holds
-every opening DM and follow-up until a person approves it, and the approved
-text is what is sent. Read what is waiting on the dashboard's Approvals page or
-with `inspect(action="waiting")`; decide with `prospect(action="approve_message")`
-or `discard_message`. Autopilot sends them unread and is one switch away
-(Settings → Sending, or `scheduler(action="approval_mode", mode="autopilot")`).
-Invitations and InMail are never held. In review mode, invitations go out without a note.
+**Approval mode (hosted):** a workspace that has not chosen otherwise sends
+opening DMs, follow-ups and answers to replies as HeyLead writes them, without
+anyone reading them first. Switch review on (Settings → Sending, or
+`scheduler(action="approval_mode", mode="require_approval")`) and they wait for
+a person, read on the Approvals page or with `inspect(action="waiting")`; the
+approved text is what is sent. Invitations and InMail are never held. In review mode, invitations go out without a note. On Free,
+sending without review is a 7-day trial, once per LinkedIn account; after it
+they wait for approval unless you move to Pro ($29 per connected account per
+month).
 
 ---
 

@@ -419,11 +419,11 @@ def campaign_plan(
         opener = f"When someone accepts: an opening message{voiced}, "
         open_hint = "On acceptance"
     if autopilot:
-        opener += "sent inside your window, no review."
+        opener += "sent inside your window, without anyone reading it first."
     else:
         # The api's drafts_waiting alert sends that email (api #2497).
         opener += (
-            "held for your approval until you switch to autopilot, on the Approvals page (if "
+            "held for your approval while review is on, on the Approvals page (if "
             f"three or more opening messages wait {c.INVITE_PAUSE_WINDOW_HOURS} of your sending hours, new invitations pause "
             "until you review them). When one has waited 2 hours in your sending window, the workspace owner gets an email."
         )
@@ -496,8 +496,9 @@ def _local_state() -> dict[str, Any]:
     """This install's own settings, in the shape campaign_plan reads.
 
     Self-hosted sends in the window its own config names and has no approval
-    hold. A hosted account whose api call failed gets the api's defaults: the
-    default sending window and require_approval.
+    hold. A hosted account whose api call failed gets the default sending
+    window and the cautious reading, review on: since api #5340 a never-chose
+    workspace sends without review, but the client cannot tell which this is.
     """
     from .. import config
 

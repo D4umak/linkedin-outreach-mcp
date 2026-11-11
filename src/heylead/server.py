@@ -47,6 +47,10 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.507 (2026-11-11)
+- Fix: keep the review-mode invitation sentence on one line in the copywriter skill (#5340)
+- New: client words say a never-chose hosted workspace sends without review
+
 ## v0.10.506 (2026-11-11)
 - New: self-hosting is removed. HeyLead runs only in the cloud: a machine with its own Unipile key and no sign-in no longer sends, any sends still queued on it are cancelled (no data is deleted, the key stays), and signing in is the way on. Versions that could self-host are no longer supported
 
@@ -2626,9 +2630,16 @@ mcp = FastMCP(
         "Sending: create_campaign saves a draft and sends nothing. Outreach starts only "
         "with campaign(action='launch'), and only when the user asks. "
         f"{facts.PACE_SENTENCE} campaign(action='emergency_stop') pauses everything. "
-        "On a hosted workspace that has not chosen otherwise, opening DMs and "
-        "follow-ups wait for the user's approval and the approved text is what is "
-        "sent; autopilot is one switch away (scheduler(action='approval_mode')).\n"
+        # api #5340: never-chose hosted workspaces send without review (T-agents);
+        # on Free that is the 7-day trial of api #5341.
+        "A hosted workspace that has not chosen otherwise sends opening DMs, follow-ups "
+        "and answers to replies as HeyLead writes them, without anyone reading them "
+        "first; review is one switch away "
+        "(scheduler(action='approval_mode', mode='require_approval')), after which they "
+        "wait for the user's approval and the approved text is what is sent. On Free, "
+        "sending without review is a 7-day trial, once per LinkedIn account; after it "
+        "they wait for approval unless the workspace moves to Pro. A self-hosted "
+        "install sends as written.\n"
         f"{facts.MODEL_PACE_INSTRUCTION}\n"
         f"{facts.NO_POSTING_SENTENCE}\n"
         "\n"
@@ -3208,9 +3219,9 @@ async def create_campaign(
             Required before launch, resume, or auto-send.
         mode: Always autopilot (copilot mode was removed). Whether opening DMs
             and follow-ups wait for a person is the WORKSPACE's approval mode,
-            not this: a hosted workspace that never chose holds them
-            (inspect(action="waiting") lists them); scheduler(action=
-            "approval_mode") switches it.
+            not this: a hosted workspace that never chose sends them without
+            review; scheduler(action='approval_mode', mode='require_approval')
+            holds them (inspect(action='waiting') lists what waits).
         company_url: Optional LinkedIn company URL for account-based targeting.
             Searches for employees at that specific company matching the ICP.
             Example: "https://www.linkedin.com/company/google"
