@@ -47,6 +47,12 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.508 (2026-11-11)
+- New: the picker's lane and order read Pedro's contract by its metric and its real author; classifier twin pair
+- New: rung.py and impact_contract.py twins: activation events are activity, a metric name's rung (of_metric), the share target rule
+- New: print the api's free-run line above the upgrade line (api #5890)
+- New: hosted Free runs until the 2nd hot lead, in every listing (api #5890)
+
 ## v0.10.507 (2026-11-11)
 - Fix: keep the review-mode invitation sentence on one line in the copywriter skill (#5340)
 - New: client words say a never-chose hosted workspace sends without review

@@ -155,10 +155,10 @@ Brand and content, signals, bulk import, CRM sync and the shared network pool ar
 
 ## Pricing
 
-| Plan | Price | Limits |
-|------|-------|--------|
-| **Free** | $0 | Up to 2 follow-ups per prospect |
-| **Pro** | $29 per connected account per month | Up to 5 follow-ups per prospect |
+- **Free:** $0, one connected account (a LinkedIn seat or an email mailbox), cloud sending included, up to 2 follow-ups per person, until your 2nd hot lead. From then HeyLead keeps working the conversations already open and reaches new people on Pro.
+- **Pro:** $29 per connected account per month (a LinkedIn seat or an email mailbox). HeyLead keeps reaching new people after your 2nd hot lead, sends without waiting in Approvals, runs more than 1 active campaign and follows up to 5 times. Monthly, cancel any time, no setup fee.
+
+A hot lead is a person whose reply HeyLead reads as interested.
 
 A connected account is a LinkedIn seat or an email mailbox. Free includes one of either.
 

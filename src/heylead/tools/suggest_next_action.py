@@ -183,6 +183,21 @@ async def _upgrade_offer_line() -> str:
     return str((live or {}).get("upgrade_offer_line") or "").strip()
 
 
+async def _free_run_line() -> str:
+    """The api's line on where the workspace's free run stands, or "" (api #5890)."""
+    from ..config import is_backend_mode
+
+    if not is_backend_mode():
+        return ""
+    try:
+        from ..services.cloud_sync import fetch_live_stats
+
+        live = await fetch_live_stats()
+    except Exception:
+        return ""
+    return str((live or {}).get("free_run_line") or "").strip()
+
+
 async def _csm_next_step() -> str:
     """The api's one next step for this workspace (``csm_next_step.chat_line``), or "" (api #2736)."""
     from ..config import is_backend_mode
@@ -1031,6 +1046,12 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
     # After the workspace's first reply: the two upgrades, in the api's words
     # (api #2328). Read from GET /stats; a hosted workspace with no reply yet,
     # a self-hosted install or an unreachable api add nothing.
+    # Where the free run stands, above the upgrade line (api #5890).
+    free_run_line = await _free_run_line()
+    if free_run_line:
+        output.append(free_run_line)
+        output.append("")
+
     offer_line = await _upgrade_offer_line()
     if offer_line:
         output.append(offer_line)

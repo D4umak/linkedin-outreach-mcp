@@ -65,7 +65,29 @@ FREE_QUOTA_SENTENCE = f"Self-hosted free installs have monthly quotas: {FREE_QUO
 # #2366), monthly. Never "$29/mo" and
 # never "unlimited": the follow-up count and the seat count are the caps.
 PRO_PRICE = f"${_c.PRO_PRICE_MONTHLY} per connected account per month"
-FREE_PLAN_LINE = f"Free: $0, up to {_c.FREE_MAX_FOLLOWUPS} follow-ups per prospect"
+# Hosted Free runs until the workspace's 2nd hot lead (api #5890, 10 Nov 2026):
+# from then HeyLead keeps the open conversations going and reaches new people
+# on Pro. Denys approved these words one by one; change none of them without
+# his yes. The short form is for a line in the client, the two long lines and
+# the definition (once per page) are what every listing prints
+# (tests/test_listings_carry_the_facts.py).
+FREE_PLAN_LINE = (
+    f"Free: $0, up to {_c.FREE_MAX_FOLLOWUPS} follow-ups per prospect, "
+    "new outreach until your 2nd hot lead (hosted)"
+)
+FREE_HOSTED_LINE = (
+    "$0, one connected account (a LinkedIn seat or an email mailbox), cloud "
+    f"sending included, up to {_c.FREE_MAX_FOLLOWUPS} follow-ups per person, until your "
+    "2nd hot lead. From then HeyLead keeps working the conversations already "
+    "open and reaches new people on Pro."
+)
+PRO_HOSTED_LINE = (
+    f"{PRO_PRICE} (a LinkedIn seat or an email mailbox). HeyLead keeps "
+    "reaching new people after your 2nd hot lead, sends without waiting in "
+    "Approvals, runs more than 1 active campaign and follows up to "
+    f"{_c.PRO_MAX_FOLLOWUPS} times. Monthly, cancel any time, no setup fee."
+)
+HOT_LEAD_DEFINITION = "A hot lead is a person whose reply HeyLead reads as interested."
 PRO_PLAN_LINE = f"Pro: {PRO_PRICE}, up to {_c.PRO_MAX_FOLLOWUPS} follow-ups per prospect"
 # What the unit is, under every price table (api #2366): Stripe counts one
 # seat per connected LinkedIn account or email mailbox in the workspace.

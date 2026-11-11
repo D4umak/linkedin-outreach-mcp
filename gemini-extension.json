@@ -1,12 +1,12 @@
 {
   "name": "heylead",
-  "version": "0.10.507",
+  "version": "0.10.508",
   "description": "HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard.",
   "mcpServers": {
     "heylead": {
       "command": "uvx",
       "args": [
-        "heylead@0.10.507"
+        "heylead@0.10.508"
       ]
     }
   },

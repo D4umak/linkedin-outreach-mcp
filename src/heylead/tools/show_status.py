@@ -1342,6 +1342,14 @@ async def _show_overview_from_backend(data: dict) -> str:
 
     output.extend(await _needs_attention_lines(data.get("needs_attention") or None))
 
+    # Where the workspace's free run stands (1 of 2 hot leads, the 7 days,
+    # stopped), in the api's words, above the upgrade line (api #5890). ""
+    # for Pro, an exempt workspace and before the change takes force.
+    free_run_line = str(data.get("free_run_line") or "").strip()
+    if free_run_line:
+        output.append(free_run_line)
+        output.append("")
+
     # After the workspace's first reply: the two upgrades, in the api's words,
     # with the page that carries the comparison (api #2328). "" until then.
     offer_line = str(data.get("upgrade_offer_line") or "").strip()
