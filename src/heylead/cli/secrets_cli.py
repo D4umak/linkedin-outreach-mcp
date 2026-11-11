@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from .. import config, secret_store
+from .. import config, constants, secret_store
 
 # Names that are secrets, in either form an agent might type.
 _REFUSED = frozenset(secret_store.SECRET_FIELDS) | frozenset(
@@ -92,6 +92,17 @@ def config_get(setting: str) -> int:
     return 0
 
 
+def _self_hosting_removed() -> str:
+    """Why the two self-hosting writes are refused, and the way on (heylead-api#2320).
+
+    A terminal is not the chat, so the sign-in clause says where to paste.
+    """
+    return (
+        f"{constants.SELF_HOSTING_REMOVED} To use HeyLead in the cloud, "
+        f"{constants.SETUP_MESSAGE_ROUTE} and paste it into your chat."
+    )
+
+
 def config_set(setting: str, raw: str) -> int:
     if _is_secret_name(setting):
         print(
@@ -103,6 +114,9 @@ def config_set(setting: str, raw: str) -> int:
         value = json.loads(raw)
     except json.JSONDecodeError:
         value = raw
+    if setting == "unipile_api_url" and str(value or "").strip():
+        print(f"heylead config set: refused: {_self_hosting_removed()}", file=sys.stderr)
+        return 2
     if setting == "backend_url":
         problem = config.backend_url_problem(str(value))
         if problem:
@@ -111,7 +125,8 @@ def config_set(setting: str, raw: str) -> int:
     cfg = config.load_config()
     cfg[setting] = value
     config.save_config(cfg)
-    print(f"{setting} set.")
+    cleared = setting == "unipile_api_url"  # only an empty value gets this far
+    print(f"{setting} {'cleared' if cleared else 'set'}.")
     return 0
 
 
@@ -189,6 +204,9 @@ def secrets_set(name: str, *, read_value: Callable[[str], str] | None = None) ->
 
         read_value = getpass.getpass
     value = read_value(f"{name} (input hidden, empty deletes): ")
+    if name == "unipile_api_key" and value.strip():
+        print(f"heylead secrets set: refused: {_self_hosting_removed()}", file=sys.stderr)
+        return 2
     config.load_config()
     secret_store.set_secret(name, value)
     print(f"{name} {'stored' if value.strip() else 'deleted'} in {secret_store.backend_name()}.")
@@ -232,12 +250,14 @@ def _kept_copies() -> list[Path]:
 
 
 def _unused_in_cloud() -> list[str]:
-    """Stored secrets a cloud-sending backend install never uses."""
-    if not (config.is_backend_mode() and config.get_sending_host() == "cloud"):
-        return []
-    candidates = ["unipile_api_key"] + [
-        f"api_key.{p}" for p in secret_store.API_KEY_PROVIDERS
-    ]
+    """Stored secrets this install never uses.
+
+    A Unipile key is unused on every install since heylead-api#2320; the LLM
+    keys only where the cloud sends for a signed-in account.
+    """
+    candidates = ["unipile_api_key"]
+    if config.is_backend_mode() and config.get_sending_host() == "cloud":
+        candidates += [f"api_key.{p}" for p in secret_store.API_KEY_PROVIDERS]
     return [n for n in candidates if secret_store.get_secret(n)]
 
 

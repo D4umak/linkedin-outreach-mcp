@@ -812,11 +812,15 @@ def sign_in_lapsed_line() -> str:
     why = config.sign_in_lapsed()
     if not why:
         return ""
-    return (
+    line = (
         f"HeyLead is not signed in on this machine ({why}): it sends nothing "
         f"and syncs nothing. To sign in, {constants.SETUP_MESSAGE_ROUTE} and "
         "paste it into your chat; setup_profile stores its token."
     )
+    # A machine that was self-hosted is told so here too (heylead-api#2320).
+    if config.self_hosted_leftover():
+        line = f"{line} {constants.SELF_HOSTING_REMOVED}"
+    return line
 
 
 # A cloud-owned workspace is written by the cloud: it plans the jobs, sends the

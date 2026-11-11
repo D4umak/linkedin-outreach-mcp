@@ -36,9 +36,14 @@ _backend_client: object | None = None
 
 
 def get_linkedin_client() -> UnipileClient:
-    """Factory: return singleton BackendClient if backend config exists, else UnipileClient.
+    """Factory: the singleton BackendClient for a signed-in install.
 
-    Both implement the same interface so all tools work without changes.
+    With no sign-in token it raises the not-signed-in ``UnipileError``
+    (callers catch that type): a stored Unipile key no longer reaches LinkedIn
+    from this machine (heylead-api#2320; until then ``send_email`` sent with
+    it past every gate). ``config.is_self_hosted()`` is False in production;
+    the direct client behind it serves only the suite's tests of the engine
+    until that code is deleted (heylead-api#5712).
     """
     global _backend_client
     from .. import config
@@ -57,4 +62,8 @@ def get_linkedin_client() -> UnipileClient:
         _backend_client = BackendClient(backend_url, jwt_token)
         return _backend_client  # type: ignore[return-value]
 
+    if not config.is_self_hosted():
+        from .. import hosted_writes
+
+        raise UnipileError(hosted_writes.not_signed_in_reply("nothing was done on LinkedIn"))
     return get_unipile_client()

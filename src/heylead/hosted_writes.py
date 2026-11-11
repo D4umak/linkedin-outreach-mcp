@@ -49,12 +49,34 @@ def not_signed_in_reply(outcome: str) -> str:
     such a machine was told its "active campaigns send on their own" and sent
     to tools that need the sign-in. The words are the designer review's on
     that issue (C1, B).
+
+    A machine that was self-hosted (its own Unipile URL or key, no sign-in)
+    reads the same sentence and then that self-hosting was removed
+    (heylead-api#2320).
     """
-    return (
+    reply = (
         f"You're not signed in to HeyLead on this machine, so {outcome}. "
         "HeyLead sends from the cloud, never from this machine. "
         f"To sign in, {constants.WHERE_TO_COPY}"
     )
+    if config.self_hosted_leftover():
+        return f"{reply}\n\n{constants.SELF_HOSTING_REMOVED}"
+    return reply
+
+
+def refuse_if_not_signed_in(outcome: str) -> str | None:
+    """The not-signed-in reply when this machine has no sign-in token, else None.
+
+    For a tool that would otherwise change something first and reach the
+    cloud second: launch and resume answered "is now live" and planned local
+    jobs nothing runs, and ``send_email`` sent with a stored Unipile key
+    (heylead-api#2320, the four-role review's qa-1-o1 and qa-1-o2; the launch
+    half of #5553). ``is_self_hosted()`` is False in production; the suite's
+    direct-install tests keep it true until that code is deleted (#5712).
+    """
+    if config.is_backend_mode() or config.is_self_hosted():
+        return None
+    return not_signed_in_reply(outcome)
 
 
 class LaptopWriteRefused(RuntimeError):

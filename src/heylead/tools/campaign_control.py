@@ -12,7 +12,7 @@ import json
 import logging
 import time
 
-from .. import config
+from .. import config, hosted_writes
 from ..config import get_scheduler_mode, is_scheduler_enabled, set_scheduler_mode
 from ..constants import STATUS_ACTIVE, STATUS_DRAFT
 from ..db.queries import (
@@ -609,6 +609,13 @@ async def run_launch_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
     launched; more than one is ambiguous and the user is asked which.
     """
 
+    # Before anything changes: with no sign-in this used to mark the campaign
+    # active, plan local jobs nothing runs and answer "is now live"
+    # (heylead-api#2320, #5553).
+    signed_out = hosted_writes.refuse_if_not_signed_in("the campaign was not launched")
+    if signed_out:
+        return signed_out
+
     campaign, campaign_id, error = await _select_campaign_to_start(campaign_id, "launch")
     if error:
         return error
@@ -884,6 +891,11 @@ async def run_resume_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
     door launch closes; pause steers users straight here, so leaving it open
     made the guarantee one tool call from false.
     """
+
+    # Before anything changes, as launch does (heylead-api#2320, #5553).
+    signed_out = hosted_writes.refuse_if_not_signed_in("the campaign was not resumed")
+    if signed_out:
+        return signed_out
 
     setup_done = await run_db(get_setting, "setup_complete", False)
     if not setup_done:

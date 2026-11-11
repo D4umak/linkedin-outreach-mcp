@@ -31,6 +31,14 @@ async def run_send_email(
     if not to or not subject or not body:
         return "Error: to, subject, and body are required."
 
+    # No sign-in, no send: a stored Unipile key no longer sends mail from this
+    # machine (heylead-api#2320).
+    from .. import hosted_writes
+
+    signed_out = hosted_writes.refuse_if_not_signed_in("no email was sent")
+    if signed_out:
+        return signed_out
+
     from ..db.async_bridge import run_db
     from ..db.global_contact_queries import is_excluded_by_email
 

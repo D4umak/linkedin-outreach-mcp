@@ -4,15 +4,12 @@ This is the #1 killer feature. Voice matching was the strongest positive
 reaction in 7 of 12 customer discovery interviews. This is where users
 think "OK, this AI actually gets me."
 
-Supports two modes:
-
-**Direct mode** (Unipile credentials in config):
-  Call 1: setup_profile(llm_api_key="...") → auth link → user connects LinkedIn
-  Call 2: setup_profile() → polls for account → profile fetch → voice analysis
-
-**Backend mode** (backend_url + backend_jwt in config):
-  Call 1: setup_profile(llm_api_key="...", backend_url="...", backend_jwt="...")
+One mode since heylead-api#2320: a HeyLead sign-in (backend_url + backend_jwt
+in config).
+  Call 1: setup_profile(backend_jwt="...")
           → saves config → connects LinkedIn via backend proxy → profile + voice
+With no sign-in it answers with the sign-in link, and on a machine that was
+self-hosted (its own Unipile URL or key) also says self-hosting was removed.
 
 If the account is already connected (re-run), skips straight to profile fetch.
 """
@@ -29,11 +26,10 @@ from ..ai.voice_block import VOICE_MIN_POSTS, is_usable_voice
 from ..config import (
     backend_url_problem,
     get_backend_config,
-    get_unipile_config,
-    has_local_llm_key,
     is_backend_mode,
     load_config,
     save_config,
+    self_hosted_leftover,
     set_active_org_id,
     set_api_key,
     set_backend_config,
@@ -49,6 +45,7 @@ from ..linkedin import (
     set_account_id,
 )
 from ..db.async_bridge import run_db
+from .. import hosted_writes
 
 logger = logging.getLogger(__name__)
 
@@ -197,8 +194,9 @@ async def run_setup_profile(
         pair_changed = bool(new_jwt) and (
             token_changed or target_url.rstrip("/") != current_url.rstrip("/")
         )
-        unipile_url, unipile_key = get_unipile_config()
-        has_setup = bool(current_jwt) or bool(unipile_url and unipile_key)
+        # Only a sign-in is a setup to protect: a Unipile key left from
+        # self-hosting runs nothing (heylead-api#2320).
+        has_setup = bool(current_jwt)
         me: dict = {}
         named_a_workspace = False
         if pair_changed:
@@ -249,44 +247,26 @@ async def run_setup_profile(
                 org_id, me.get("org_name") or "",
             )
 
-    # ── Step 1: Check if we have any connection mode available ──
-    # If neither backend JWT nor direct Unipile credentials exist, guide the user
+    # ── Step 1: HeyLead needs a sign-in; there is no other mode (heylead-api#2320) ──
     if not is_backend_mode():
-        api_url, api_key = get_unipile_config()
-        if not api_url or not api_key:
-            login_url = f"{DEFAULT_BACKEND_URL}{LOGIN_URL_PATH}"
-            return (
-                "👋 Welcome to HeyLead! Let's get you set up (takes about 2 minutes).\n\n"
-                "**Step 1** — Sign in and connect LinkedIn:\n"
-                f"  👉 {login_url}\n"
-                "  Sign in with Google, click 'Connect' on the LinkedIn row, then press "
-                "'Copy' under 'Get Started' to copy your setup message.\n"
-                "  Already signed in on the dashboard? Find it at "
-                "Settings → Integrations → Chat client → 'Copy setup message'.\n\n"
-                "**Step 2** — Paste that message back here. It carries your token, "
-                "and setup finishes with:\n"
-                "  setup_profile(backend_jwt='YOUR_TOKEN')\n\n"
-                "That's it! No API keys needed — the hosted backend handles LinkedIn and AI."
-            )
+        if self_hosted_leftover():
+            return hosted_writes.not_signed_in_reply("setup did not run")
+        login_url = f"{DEFAULT_BACKEND_URL}{LOGIN_URL_PATH}"
+        return (
+            "👋 Welcome to HeyLead! Let's get you set up (takes about 2 minutes).\n\n"
+            "**Step 1** — Sign in and connect LinkedIn:\n"
+            f"  👉 {login_url}\n"
+            "  Sign in with Google, click 'Connect' on the LinkedIn row, then press "
+            "'Copy' under 'Get Started' to copy your setup message.\n"
+            "  Already signed in on the dashboard? Find it at "
+            "Settings → Integrations → Chat client → 'Copy setup message'.\n\n"
+            "**Step 2** — Paste that message back here. It carries your token, "
+            "and setup finishes with:\n"
+            "  setup_profile(backend_jwt='YOUR_TOKEN')\n\n"
+            "That's it! No API keys needed — the hosted backend handles LinkedIn and AI."
+        )
 
-    # ── Step 2: Check LLM key ──
-    # In backend mode, LLM calls are proxied through the backend — no local key needed.
-    # Only require a local key for direct mode (self-hosted Unipile).
-    if not is_backend_mode():
-        has_llm_key = has_local_llm_key()
-        if not has_llm_key:
-            return (
-                "❌ No LLM API key configured.\n\n"
-                "Please provide an API key:\n"
-                "  setup_profile(llm_api_key='YOUR_KEY', llm_provider='gemini')\n\n"
-                f"Get a free Gemini key at: {GEMINI_KEY_URL}"
-            )
-
-    # ── Step 3: Route to appropriate mode ──
-    if is_backend_mode():
-        body = await _setup_backend_mode()
-    else:
-        body = await _setup_direct_mode()
+    body = await _setup_backend_mode()
     return f"{notice}\n\n{body}" if notice else body
 
 
@@ -396,85 +376,6 @@ async def _setup_backend_mode() -> str:
         return f"❌ Backend error: {e}"
     except Exception as e:
         logger.error(f"setup_profile (backend mode) failed: {e}", exc_info=True)
-        return f"❌ Setup failed: {e}\n\nCheck ~/.heylead/logs/heylead.log for details."
-    finally:
-        await client.close()
-
-
-async def _setup_direct_mode() -> str:
-    """Setup flow with direct Unipile credentials (original behavior)."""
-    from ..config import get_unipile_config
-    from ..linkedin.unipile import UnipileClient
-
-    api_url, api_key = get_unipile_config()
-
-    if not api_url or not api_key:
-        login_url = f"{DEFAULT_BACKEND_URL}{LOGIN_URL_PATH}"
-        return (
-            "No Unipile credentials found for direct mode.\n\n"
-            "Recommended: Use backend mode instead (easier setup):\n"
-            f"  1. Sign in at: {login_url}\n"
-            "  2. Click 'Connect' on the LinkedIn row, then 'Copy' under 'Get Started'\n"
-            "  3. Run: setup_profile(backend_jwt='YOUR_TOKEN')\n\n"
-            "Advanced: for self-hosted Unipile, run in a terminal:\n"
-            "  heylead config set unipile_api_url https://apiXX.unipile.com:XXXXX\n"
-            "  heylead secrets set unipile_api_key   (prompts; kept in the OS keychain)"
-        )
-
-    client = UnipileClient(api_url, api_key)
-    try:
-        stored_account_id = await run_db(get_account_id)
-        # A cleared dead account means the next link re-authenticates an
-        # existing LinkedIn session, not a first-time connect.
-        session_expired = False
-
-        if stored_account_id:
-            connected, status_msg = await client.verify_account(stored_account_id)
-            if connected:
-                return await _fetch_and_analyze(client, stored_account_id)
-            else:
-                logger.info(f"Stored account no longer connected: {status_msg}")
-                await run_db(set_account_id, None)
-                session_expired = True
-
-        # Check if we're in "waiting for OAuth" state
-        auth_link_pending = await run_db(get_setting, "auth_link_pending", False)
-
-        if auth_link_pending:
-            known_ids = set( await run_db(get_setting, "known_account_ids_before_auth", []))
-            account_id, poll_msg = await client.poll_for_new_account(known_ids)
-
-            if account_id:
-                await run_db(set_account_id, account_id)
-                await run_db(save_setting, "auth_link_pending", False)
-                await run_db(save_setting, "known_account_ids_before_auth", [])
-                return await _fetch_and_analyze(client, account_id)
-            else:
-                return _pending_reply(poll_msg)
-
-        # Snapshot existing accounts, then create auth link
-        known_ids = await client.get_existing_account_ids()
-
-        # Redirect user back to HeyLead after LinkedIn connects
-        redirect_url = f"{DEFAULT_BACKEND_URL}/auth/linkedin-connected"
-
-        try:
-            auth_url = await client.create_hosted_auth_link(
-                success_redirect_url=redirect_url,
-                is_reconnect=session_expired,
-            )
-        except UnipileError as e:
-            return f"❌ Failed to create LinkedIn auth link: {e}"
-
-        await run_db(save_setting, "auth_link_pending", True)
-        await run_db(save_setting, "known_account_ids_before_auth", list(known_ids))
-
-        return _link_reply(auth_url)
-
-    except UnipileError as e:
-        return f"❌ Unipile error: {e}"
-    except Exception as e:
-        logger.error(f"setup_profile failed: {e}", exc_info=True)
         return f"❌ Setup failed: {e}\n\nCheck ~/.heylead/logs/heylead.log for details."
     finally:
         await client.close()

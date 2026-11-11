@@ -607,30 +607,40 @@ def backend_jwt_expired(token: str, *, now: float | None = None) -> bool:
 
 
 def is_self_hosted() -> bool:
-    """True only for a self-hosted install: no HeyLead sign-in, and its own
-    Unipile URL and key (heylead-api#2320's definition).
+    """Always False since heylead-api#2320: HeyLead runs only in the cloud.
 
-    A missing sign-in token alone is not self-hosted. A hosted install whose
-    sign-in lapsed has no token either, and no Unipile key. Read as
-    self-hosted, it ran SchedulerEngine on Denys's Mac from 6 Nov 2026 and
-    failed 1,125 local jobs in a day, every send with «Unipile not
-    configured» (heylead-api#5541).
-
-    The one answer to "may this machine plan and send": the engine
+    Until that outcome an install with no sign-in and its own Unipile URL and
+    key was self-hosted: it built SchedulerEngine and wrote to LinkedIn from
+    this machine, outside every guard the cloud has. The engine
     (``cloud_sync.local_scheduler_engine_enabled``), the laptop-send and
     laptop-write refusals, the leftover-job stand-down and the sending host
-    all read it, so they cannot drift apart.
+    all read this one function, so False here hands every one of them to the
+    cloud on every install. A missing sign-in token was never self-hosted
+    (heylead-api#5541). The function stays until the code behind it is
+    deleted (heylead-api#5712); ``tests/test_self_hosting_is_removed_2320.py``
+    fails if its body becomes anything but ``return False``.
+    """
+    return False
+
+
+def self_hosted_leftover() -> bool:
+    """True on a machine that was self-hosted: no sign-in token and a stored Unipile URL or key.
+
+    It only chooses words: the removal sentence
+    (``constants.SELF_HOSTING_REMOVED``) beside the not-signed-in one. It
+    never decides whether anything runs.
     """
     if is_backend_mode():
         return False
     api_url, api_key = get_unipile_config()
-    return bool(api_url and api_key)
+    return bool(api_url or api_key)
 
 
 def sign_in_lapsed() -> str:
     """Why a hosted install's sign-in lapsed, or "" when it has not.
 
-    "" for a self-hosted install (it never signs in) and for a live token.
+    "" for a live token. A machine that was self-hosted has no token, so it
+    reads as lapsed too (heylead-api#2320).
     """
     if is_self_hosted():
         return ""

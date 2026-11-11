@@ -339,6 +339,18 @@ SETUP_MESSAGE_ROUTE = (
 )
 WHERE_TO_COPY = f"{SETUP_MESSAGE_ROUTE} and paste it here."
 
+# What a machine that was self-hosted (no sign-in, its own Unipile URL or key)
+# is told since heylead-api#2320, beside the not-signed-in sentence: in the
+# start-up log, setup_profile, every tool that would send, launch or resume,
+# and the two CLI writes. It carries no sign-in clause, because each surface
+# adds its own, and names no older version to go back to (the four-role
+# review on that issue: designer round 2, pm-1-q3).
+SELF_HOSTING_REMOVED = (
+    "Self-hosting was removed from HeyLead: this machine no longer sends with its own "
+    "Unipile key, and any sends still queued on it are cancelled. Your local database "
+    "and the key are still on this machine."
+)
+
 # ──────────────────────────────────────────────
 # Misc
 # ──────────────────────────────────────────────

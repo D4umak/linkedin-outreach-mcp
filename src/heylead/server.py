@@ -47,6 +47,9 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.506 (2026-11-11)
+- New: self-hosting is removed. HeyLead runs only in the cloud: a machine with its own Unipile key and no sign-in no longer sends, any sends still queued on it are cancelled (no data is deleted, the key stays), and signing in is the way on. Versions that could self-host are no longer supported
+
 ## v0.10.505 (2026-11-10)
 - Fix: a failed brand analysis is never stored, shown or pushed (api #5838)
 - New: a line of up to ten goes as one batch (#5879)
@@ -2648,9 +2651,7 @@ mcp = FastMCP(
         "call setup_profile; ask the user first. Replacing the stored token can break a "
         "working setup.\n"
         "\n"
-        "FIRST-TIME SETUP — two paths; offer the hosted one first, it is fastest:\n"
-        "\n"
-        "Option A — Hosted (backend handles LinkedIn access and AI calls):\n"
+        "FIRST-TIME SETUP — one path, HeyLead runs in the cloud:\n"
         "  1. Tell the user: 'Open this link to sign in and connect your LinkedIn:'\n"
         "     https://heylead.dev/auth/login-url\n"
         "     They sign in with Google, click 'Connect' on the LinkedIn row, and copy\n"
@@ -2664,22 +2665,7 @@ mcp = FastMCP(
         "     The token names the workspace it was copied in and setup selects it, so\n"
         "     organization(action='list') is only needed to move somewhere else.\n"
         "\n"
-        "Option B — Self-hosted (their own accounts; AI calls billed to them):\n"
-        "  They need two things, and setup_profile refuses to run without them:\n"
-        "  1. A Unipile account (this is what talks to LinkedIn).\n"
-        "     Sign up at https://www.unipile.com, then copy the DSN and API key\n"
-        "     from the Access Tokens page and run in a terminal:\n"
-        "     heylead config set unipile_api_url <the DSN>, then\n"
-        "     heylead secrets set unipile_api_key (it prompts; the key goes to the OS keychain).\n"
-        "  2. An LLM API key of their own — a free Gemini key from\n"
-        "     https://aistudio.google.com/apikey is enough.\n"
-        "  Then walk them through:\n"
-        "  Step 1 — setup_profile(llm_api_key='<their key>', llm_provider='gemini')\n"
-        "    This returns a LinkedIn authentication link.\n"
-        "  Step 2 — They open that link and connect LinkedIn, then setup_profile()\n"
-        "    binds the connected account, fetches their profile and analyses their\n"
-        "    writing style. If LinkedIn is not connected yet it returns the link\n"
-        "    again — tell them to finish connecting and call it once more.\n"
+        "There is no self-hosted mode: never ask for a Unipile or LLM API key.\n"
         "\n"
         "After setup is complete, the user can:\n"
         "  - generate_icp('target description') to create a rich ICP with buyer personas\n"
