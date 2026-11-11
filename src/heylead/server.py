@@ -47,6 +47,13 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.509 (2026-11-11)
+- Fix: the invite order reading dates a workspace's start from an invitation with no due time (#6004)
+- the measured lengths of the PM's definition and report (api #6045)
+- Fix: a round is refused when its comment does not hold the ids its marker names (api #6045)
+- Fix: a research run whose people search raised judges nothing and stores no hold
+- New: weekly reading of ranked against holdout acceptance (#6004)
+
 ## v0.10.508 (2026-11-11)
 - New: the picker's lane and order read Pedro's contract by its metric and its real author; classifier twin pair
 - New: rung.py and impact_contract.py twins: activation events are activity, a metric name's rung (of_metric), the share target rule

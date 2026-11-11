@@ -119,7 +119,8 @@ async def maybe_run_icp_research(
             target_description=target_description or record.get("target_desc") or "",
             icp_name=record.get("name") or "",
         )
-        tools = _build_tools(icp_id, record, preview_fn)
+        run: dict[str, Any] = {}
+        tools = _build_tools(icp_id, record, preview_fn, run)
         tools.update(async_commons_tools(agent="icp_research", campaign_id=""))
         budget = AgentBudget(
             max_steps=ICP_RESEARCH_MAX_STEPS,
@@ -141,6 +142,17 @@ async def maybe_run_icp_research(
             await model_failure.loop_failed(actor="icp_research", failure=result.failure, detail=result.error)
             return IcpResearchOutcome(decision=model_failure.NOT_FINISHED, reason=LOOP_FAILED_REASON,
                                       summary="not finished — ICP unchanged")
+        if run.get("search_did_not_run"):
+            # The people search raised, so whatever the model answered is not a judgement of
+            # the target (heylead-api#6039): no hold, nothing applied, no sibling woken. The
+            # target is checked again the next time it is generated or saved.
+            await run_db(
+                log_action, "icp_research_decision",
+                result=model_failure.NOT_FINISHED,
+                details={"icp_id": icp_id, "mode": mode, "preview": "unfinished", "reason": PREVIEW_DID_NOT_RUN},
+            )
+            return IcpResearchOutcome(decision=model_failure.NOT_FINISHED, reason=PREVIEW_DID_NOT_RUN,
+                                      summary="not finished — the people search did not run; ICP unchanged")
         await after_sibling_loop(
             agent="icp_research",
             campaign_id="",
@@ -168,11 +180,17 @@ async def _load_config() -> dict[str, Any]:
     }
 
 
+#: The reason of a run whose preview search raised (heylead-api#6039).
+PREVIEW_DID_NOT_RUN = "The people search did not run, so the target was not checked."
+
+
 def _build_tools(
     icp_id: str,
     record: dict[str, Any],
     preview_fn: PreviewFn | None,
+    run: dict[str, Any] | None = None,
 ) -> dict[str, Callable[..., Any]]:
+    """The run's tools. ``run`` is told when the preview's search raised (``search_did_not_run``)."""
     used = {"preview": False}
 
     async def read_icp() -> str:
@@ -190,7 +208,7 @@ def _build_tools(
             if inspect.isawaitable(raw):
                 raw = await raw
             return str(raw)
-        return await _default_preview(icp_id)
+        return await _default_preview(icp_id, run)
 
     return {
         "read_icp": read_icp,
@@ -238,8 +256,12 @@ def _format_filters(record: dict[str, Any]) -> str:
     )
 
 
-async def _default_preview(icp_id: str) -> str:
-    """One page of persona-1 matches. Never creates campaign/contact/outreach rows."""
+async def _default_preview(icp_id: str, run: dict[str, Any] | None = None) -> str:
+    """One page of persona-1 matches. Never creates campaign/contact/outreach rows.
+
+    A search that raised (no client, or LinkedIn refused or timed out) marks ``run``: the
+    run then judges nothing (heylead-api#6039). A target with nothing to search, or no
+    account, is still the model's to judge from the filters."""
     from ..linkedin import UnipileError, get_account_id, get_linkedin_client
     from ..services.icp_search import build_segment_query, page_size, resolve_icp_record
     from ..tools.create_campaign import _icp_result_to_legacy
@@ -264,6 +286,8 @@ async def _default_preview(icp_id: str) -> str:
     try:
         client = get_linkedin_client()
     except UnipileError as e:
+        if run is not None:
+            run["search_did_not_run"] = True
         return f"preview failed: {e}"
 
     search_acct_id = account_id
@@ -291,6 +315,8 @@ async def _default_preview(icp_id: str) -> str:
             **filters,
         )
     except Exception as e:
+        if run is not None:
+            run["search_did_not_run"] = True
         return f"preview failed: {e}"
 
     lines = []

@@ -16,7 +16,8 @@ Decisions:
 - none: you cannot decide
 
 Empty patch strings mean no change. Revise only persona 1. Never create a campaign or outreach.
-Default to keep when the first page looks like the buyer. Default to hold when the preview failed or looks like recruiters, students, or the wrong function."""
+Default to keep when the first page looks like the buyer. Default to hold when the preview looks like recruiters, students, or the wrong function.
+Do not name people in your reason."""
 
 
 def build_icp_research_context(*, target_description: str, icp_name: str) -> str:
