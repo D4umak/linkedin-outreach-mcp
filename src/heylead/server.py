@@ -47,6 +47,23 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.510 (2026-11-12)
+- New: the client retriever never returns a targeting card unasked; stage mirrors gain target (#6251)
+- wip(kb): ship the 15 target cards and NOTICES.md, byte-identical to heylead-api (#6251)
+- joint self-review of the five phase plans (heylead-api#5957)
+- joint review of the phase plans and one build prompt per phase (heylead-api#5957)
+- Phase 6 build plan, targeting cards for the ICP generator, sourced outside priors, and the client's learning read (heylead-api#5957)
+- Phase 5 build plan, kept cases, the judge calibration, a capped offline prompt search and the prompt arm (heylead-api#5957)
+- Phase 4 build plan, reply moves, stage and meetings in the ledger, and the next-step rule (heylead-api#5957)
+- Phase 3 build plan, lessons counted by code from the results ledger (heylead-api#5957)
+- agents learn from results — shared rules and the Phase 2 build plan (heylead-api#5957)
+- what the reviews of api #5599 missed on the first-run demo player (F2, F3)
+- Fix: wip-queued comes off when no queue entry waits behind it (#5383)
+- the plan's status line says what is live on 12 Nov (heylead-api#5957)
+- F5's lesson for case-qa; the oldest designer line moves to the archive
+- review lesson for the editor that opened below the screen
+- agents learn from results — review and implementation plan (heylead-api#5957)
+
 ## v0.10.509 (2026-11-11)
 - Fix: the invite order reading dates a workspace's start from an invitation with no due time (#6004)
 - the measured lengths of the PM's definition and report (api #6045)

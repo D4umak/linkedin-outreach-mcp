@@ -60,6 +60,9 @@ KB_CHECKSUM_PATH = KB_DIR / "SHA256"
 
 FAMILY_PERSONA = "persona"
 FAMILY_METHODOLOGY = "methodology"
+#: Choosing whom to contact (heylead-api #6251): the hosted ICP generator's
+#: cards. The client ships them in the same bytes but never reads them.
+TARGET_STAGE = "target"
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _STOPWORDS = frozenset(
@@ -127,6 +130,14 @@ class KbCard:
 
     def matches_stage(self, stage: str) -> bool:
         return stage in (self.stages or [self.stage])
+
+    def is_target(self) -> bool:
+        """A targeting note (stage ``target``, heylead-api #6251).
+
+        Every read that does not ask for ``stage="target"`` skips it, the
+        persona default and ``stage=None`` included.
+        """
+        return list(self.stages or [self.stage]) == [TARGET_STAGE]
 
     def _content_bits(self, for_prompt: bool = False) -> list[str]:
         if self.family == FAMILY_METHODOLOGY:
@@ -480,6 +491,8 @@ def retrieve_kb(
                 continue
             if card.family == FAMILY_METHODOLOGY and card_personas and not (card_personas & wanted):
                 continue
+        if card.is_target() != (stage == TARGET_STAGE):
+            continue  # a targeting note is read only when asked for (heylead-api #6251)
         if stage and not card.matches_stage(stage):
             continue
         if channel and card.family == FAMILY_METHODOLOGY and card.channels and channel not in card.channels:
