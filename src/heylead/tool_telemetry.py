@@ -9,7 +9,10 @@ registration. Each MCP call is timed and becomes a record of seven fields:
 the tool, its ``action`` (an identifier word, else "other"), the MCP host
 from a closed list, ok, the exception class, the duration and the transport.
 Never the arguments, the result, a prospect, a URL or a message. The result is read only to
-ask handled_error.classify whether the tool answered with a handled error (api #3206).
+ask handled_error.classify whether the tool answered with a handled error (api #3206),
+and, for a suggest_next_action call that reached its learning block, to count
+the learning lines it shows (``learning_offered`` and ``learning_lines``, two
+counts 0-2, api #6252).
 
 Records wait in memory and are posted in batches (50 records, or 2 seconds
 after the first one) through the backend client to
@@ -25,6 +28,7 @@ every failure here is swallowed, and a refused or failed post is logged.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import functools
 import logging
 import re
@@ -79,6 +83,18 @@ _ACTION = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 _TOOL = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _ERROR_CLASS = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,79}$")
 
+#: Per call, made in :func:`telemetered`'s wrapper before the tool runs: what a
+#: tool reports about its own answer (:func:`note`). Only the keys in
+#: :data:`_NOTED` leave, and only for the tool that owns them.
+_call_notes: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "heylead_tool_call_notes", default=None,
+)
+#: suggest_next_action reached its learning block (api #6252): the lines it had
+#: to offer (0-2); the lines shown are counted from its answer.
+LEARNING_OFFERED = "learning_offered"
+LEARNING_LINES = "learning_lines"
+_NOTED: dict[str, frozenset[str]] = {"suggest_next_action": frozenset({LEARNING_OFFERED})}
+
 _lock = threading.Lock()
 _pending: list[dict[str, Any]] = []
 _timer: asyncio.TimerHandle | None = None
@@ -125,6 +141,36 @@ def _request_context() -> Any:
         return None
 
 
+def note(key: str, value: int) -> None:
+    """Record one fact about the current tool call's answer; a no-op outside a recorded call."""
+    notes = _call_notes.get()
+    if notes is not None:
+        notes[key] = value
+
+
+def _answer_text(result: Any) -> str:
+    """The text part of a tool's answer (a str, or a list whose first str is the text)."""
+    if isinstance(result, str):
+        return result
+    if isinstance(result, (list, tuple)):
+        return next((part for part in result if isinstance(part, str)), "")
+    return ""
+
+
+def _learning_fields(tool: str, notes: dict[str, Any] | None, result: Any) -> dict[str, int]:
+    """``learning_offered`` and ``learning_lines`` for a call that reached the learning block, else {}."""
+    if not notes or LEARNING_OFFERED not in _NOTED.get(tool, frozenset()):
+        return {}
+    offered = notes.get(LEARNING_OFFERED)
+    if isinstance(offered, bool) or not isinstance(offered, int):
+        return {}
+    from .services.learning_lines import MAX_LINES, count_learning_lines
+
+    shown = count_learning_lines(_answer_text(result))
+    return {LEARNING_OFFERED: max(0, min(offered, MAX_LINES)),
+            LEARNING_LINES: max(0, min(shown, MAX_LINES))}
+
+
 def _client_and_transport(rctx: Any) -> tuple[str, str]:
     name = ""
     session = getattr(rctx, "session", None)
@@ -141,9 +187,13 @@ def _client_and_transport(rctx: Any) -> tuple[str, str]:
 
 def build_record(
     *, tool: str, action: str, rctx: Any, duration_s: float,
-    error: BaseException | None, result: Any = None,
+    error: BaseException | None, result: Any = None, notes: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """The seven-field record, or None when a name falls outside its shape."""
+    """The seven-field record, or None when a name falls outside its shape.
+
+    A suggest_next_action call that reached its learning block also carries
+    ``learning_offered`` and ``learning_lines`` (api #6252), both counts 0-2.
+    """
     if not _TOOL.fullmatch(tool):
         return None
     # A handled error ("❌ …") is a failed call too (api #3206); only its class leaves here.
@@ -161,6 +211,7 @@ def build_record(
         "error_class": error_class,
         "duration_ms": max(0, min(int(round(duration_s * 1000)), 3_600_000)),
         "transport": transport,
+        **(_learning_fields(tool, notes, result) if error is None else {}),
     }
 
 
@@ -308,11 +359,11 @@ async def flush() -> int:
 
 
 def _record(tool: str, action: str, rctx: Any, started: float, error: BaseException | None,
-            result: Any = None) -> None:
+            result: Any = None, notes: dict[str, Any] | None = None) -> None:
     try:
         record = build_record(
             tool=tool, action=action, rctx=rctx,
-            duration_s=time.perf_counter() - started, error=error, result=result,
+            duration_s=time.perf_counter() - started, error=error, result=result, notes=notes,
         )
         if record is not None:
             enqueue(record)
@@ -336,6 +387,8 @@ def telemetered(name: str, fn: Callable[..., Any], is_async: bool) -> Callable[.
             result = fn(*args, **kwargs)
             return await result if is_async else result
         action = safe_action(kwargs.get("action"))
+        notes: dict[str, Any] = {}
+        token = _call_notes.set(notes)
         started = time.perf_counter()
         try:
             result = fn(*args, **kwargs)
@@ -344,7 +397,9 @@ def telemetered(name: str, fn: Callable[..., Any], is_async: bool) -> Callable[.
         except Exception as exc:
             _record(name, action, rctx, started, exc)
             raise
-        _record(name, action, rctx, started, None, result)
+        finally:
+            _call_notes.reset(token)
+        _record(name, action, rctx, started, None, result, notes)
         return result
 
     setattr(wrapper, MARKER, True)

@@ -47,6 +47,10 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.511 (2026-11-12)
+- S13 fix notices: words, then the map binding, then the prod-proof; how to stop and unbind
+- Fix: the Mac planner measures the plan weekly target against plan posts only (heylead-api#6285)
+
 ## v0.10.510 (2026-11-12)
 - New: the client retriever never returns a targeting card unasked; stage mirrors gain target (#6251)
 - wip(kb): ship the 15 target cards and NOTICES.md, byte-identical to heylead-api (#6251)

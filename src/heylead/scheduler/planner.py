@@ -2196,21 +2196,23 @@ def _today_weekday() -> str:
 
 
 async def _weekly_brand_posts_published() -> int:
-    """Own posts published since Monday 00:00 local.
+    """The content plan's own posts published since Monday 00:00 local.
 
-    On a hosted account the posts publish in the cloud and never reach this
-    machine's actions_log, so the API's count is read (heylead-api#2794);
-    when it cannot be read, the local count stands, as before.
+    The weekly target is the plan's pacing promise, so only plan posts count
+    against it: two posts typed by hand never fill the plan's week
+    (heylead-api#6285). On a hosted account the posts publish in the cloud and
+    never reach this machine's actions_log, so the API's plan-only count is
+    read (heylead-api#2794); when it cannot be read, the local count stands.
     """
     from ..db.queries import brand_week_start_ts, get_weekly_brand_post_published_count
 
     if laptop_writes_refused():
         from ..tools.brand_strategy import _cloud_published_count
 
-        cloud = await _cloud_published_count(brand_week_start_ts())
+        cloud = await _cloud_published_count(brand_week_start_ts(), source="plan")
         if cloud is not None:
             return cloud
-    return await run_db(get_weekly_brand_post_published_count)
+    return await run_db(get_weekly_brand_post_published_count, plan_only=True)
 
 
 async def plan_brand_post() -> None:

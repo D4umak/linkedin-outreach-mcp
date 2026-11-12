@@ -759,40 +759,6 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
     except (UnipileError, Exception) as e:
         logger.debug("Profile viewers/invitations fetch failed in suggest_next_action: %s", e)
 
-    # ── Strategy engine recommendations (priority 1-2) ──
-    try:
-        from ..db.strategy_queries import get_strategy_summary, list_strategy_patterns
-        strat = await run_db(get_strategy_summary)
-        if strat.get("active_patterns", 0) > 0:
-            top_patterns = await run_db(list_strategy_patterns, status="active", limit=2)
-            for p in top_patterns:
-                if p.get("estimated_revenue_impact", 0) > 5000:
-                    recommendations.append({
-                        "priority": 1,
-                        "score": p.get("estimated_revenue_impact", 0) / 1000,
-                        "icon": "\U0001f9e0",
-                        "text": f"Strategy: {p.get('pattern_key', '')}",
-                        "action": f"High-revenue pattern detected — {cut_at_word(p.get('description', ''), 80)}. "
-                                  "Run show_strategy() for details.",
-                        "fit_score": p.get("confidence", 0),
-                        "campaign": "",
-                        "temp": "",
-                    })
-            if strat.get("spawned_campaigns", 0) > 0:
-                recommendations.append({
-                    "priority": 2,
-                    "score": 5,
-                    "icon": "\U0001f680",
-                    "text": "Auto-spawned campaigns active",
-                    "action": f"{strat['spawned_campaigns']} campaign(s) auto-created by strategy engine. "
-                              "Run show_strategy() to review.",
-                    "fit_score": 0,
-                    "campaign": "",
-                    "temp": "",
-                })
-    except Exception:
-        pass
-
     # ── Sort by priority, then R4 score (desc), then rank_score (desc) ──
     recommendations.sort(key=lambda r: (r["priority"], -r.get("score", 0), -r.get("rank_score", r.get("fit_score", 0)), r.get("created_at") or 0, r.get("outreach_id") or ""))
 
@@ -804,13 +770,24 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
         else status_footer("overview")
     )
 
+    # ── What HeyLead is learning, from the cloud's learning read (api #6252) ──
+    # Read before "All caught up" so that answer carries it too; its own
+    # block, never a recommendation, so the top-5 cut and the queued count
+    # never touch it. The read has its own 3 s bound.
+    from .. import tool_telemetry
+    from ..services import learning_lines
+
+    learning = await learning_lines.learning_for_next_action()
+    tool_telemetry.note(tool_telemetry.LEARNING_OFFERED, len(learning))
+    learning_block = learning_lines.block(learning)
+
     if not recommendations:
         return (
             "✅ All caught up! No immediate actions needed.\n\n"
             "Your campaigns are running smoothly.\n"
             "Use show_status() for your dashboard, or\n"
             "create_campaign(\"target\") to find new prospects."
-        ) + "\n".join(["", *footer])
+        ) + "\n".join(["", *(["", *learning_block] if learning_block else []), *footer])
 
     # ── Health check ──
     health_warning = ""
@@ -998,26 +975,6 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
     except Exception:
         pass
 
-    # ── Experiment insight suggestion ──
-    try:
-        from ..services.experiment_service import get_experiment_summary
-        # Sync DB read — get_db() raises on the event loop thread and the
-        # except below would swallow it, so the insight never appeared.
-        exp_summary = await run_db(get_experiment_summary)
-        if exp_summary:
-            recommendations.append({
-                "priority": 10,
-                "score": 0.5,
-                "icon": "\U0001f52c",
-                "text": f"Experiment insight: {exp_summary}",
-                "action": "Run: campaign_report() for full experiment details",
-                "fit_score": 0,
-                "campaign": "",
-                "temp": "",
-            })
-    except Exception:
-        pass
-
     # ── Format output ──
     top = recommendations[:MAX_RECOMMENDATIONS]
     remaining = len(recommendations) - MAX_RECOMMENDATIONS
@@ -1041,6 +998,10 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
 
     if remaining > 0:
         output.append(f"... and {remaining} more action{'s' if remaining != 1 else ''} queued.")
+        output.append("")
+
+    if learning_block:
+        output.extend(learning_block)
         output.append("")
 
     # After the workspace's first reply: the two upgrades, in the api's words

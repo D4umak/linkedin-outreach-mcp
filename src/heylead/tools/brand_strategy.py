@@ -829,6 +829,7 @@ Return ONLY the post text, nothing else."""
             if photo:
                 await post_photo.mark_photo_used(photo.path)
             await run_db(log_action, "brand_post_published", details={
+                "source": "plan",
                 "topic": topic, "tone": tone, "chars": len(post_text),
                 "post_id": result.get("post_id", ""),
                 post_photo.IMAGE_PATH_DETAIL: photo.path if photo else "",
@@ -1307,15 +1308,20 @@ POST_RESULTS_LINE = (
 )
 
 
-async def _cloud_published_count(since: int) -> int | None:
-    """The API's count of this workspace's own posts since *since*, or None."""
+async def _cloud_published_count(since: int, *, source: str = "all") -> int | None:
+    """The API's count of this workspace's own posts since *since*, or None.
+
+    ``source="plan"``: the content plan's posts only (heylead-api#6285).
+    """
     try:
         client = get_linkedin_client()
     except Exception:
         logger.debug("published-count: no client", exc_info=True)
         return None
     try:
-        return await client.get_published_count(since)
+        if source == "all":
+            return await client.get_published_count(since)
+        return await client.get_published_count(since, source=source)
     except Exception:
         # A hosted account without a BackendClient is a bug worth seeing.
         logger.debug("published-count call failed", exc_info=True)

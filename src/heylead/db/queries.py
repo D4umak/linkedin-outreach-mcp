@@ -5018,17 +5018,25 @@ def brand_week_start_ts() -> int:
     return int(time.mktime(week_start.timetuple()))
 
 
-def get_weekly_brand_post_published_count() -> int:
+def get_weekly_brand_post_published_count(*, plan_only: bool = False) -> int:
     """Count brand_post_published actions_log rows since Monday 00:00 local.
 
     Local posts only; on a hosted account the planner asks the API instead
     (planner._weekly_brand_posts_published, heylead-api#2794).
+
+    ``plan_only``: the content plan's own posts (heylead-api#6285), what the
+    weekly target is measured against. A row that names another source is
+    left out; one that names none predates the field, and every such row was
+    written by the plan's own post action, so it counts.
     """
     week_start_ts = brand_week_start_ts()
+    plan_filter = (
+        " AND COALESCE(json_extract(details_json, '$.source'), 'plan') = 'plan'" if plan_only else ""
+    )
     db = get_db()
     row = db.execute(
         "SELECT COUNT(*) as c FROM actions_log "
-        "WHERE action_type = 'brand_post_published' AND timestamp >= ?",
+        "WHERE action_type = 'brand_post_published' AND timestamp >= ?" + plan_filter,
         (week_start_ts,),
     ).fetchone()
     db.close()
