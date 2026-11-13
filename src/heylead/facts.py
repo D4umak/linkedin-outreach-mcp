@@ -83,8 +83,7 @@ FREE_HOSTED_LINE = (
 )
 PRO_HOSTED_LINE = (
     f"{PRO_PRICE} (a LinkedIn seat or an email mailbox). HeyLead keeps "
-    "reaching new people after your 2nd hot lead, sends without waiting in "
-    "Approvals, runs more than 1 active campaign and follows up to "
+    "reaching new people after your 2nd hot lead, runs more than 1 active campaign and follows up to "
     f"{_c.PRO_MAX_FOLLOWUPS} times. Monthly, cancel any time, no setup fee."
 )
 HOT_LEAD_DEFINITION = "A hot lead is a person whose reply HeyLead reads as interested."

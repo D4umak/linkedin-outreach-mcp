@@ -118,7 +118,7 @@ writes. Each refuses the other's actions and says which tool took them.
 
 ### Review & Approval
 
-A hosted workspace is in one of two modes. `autopilot` (the default for a workspace that never chose) sends opening DMs, follow-ups and answers to replies without review. `require_approval` holds them until a person approves; the approved text, edited or not, is what goes out. Invitations and InMail are never held. In review mode, invitations go out without a note. On Free, sending without review is a 7-day trial, once per LinkedIn account; after it they wait for approval unless you move to Pro ($29 per connected account per month). Switch in the dashboard (Settings → Sending) or with `scheduler(action="approval_mode", mode="autopilot" | "require_approval")`; read what is waiting on the dashboard Approvals page or with `inspect(action="waiting")`, and decide with `prospect(action="approve_message" | "discard_message", draft_id=...)`.
+A hosted workspace is in one of two modes. `autopilot` (the default for a workspace that never chose) sends opening DMs, follow-ups and answers to replies without review. `require_approval` holds them until a person approves; the approved text, edited or not, is what goes out. Invitations and InMail are never held. In review mode, invitations go out without a note. This is the same on every plan. Switch in the dashboard (Settings → Sending) or with `scheduler(action="approval_mode", mode="autopilot" | "require_approval")`; read what is waiting on the dashboard Approvals page or with `inspect(action="waiting")`, and decide with `prospect(action="approve_message" | "discard_message", draft_id=...)`.
 
 | Tool | Description |
 |------|-------------|
@@ -249,7 +249,7 @@ default; setting the variable gives a session the full set of 47.
 ## Pricing
 
 - **Free:** $0, one connected account (a LinkedIn seat or an email mailbox), cloud sending included, up to 2 follow-ups per person, until your 2nd hot lead. From then HeyLead keeps working the conversations already open and reaches new people on Pro.
-- **Pro:** $29 per connected account per month (a LinkedIn seat or an email mailbox). HeyLead keeps reaching new people after your 2nd hot lead, sends without waiting in Approvals, runs more than 1 active campaign and follows up to 5 times. Monthly, cancel any time, no setup fee.
+- **Pro:** $29 per connected account per month (a LinkedIn seat or an email mailbox). HeyLead keeps reaching new people after your 2nd hot lead, runs more than 1 active campaign and follows up to 5 times. Monthly, cancel any time, no setup fee.
 
 A hot lead is a person whose reply HeyLead reads as interested.
 

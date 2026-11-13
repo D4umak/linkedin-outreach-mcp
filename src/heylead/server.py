@@ -47,6 +47,9 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.512 (2026-11-13)
+- retire the Free 7-day review trial in the client's words
+
 ## v0.10.511 (2026-11-12)
 - S13 fix notices: words, then the map binding, then the prod-proof; how to stop and unbind
 - Fix: the Mac planner measures the plan weekly target against plan posts only (heylead-api#6285)
@@ -2665,14 +2668,13 @@ mcp = FastMCP(
         "with campaign(action='launch'), and only when the user asks. "
         f"{facts.PACE_SENTENCE} campaign(action='emergency_stop') pauses everything. "
         # api #5340: never-chose hosted workspaces send without review (T-agents);
-        # on Free that is the 7-day trial of api #5341.
+        # api #6254 S1: the same on every plan (the Free trial of #5341 is retired).
         "A hosted workspace that has not chosen otherwise sends opening DMs, follow-ups "
         "and answers to replies as HeyLead writes them, without anyone reading them "
         "first; review is one switch away "
         "(scheduler(action='approval_mode', mode='require_approval')), after which they "
-        "wait for the user's approval and the approved text is what is sent. On Free, "
-        "sending without review is a 7-day trial, once per LinkedIn account; after it "
-        "they wait for approval unless the workspace moves to Pro. A self-hosted "
+        "wait for the user's approval and the approved text is what is sent. This is "
+        "the same on every plan. A self-hosted "
         "install sends as written.\n"
         f"{facts.MODEL_PACE_INSTRUCTION}\n"
         f"{facts.NO_POSTING_SENTENCE}\n"

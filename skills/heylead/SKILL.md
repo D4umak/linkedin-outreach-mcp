@@ -109,7 +109,7 @@ In-process agents default to act. Use `edit_campaign(enable_reply_agent="observe
 
 Campaigns are created as drafts and only start when explicitly launched. Every send passes rate limits, working-hours checks, and a 1st-degree connection guard. HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator: a newly connected paid account starts at 20 a day and doubles each week up to its limit), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
 
-On a hosted workspace that has not chosen otherwise, opening DMs, follow-ups and answers to replies go out as HeyLead writes them, without anyone reading them first. Review is one switch away: `scheduler(action="approval_mode", mode="require_approval")` or Settings → Sending; then they wait (`inspect(action="waiting")`, `prospect(action="approve_message")` or `discard_message`) and the approved text is what is sent. Invitations are never held. In review mode, invitations go out without a note. On Free, sending without review is a 7-day trial, once per LinkedIn account; after it they wait for approval unless you move to Pro ($29 per connected account per month). A self-hosted install sends as written.
+On a hosted workspace that has not chosen otherwise, opening DMs, follow-ups and answers to replies go out as HeyLead writes them, without anyone reading them first. Review is one switch away: `scheduler(action="approval_mode", mode="require_approval")` or Settings → Sending; then they wait (`inspect(action="waiting")`, `prospect(action="approve_message")` or `discard_message`) and the approved text is what is sent. Invitations are never held. In review mode, invitations go out without a note. This is the same on every plan. A self-hosted install sends as written.
 
 ## All 22 Tools
 
@@ -156,7 +156,7 @@ Brand and content, signals, bulk import, CRM sync and the shared network pool ar
 ## Pricing
 
 - **Free:** $0, one connected account (a LinkedIn seat or an email mailbox), cloud sending included, up to 2 follow-ups per person, until your 2nd hot lead. From then HeyLead keeps working the conversations already open and reaches new people on Pro.
-- **Pro:** $29 per connected account per month (a LinkedIn seat or an email mailbox). HeyLead keeps reaching new people after your 2nd hot lead, sends without waiting in Approvals, runs more than 1 active campaign and follows up to 5 times. Monthly, cancel any time, no setup fee.
+- **Pro:** $29 per connected account per month (a LinkedIn seat or an email mailbox). HeyLead keeps reaching new people after your 2nd hot lead, runs more than 1 active campaign and follows up to 5 times. Monthly, cancel any time, no setup fee.
 
 A hot lead is a person whose reply HeyLead reads as interested.
 

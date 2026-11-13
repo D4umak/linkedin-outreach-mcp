@@ -139,10 +139,7 @@ opening DMs, follow-ups and answers to replies as HeyLead writes them, without
 anyone reading them first. Switch review on (Settings → Sending, or
 `scheduler(action="approval_mode", mode="require_approval")`) and they wait for
 a person, read on the Approvals page or with `inspect(action="waiting")`; the
-approved text is what is sent. Invitations and InMail are never held. In review mode, invitations go out without a note. On Free,
-sending without review is a 7-day trial, once per LinkedIn account; after it
-they wait for approval unless you move to Pro ($29 per connected account per
-month).
+approved text is what is sent. Invitations and InMail are never held. In review mode, invitations go out without a note. This is the same on every plan.
 
 ---
 
@@ -236,7 +233,7 @@ HeyLead gives your AI 22 tools:
 ## Pricing
 
 - **Free:** $0, one connected account (a LinkedIn seat or an email mailbox), cloud sending included, up to 2 follow-ups per person, until your 2nd hot lead. From then HeyLead keeps working the conversations already open and reaches new people on Pro.
-- **Pro:** $29 per connected account per month (a LinkedIn seat or an email mailbox). HeyLead keeps reaching new people after your 2nd hot lead, sends without waiting in Approvals, runs more than 1 active campaign and follows up to 5 times. Monthly, cancel any time, no setup fee.
+- **Pro:** $29 per connected account per month (a LinkedIn seat or an email mailbox). HeyLead keeps reaching new people after your 2nd hot lead, runs more than 1 active campaign and follows up to 5 times. Monthly, cancel any time, no setup fee.
 
 A hot lead is a person whose reply HeyLead reads as interested.
 
