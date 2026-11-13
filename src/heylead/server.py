@@ -47,6 +47,9 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.514 (2026-11-13)
+- Fix: the daemon's no-chat memory is the person's and survives a cut sweep (#6215)
+
 ## v0.10.513 (2026-11-13)
 - Fix: clean headline splitting and provider ID classification
 - New: clean headline splitting and companion tests (#6001)

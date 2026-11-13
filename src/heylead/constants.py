@@ -123,6 +123,20 @@ HOSTED_WEEKLY_INVITE_CAP = 100       # free seat
 HOSTED_WEEKLY_INVITE_CAP_PAID = 320  # Premium and Sales Navigator
 HOSTED_DAILY_INVITE_CAP_FREE = 20
 HOSTED_DAILY_INVITE_CAP_PAID = 168
+# 3. The HeyLead PLAN pace (api #6254, slice S3, heylead-api
+#    app/services/plan_pace.py FREE_DAILY / FREE_WEEKLY): a seat on HeyLead
+#    Free sends at most 2 invitations a UTC day and 10 in any 7 days; Pro keeps
+#    the LinkedIn ceilings above. facts.PACE_SENTENCE states both, and
+#    tests/test_plan_pace_facts_6254.py reads the backend's numbers to hold
+#    these two there.
+PLAN_FREE_DAILY_INVITES = 2
+PLAN_FREE_WEEKLY_INVITES = 10
+# Whether the api's plan pace is dated (plan_pace.PLAN_PACE_SINCE set). Until
+# it is, every surface states today's pace (facts.TODAY_PACE_SENTENCE): the
+# plan sentence goes live with the date, never before it (#6254 case-pm round
+# 5, comment 6848482024). The date PR flips this, with the figures above set to
+# the approved ones; the drift test reads the api's date to hold the two together.
+PLAN_PACE_DATED = False
 # Settings key: the last ceilings a pull carried, for the views that render
 # from the local mirror and have no payload in hand.
 HOSTED_INVITE_CAPS_SETTING = "hosted_invite_caps"

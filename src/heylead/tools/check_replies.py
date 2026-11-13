@@ -87,6 +87,14 @@ ATTENDEE_NO_CHAT_TTL_SECONDS = 72 * 3600
 _NO_CHAT_STATUSES = ("invited", "connected")
 
 
+def _furthest_no_chat_status(statuses: set[str]) -> str:
+    """The most advanced of a person's open no-chat statuses (connected after
+    invited). A "no messages" answer holds only for it: when one of the
+    person's rows is accepted, the answer given while invited is asked again.
+    Same rule as the cloud sweep (D4umak/heylead-api#6215)."""
+    return max(statuses, key=_NO_CHAT_STATUSES.index) if statuses else ""
+
+
 def _no_chat_key(account_id: str) -> str:
     return f"attendee_no_chat:{account_id}"
 
@@ -196,17 +204,33 @@ async def _revisit_off_page_threads(
 
     active_no_chat_pids = {c[1] for c in candidates if c[2] in _NO_CHAT_STATUSES}
     no_chat, pruned = await _load_no_chat(account_id, active_pids=active_no_chat_pids)
+    # The answer is the person's, not the row's. One person can have two open
+    # rows (an invitation in one campaign, a connection in another): the
+    # answer is kept while it was given for their furthest status. Comparing
+    # it with each row in turn dropped it on every sweep and asked both rows
+    # again each cycle (D4umak/heylead-api#6215); an accept on either row
+    # still asks again at once (#4374).
+    statuses: dict[str, set[str]] = {}
     for _oid, pid, status in candidates:
-        memo = no_chat.get(pid)
-        if memo and memo[1] != status:
+        if status in _NO_CHAT_STATUSES:
+            statuses.setdefault(pid, set()).add(status)
+    furthest = {pid: _furthest_no_chat_status(s) for pid, s in statuses.items()}
+    for pid, memo in list(no_chat.items()):
+        if memo[1] != furthest.get(pid, ""):
             no_chat.pop(pid, None)
             pruned = True
+
+    def _ask_status(pid: str, status: str) -> str:
+        return furthest.get(pid, status) if status in _NO_CHAT_STATUSES else status
 
     # Filter before slicing so remembered rows do not starve the sweep
     # (D4umak/heylead-api#4712).
     pollable = [
         c for c in ordered
-        if (no_chat.get(c[1]) or [None, None])[1] != c[2]
+        if not (
+            c[2] in _NO_CHAT_STATUSES
+            and (no_chat.get(c[1]) or [None, None])[1] == _ask_status(c[1], c[2])
+        )
     ]
     batch = pollable[:REVISIT_THREADS_PER_SWEEP]
 
@@ -222,48 +246,61 @@ async def _revisit_off_page_threads(
     no_chat_before = dict(no_chat)
     found: list[dict[str, Any]] = []
     asked = 0
-    for _oid, pid, status in batch:
-        try:
-            msgs = await _attendee_messages_for_sweep(
-                client, account_id, pid, status, no_chat,
+    # The job runs under asyncio.wait_for (scheduler engine), so a sweep its
+    # budget cuts is cancelled inside this loop. What it learned is saved in
+    # the finally: before D4umak/heylead-api#6215 the memory and the cursor
+    # were written after the loop and a cut dropped both, so the next sweep
+    # asked the same people again.
+    cut = False
+    try:
+        for _oid, pid, status in batch:
+            try:
+                msgs = await _attendee_messages_for_sweep(
+                    client, account_id, pid, _ask_status(pid, status), no_chat,
+                )
+            except (CircuitBreakerOpen, asyncio.TimeoutError) as e:
+                logger.info("Reply revisit stopped early (%s) after %d thread(s)", e, asked)
+                # Stop traversed at the last one we actually asked
+                for i, c in enumerate(ordered):
+                    if c[1] == pid:
+                        traversed = i
+                        break
+                break
+            if msgs is None:
+                continue
+            asked += 1
+            newest = None
+            for m in msgs or []:
+                sender = str(m.get("sender_id") or "")
+                if not sender or message_is_ours(m, our_provider_id) or sender != pid:
+                    continue
+                if not (m.get("text") or "").strip():
+                    continue
+                ts = to_epoch(m.get("timestamp")) or 0
+                if newest is None or ts >= (to_epoch(newest.get("timestamp")) or 0):
+                    newest = m
+            if newest is not None:
+                found.append({
+                    "sender_id": pid,
+                    "text": newest.get("text", ""),
+                    "chat_id": newest.get("chat_id") or "",
+                    "timestamp": newest.get("timestamp"),
+                    "_revisit": True,
+                })
+    except BaseException:
+        cut = True
+        raise
+    finally:
+        # On a cut the cursor stays put: the rows it learned have no messages
+        # are filtered out next time, so the next sweep starts at the first
+        # row of this batch still to be read.
+        if traversed and not cut:
+            await run_db(
+                save_setting, _REVISIT_CURSOR_KEY,
+                (start + traversed) % len(candidates),
             )
-        except (CircuitBreakerOpen, asyncio.TimeoutError) as e:
-            logger.info("Reply revisit stopped early (%s) after %d thread(s)", e, asked)
-            # Stop traversed at the last one we actually asked
-            for i, c in enumerate(ordered):
-                if c[1] == pid:
-                    traversed = i
-                    break
-            break
-        if msgs is None:
-            continue
-        asked += 1
-        newest = None
-        for m in msgs or []:
-            sender = str(m.get("sender_id") or "")
-            if not sender or message_is_ours(m, our_provider_id) or sender != pid:
-                continue
-            if not (m.get("text") or "").strip():
-                continue
-            ts = to_epoch(m.get("timestamp")) or 0
-            if newest is None or ts >= (to_epoch(newest.get("timestamp")) or 0):
-                newest = m
-        if newest is not None:
-            found.append({
-                "sender_id": pid,
-                "text": newest.get("text", ""),
-                "chat_id": newest.get("chat_id") or "",
-                "timestamp": newest.get("timestamp"),
-                "_revisit": True,
-            })
-
-    if traversed:
-        await run_db(
-            save_setting, _REVISIT_CURSOR_KEY,
-            (start + traversed) % len(candidates),
-        )
-    if pruned or no_chat != no_chat_before:
-        await _save_no_chat(account_id, no_chat)
+        if pruned or no_chat != no_chat_before:
+            await _save_no_chat(account_id, no_chat)
     logger.info(
         "Reply revisit: %d of %d off-page thread(s) checked, %d skipped as known "
         "to have no messages, %d with a prospect message",

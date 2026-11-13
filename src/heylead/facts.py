@@ -132,12 +132,15 @@ INCOMPLETE_GOALS_SENTENCE = (
 # the owner's zone). On 24 Sep 2026 a new user's first chat session, with no
 # HeyLead sentence about pace to repeat, warned him off LinkedIn automation
 # and told him to hold back to a small daily volume behind a review step. This
-# sentence is what every surface says instead; heylead-api app/facts.py and
+# sentence is what every surface says instead. Since api #6254 (S6, words
+# approved by Denys on 12 Nov 2026, issue comment 6831064432) it states the
+# HeyLead plan pace: Free 2 a day / 10 a week, Pro at the LinkedIn ceilings.
+# heylead-api app/facts.py and
 # heylead-dashboard src/marketing/facts.ts carry it verbatim, and
 # tests/test_onboarding_never_warns.py fails any surface that warns.
 SENDING_WINDOW = "Monday to Friday 08:00 to 22:00 in your time zone"
 
-PACE_SENTENCE = (
+TODAY_PACE_SENTENCE = (
     "HeyLead sends from your own LinkedIn account at a human pace: at most "
     f"{_c.HOSTED_DAILY_INVITE_CAP_FREE} invitations a day and "
     f"{_c.HOSTED_WEEKLY_INVITE_CAP} a week on a free LinkedIn account (more on "
@@ -147,6 +150,23 @@ PACE_SENTENCE = (
     "off when LinkedIn pushes back and resumes on its own. You can pause any "
     "campaign at any time."
 )
+
+# The approved plan sentence (string 9), stated only once the plan pace is dated.
+PLAN_PACE_SENTENCE = (
+    "HeyLead sends from your own LinkedIn account at a human pace. On HeyLead "
+    f"Free: at most {_c.PLAN_FREE_DAILY_INVITES} invitations a day and "
+    f"{_c.PLAN_FREE_WEEKLY_INVITES} a week. On Pro: at most "
+    f"{_c.HOSTED_DAILY_INVITE_CAP_FREE} invitations a day and "
+    f"{_c.HOSTED_WEEKLY_INVITE_CAP} a week on a free LinkedIn account (more on "
+    "Premium or Sales Navigator: an account new to Pro starts at "
+    f"{_c.HOSTED_DAILY_INVITE_CAP_FREE} a day and doubles each week up to its limit). "
+    f"{SENDING_WINDOW}, minutes apart. It backs "
+    "off when LinkedIn pushes back and resumes on its own. You can pause any "
+    "campaign at any time."
+)
+
+# The sentence in force: today's pace until the api's plan pace is dated.
+PACE_SENTENCE = PLAN_PACE_SENTENCE if _c.PLAN_PACE_DATED else TODAY_PACE_SENTENCE
 
 # What a tool says about cloud sending. The cloud keeps working when the
 # laptop is closed, but it sends only inside the window above: on 30 Sep 2026
