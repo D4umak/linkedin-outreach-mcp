@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "heylead",
-  "version": "0.10.512",
+  "version": "0.10.513",
   "description": "HeyLead is an AI agent for LinkedIn outreach: it finds the right people, writes to them in the voice of your own LinkedIn posts, follows up, and handles replies. It runs from Claude Code, Cursor, any MCP client or a web dashboard.",
   "author": {
     "name": "HeyLead",

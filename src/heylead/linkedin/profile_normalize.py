@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .experience import apply_current_role, experience_from_payload
-from .headline_split import split_headline
+from .headline_split import split_clean_headline
 from .redirects import unwrap_linkedin_redirects
 
 def _as_dict(data: Any) -> dict[str, Any]:
@@ -81,7 +81,7 @@ def normalize_linkedin_profile(data: Any) -> dict[str, Any]:
     last_name = _first_text(data.get("last_name"), data.get("lastName"))
     # A link in a headline arrives as LinkedIn's redirect wrapper (#2723).
     headline = unwrap_linkedin_redirects(_first_text(data.get("headline"), data.get("occupation")))
-    parsed_title, parsed_company = split_headline(headline)
+    parsed_title, parsed_company = split_clean_headline(headline)
     title = unwrap_linkedin_redirects(_first_text(data.get("title"), parsed_title))
     company = unwrap_linkedin_redirects(_first_text(data.get("company"), parsed_company))
 
@@ -91,13 +91,50 @@ def normalize_linkedin_profile(data: Any) -> dict[str, Any]:
         data.get("public_identifier"),
         data.get("publicIdentifier"),
     )
-    prov_id = _first_text(data.get("provider_id"), data.get("id"))
+    prov_id = _first_text(
+        data.get("provider_id"), data.get("id"), data.get("member_id"),
+        data.get("linkedin_id"), data.get("sender_id"), data.get("author_id"),
+    )
 
     prof_url = _first_text(
         data.get("profile_url"),
         data.get("public_profile_url"),
         data.get("url"),
     )
+
+    # Classify provider IDs and reject placeholders
+    if prov_id and prov_id.startswith(("ACoAA", "ACwAA", "ADoAA")):
+        # Valid provider ID: preserve case
+        pass
+    elif prov_id.lower().startswith(("acoaa", "acwaa", "adoaa")) or \
+            prov_id.lower() in ("headless", "unknown", "none", "null", "n/a", "undefined", ""):
+        prov_id = ""
+
+    if pub_id.lower() in ("headless", "unknown", "none", "null", "n/a", "undefined"):
+        pub_id = ""
+    if prof_url.lower() in ("headless", "unknown", "none", "null", "n/a", "undefined"):
+        prof_url = ""
+
+    import re
+    # If public_id or profile_url contains a provider-id shape, it's actually a provider_id
+    for candidate in (pub_id, prof_url):
+        if not prov_id:
+            candidate_id = candidate
+            if "/in/" in candidate.lower():
+                parts = re.split(r"/in/", candidate, maxsplit=1, flags=re.I)
+                tail = parts[1] if len(parts) > 1 else ""
+                candidate_id = re.split(r"[/?#]", tail, maxsplit=1)[0].strip()
+            if candidate_id.startswith(("ACoAA", "ACwAA", "ADoAA")):
+                prov_id = candidate_id
+                break
+
+    # If it was a provider ID, it's not a public slug or a canonical URL
+    if prov_id:
+        if pub_id.startswith(("ACoAA", "ACwAA", "ADoAA", "acoaa", "acwaa", "adoaa")):
+            pub_id = ""
+        if any(p in prof_url.lower() for p in ("acoaa", "acwaa", "adoaa")):
+            prof_url = ""
+
     if not prof_url and pub_id:
         prof_url = f"https://www.linkedin.com/in/{pub_id}"
 

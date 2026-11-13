@@ -18,8 +18,10 @@ from __future__ import annotations
 import re
 
 # LinkedIn headlines separate role from employer in several ways. Only " at "
-# was handled once, so "VP Engineering @ Resident" parsed no company at all.
-SEPARATORS = (" at ", " @ ", " — ", " – ")
+# and " @ " are canonical separators that split into title/company for a
+# clean headline.
+CLEAN_SEPARATORS = (" at ", " @ ")
+SEPARATORS = (*CLEAN_SEPARATORS, " — ", " – ")
 
 _SEGMENT_RE = re.compile(r"[^|•·]+")
 _COMPANY_TAIL_RE = re.compile(r"\s[—–]\s|[|•·]")
@@ -27,16 +29,40 @@ _COMPANY_TAIL_RE = re.compile(r"\s[—–]\s|[|•·]")
 
 def split_headline(headline: object) -> tuple[str, str]:
     """(title, company) of a headline; ("<headline>", "") when it names none."""
+    return _split_with(headline, SEPARATORS)
+
+
+def split_clean_headline(headline: object) -> tuple[str, str]:
+    """(title, company) of a headline, using only canonical separators.
+
+    Separators like " — " and " – " are common in the tail of a headline but
+    rarely separate role from employer in a way that produces a clean company
+    name.
+    """
+    title, company = _split_with(headline, CLEAN_SEPARATORS)
+    if not title or not company:
+        return ("", "")
+
+    # Reject non-role lead-ins before a pipe/bullet: "Helping B2B founders scale | Advisor at Y"
+    parts = _COMPANY_TAIL_RE.split(title, 1)
+    if len(parts) > 1 and parts[0].strip().lower().startswith(("helping ", "building ", "i help ", "i am ", "passionate ")):
+        return ("", "")
+
+    return title, company
+
+
+def _split_with(headline: object, separators: tuple[str, ...]) -> tuple[str, str]:
     text = str(headline or "").strip()
-    for sep in SEPARATORS:
+    for sep in separators:
         if sep not in text:
             continue
         for segment in _SEGMENT_RE.finditer(text):
             at = segment.group().rfind(sep)
             if at < 0:
                 continue
-            cut = segment.start() + at
-            company = _COMPANY_TAIL_RE.split(text[cut + len(sep):], 1)[0]
+            cut = segment.span()[0] + at
+            company_tail = text[cut + len(sep):]
+            company = _COMPANY_TAIL_RE.split(company_tail, 1)[0]
             return text[:cut].strip(), company.strip()
     return text, ""
 
