@@ -75,7 +75,7 @@ claude mcp add heylead -- heylead
 
 `project_brief` is required before launch: what you are building, go-live, volume, and what a vendor must confirm. Launch refuses a bare URL or a one-line blurb under 80 characters.
 
-Launch is the only step that starts sending; there is no separate scheduler step. On a hosted account, `campaign(action="launch")` marks the campaign active, resumes it on the HeyLead backend, switches the backend's cloud scheduler on if it was off, and queues the first connection request. Outreach then runs from the cloud with your laptop closed; this machine sends only if you move sending here with the scheduler tool's `send_from` action. On a self-hosted install, launch turns this machine's scheduler on if it was off. In observe mode, launch activates the campaign for signal collection only and sends nothing.
+Launch is the only step that starts sending; there is no separate scheduler step. On a hosted account, `campaign(action="launch")` marks the campaign active, resumes it on the HeyLead backend, switches the backend's cloud scheduler on if it was off, and queues the first connection request. HeyLead connects to heylead.dev. Outreach then runs from the cloud with your laptop closed. In observe mode, launch activates the campaign for signal collection only and sends nothing.
 
 ## All 22 Tools
 
@@ -256,7 +256,6 @@ A hot lead is a person whose reply HeyLead reads as interested.
 A connected account is a LinkedIn seat or an email mailbox. Free includes one of either.
 
 Invitation limits follow the LinkedIn account (free, Premium or Sales Navigator), not the HeyLead plan.
-Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign, 3 ICP generations.
 
 ## Privacy
 
@@ -264,10 +263,6 @@ Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 e
 - Campaigns, contacts and messages are stored by HeyLead on Google Cloud
 - LinkedIn access goes through Unipile
 - AI calls are made by the HeyLead backend
-
-**Self-hosted installs:**
-- Contacts and messages stay on your machine in a local SQLite database
-- LinkedIn access uses your own Unipile account, and AI calls use your own LLM key (Gemini/Claude/OpenAI)
 
 ## Transport
 

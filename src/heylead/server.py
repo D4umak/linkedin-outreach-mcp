@@ -47,6 +47,10 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.516 (2026-11-14)
+- Name the draft archive separately from analysis storage
+- Fix: validate hosted plans in the cloud and archive legacy drafts (#6293)
+
 ## v0.10.515 (2026-11-14)
 - cut the nine laptop-engine seams
 - Fix: derive intake lane mappings from the API

@@ -84,6 +84,16 @@ def store_from_cloud(brand_updates: dict[str, Any]) -> list[str]:
         return []
     saved = []
     if brand_updates.get(_KEY_PLAN):
+        incoming = brand_updates[_KEY_PLAN]
+        previous = get_setting(scoped_key(_KEY_PLAN, org))
+        if isinstance(previous, dict) and previous.get("quality_version") != 1 and isinstance(incoming, dict) and incoming.get("quality_version") == 1:
+            # The canonical pull must not erase local-only handwritten drafts or media references.
+            import hashlib
+            import json
+            archive_key = scoped_key("brand_plan_draft_archive", org)
+            archive = get_setting(archive_key, {}) or {}
+            digest = hashlib.sha256(json.dumps(previous, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+            save_setting(archive_key, {**archive, digest: previous})
         save_setting(scoped_key(_KEY_PLAN, org), brand_updates[_KEY_PLAN])
         saved.append(_KEY_PLAN)
     # The cloud's analysis keeps the cloud's analyzed_at.

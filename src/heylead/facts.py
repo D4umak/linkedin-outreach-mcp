@@ -58,7 +58,6 @@ FREE_QUOTA_LIST = (
     f"{_c.FREE_MAX_CAMPAIGNS} active campaign, "
     f"{_c.FREE_MAX_ICP_V2_GENERATIONS} ICP generations"
 )
-FREE_QUOTA_SENTENCE = f"Self-hosted free installs have monthly quotas: {FREE_QUOTA_LIST}."
 
 # Pro is priced per connected account, a LinkedIn seat or an email mailbox, the
 # way Unipile bills (billing.billable_quantity_for_org; Denys, 7 Oct 2026, api

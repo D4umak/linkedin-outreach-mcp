@@ -31,7 +31,7 @@ Also known as: LinkedIn lead generation, cold outreach automation, B2B prospecti
 | **Reply Handling** | Sentiment classification (positive/negative/question/neutral), auto-responses, meeting scheduling |
 | **Intent Signals** | Company news, page engagement, website visitors, profile viewers — compounded into outreach angles |
 | **Analytics** | Funnel reports, conversion rates, stale lead detection, engagement ROI |
-| **Autonomous Scheduling** | Cloud is the default sender for hosted accounts (existing and new campaigns). Launching commissions the cloud: invitations, opening DMs, first-touch InMail, follow-ups, engagements, follows, endorsements, email fallbacks, campaign top-ups, auto-replies, inbound, warmup, signal collectors, post-intel, and housekeeping. This machine stays silent for that work unless the user runs `scheduler(action='send_from', host='local')`, which turns the cloud scheduler off. The local engine does not start on a hosted cloud account. Observe still means nobody sends, including the cloud. Direct / self-hosted installs send from this machine only. |
+| **Autonomous Scheduling** | Cloud is the default sender for hosted accounts (existing and new campaigns). Launching commissions the cloud: invitations, opening DMs, first-touch InMail, follow-ups, engagements, follows, endorsements, email fallbacks, campaign top-ups, auto-replies, inbound, warmup, signal collectors, post-intel, and housekeeping. HeyLead connects to heylead.dev. Observe means nobody sends, including the cloud. |
 
 ## Typical Workflow
 
@@ -41,7 +41,7 @@ Also known as: LinkedIn lead generation, cold outreach automation, B2B prospecti
 3. create_campaign(target_description="...", icp_id="...") → Find prospects (saved as a draft)
 4. campaign(action="launch", campaign_id="...") → Start outreach — nothing sends before this
                                                    (hosted accounts: also starts cloud sending)
-5. scheduler(action="status")                   → Confirm sending is on the cloud (or send_from host=local)
+5. scheduler(action="status")                   → Confirm sending is on the cloud
 6. inspect() / check_replies() / show_status()  → Monitor pipeline and agent holds
 7. prospect(action="close", outcome="won")      → Track conversions
 ```
@@ -67,7 +67,6 @@ In-process agents default to act. Use `edit_campaign(enable_reply_agent="observe
 ## Authentication
 
 - **Hosted (easiest):** take the 90-second quiz at <https://heylead.dev/quiz>, then Sign in (Google). That claims the quiz as an Account brief and a **draft** campaign. Connect LinkedIn on Account, launch the draft — nothing sends before that. Or sign in at <https://heylead.dev/auth/login-url> and land on Account. Copy the token message and paste it into chat → `setup_profile(backend_jwt="...")`. Hosted users share a professional directory; campaigns and inboxes stay private. Organizations let an owner invite editors (run campaigns) and viewers (stats only). Switch in the dashboard sidebar or with `organization(action="switch", org_id="...")`. The waitlist on `/quiz` is marketing-only and does not create a campaign.
-- **Self-hosted:** a Unipile account (LinkedIn access) plus the user's own LLM key, passed as `setup_profile(llm_api_key=...)` (kept in the OS keychain, not in a file).
 - **Inspecting an install or production:** never open the HeyLead config file. `heylead config get <setting>` prints one ordinary setting, `heylead api get /api/v1/...` makes an authenticated read with credentials masked, and `heylead secrets status` names the stored secrets without values.
 - Optional: bring your own key (Gemini/Claude/OpenAI) via `setup_profile(llm_api_key="...")`.
 
@@ -139,7 +138,7 @@ Brand and content, signals, bulk import, CRM sync and the shared network pool ar
 ### Automation
 | Tool | Description |
 |------|-------------|
-| `scheduler` | Autonomous scheduler — status, toggle on/off, send_from (cloud default / local opt-in), always-on |
+| `scheduler` | Autonomous scheduler — status, toggle on/off, always-on |
 | `product` | Local git checkout only — patch this repo and/or open a PR. Never from the send path. |
 
 ## Installation
@@ -181,7 +180,7 @@ claude mcp add heylead -- heylead
 ## Transport
 
 - **stdio** — `heylead` (installed via `uv tool install heylead`); update with `uv tool upgrade heylead`
-- **streamable-http** — `heylead --transport streamable-http` for self-hosted HTTP serving
+- **streamable-http** — remote endpoint at `https://heylead.dev/mcp`
 
 ## Build on heylead-dev, not on the Mac (api #5565)
 If `uname` is Darwin and you are about to run tests, scans, a worktree or a Cloud SQL proxy for a

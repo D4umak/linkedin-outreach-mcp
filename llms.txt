@@ -38,7 +38,6 @@ HeyLead reads the user's LinkedIn posts only to learn their voice. It never publ
 - A hot lead is a person whose reply HeyLead reads as interested.
 - A connected account is a LinkedIn seat or an email mailbox. Free includes one of either.
 - Invitation limits follow the LinkedIn account (free, Premium or Sales Navigator), not the HeyLead plan.
-- Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign, 3 ICP generations.
 
 ## Documentation
 

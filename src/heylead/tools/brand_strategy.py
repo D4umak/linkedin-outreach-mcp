@@ -354,6 +354,19 @@ def _format_analysis(analysis: dict[str, Any], focus: str) -> str:
 async def _handle_plan(account_id: str, focus: str) -> str:
     """Generate a 4-week brand strategy plan."""
 
+    if laptop_writes_refused():
+        client = get_linkedin_client()
+        try:
+            status, body = await client.generate_content_plan(focus or "all")
+        except Exception:
+            return "The cloud plan result could not be read. Check Content before trying again."
+        finally:
+            await client.close()
+        if status != 200:
+            return str(body.get("detail") or "The cloud plan could not finish. Try again.")
+        # Never replace the local cache: it may still hold hand-written legacy drafts.
+        return _format_plan(body["plan"], hosted=True)
+
     from ..ai.brand_strategist import generate_brand_plan
     from ..services.brand_service import get_active_icp_context
 
@@ -403,7 +416,7 @@ async def _handle_plan(account_id: str, focus: str) -> str:
     return _format_plan(plan)
 
 
-def _format_plan(plan: dict[str, Any]) -> str:
+def _format_plan(plan: dict[str, Any], *, hosted: bool = False) -> str:
     """Format brand strategy plan for chat display."""
     lines = [
         "4-Week Brand Strategy",
@@ -419,7 +432,7 @@ def _format_plan(plan: dict[str, Any]) -> str:
         for i, action in enumerate(actions):
             is_last = i == len(actions) - 1
             prefix = "└──" if is_last else "├──"
-            desc = action.get("description", "")
+            desc = action.get("description") or action.get("topic") or ""
             action_type = action.get("type", "")
             icon = {"profile_optimize": "✏️", "post": "📝", "engagement": "💬", "photo_enhance": "📸"}.get(action_type, "📌")
             lines.append(f"  {prefix} {icon} {desc}")
@@ -450,7 +463,8 @@ def _format_plan(plan: dict[str, Any]) -> str:
     lines.append(f"Progress: {completed}/{total} actions")
     lines.append(f"  {progress_bar(completed, total, 20)}")
     lines.append("")
-    lines.append('Next: Run brand_strategy(action="execute") to start working on your plan.')
+    lines.append("Review the new drafts in this workspace's Content page. Publishing follows its existing approval setting."
+                 if hosted else 'Next: Run brand_strategy(action="execute") to start working on your plan.')
 
     return "\n".join(lines)
 

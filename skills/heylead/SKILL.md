@@ -19,7 +19,7 @@ This skill connects HeyLead as an MCP server in your OpenClaw agent, giving it 2
 - **Multi-Touch Sequences** — Follow-up DMs, engagement warm-ups (comments, likes, endorsements)
 - **Reply Handling** — Sentiment classification, auto-responses, meeting scheduling
 - **Analytics** — Funnel reports, conversion rates, stale lead detection, engagement ROI
-- **Autonomous Scheduling** — Cloud is the default sender; move to this machine with `scheduler(action='send_from', host='local')`
+- **Autonomous Scheduling** — HeyLead connects to heylead.dev and sends from the cloud with your laptop closed
 
 ## Use cases
 
@@ -64,9 +64,8 @@ After adding the MCP server, tell your OpenClaw agent:
 
 > "Set up my HeyLead profile"
 
-**Hosted:** take the [90-second quiz](https://heylead.dev/quiz), Sign in, connect LinkedIn on Account, then launch the draft campaign. Or start at [heylead.dev/auth/login-url](https://heylead.dev/auth/login-url). Paste the token message into chat — the backend handles LinkedIn access and AI calls. The quiz waitlist is marketing-only.
+HeyLead connects to heylead.dev. Take the [90-second quiz](https://heylead.dev/quiz), Sign in, connect LinkedIn on Account, then launch the draft campaign. Or start at [heylead.dev/auth/login-url](https://heylead.dev/auth/login-url). Paste the token message into chat — the backend handles LinkedIn access and AI calls. The quiz waitlist is marketing-only.
 
-**Self-hosted:** requires a [Unipile](https://www.unipile.com) account for LinkedIn access and your own LLM API key (a free [Gemini key](https://aistudio.google.com/apikey) works). Pass the key to setup_profile, open the LinkedIn link it returns, then run setup_profile again.
 
 ## Usage Examples
 
@@ -88,7 +87,7 @@ After adding the MCP server, tell your OpenClaw agent:
 2. generate_icp(target_description="CTOs fintech") → Create buyer personas
 3. create_campaign(target_description="...", icp_id="...") → Find prospects (saved as a draft)
 4. campaign(action="launch", campaign_id="...") → Start outreach
-5. scheduler(action="status")                   → Confirm cloud sending (or send_from host=local)
+5. scheduler(action="status")                   → Confirm cloud sending
 6. inspect() / check_replies() / show_status()  → Monitor pipeline and agent holds
 7. prospect(action="close", outcome="won")      → Track conversions
 ```
@@ -109,7 +108,7 @@ In-process agents default to act. Use `edit_campaign(enable_reply_agent="observe
 
 Campaigns are created as drafts and only start when explicitly launched. Every send passes rate limits, working-hours checks, and a 1st-degree connection guard. HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitations a day and 100 a week on a free LinkedIn account (more on Premium or Sales Navigator: a newly connected paid account starts at 20 a day and doubles each week up to its limit), Monday to Friday 08:00 to 22:00 in your time zone, minutes apart. It backs off when LinkedIn pushes back and resumes on its own. You can pause any campaign at any time.
 
-On a hosted workspace that has not chosen otherwise, opening DMs, follow-ups and answers to replies go out as HeyLead writes them, without anyone reading them first. Review is one switch away: `scheduler(action="approval_mode", mode="require_approval")` or Settings → Sending; then they wait (`inspect(action="waiting")`, `prospect(action="approve_message")` or `discard_message`) and the approved text is what is sent. Invitations are never held. In review mode, invitations go out without a note. This is the same on every plan. A self-hosted install sends as written.
+On a hosted workspace that has not chosen otherwise, opening DMs, follow-ups and answers to replies go out as HeyLead writes them, without anyone reading them first. Review is one switch away: `scheduler(action="approval_mode", mode="require_approval")` or Settings → Sending; then they wait (`inspect(action="waiting")`, `prospect(action="approve_message")` or `discard_message`) and the approved text is what is sent. Invitations are never held. In review mode, invitations go out without a note. This is the same on every plan.
 
 ## All 22 Tools
 
@@ -149,7 +148,7 @@ Brand and content, signals, bulk import, CRM sync and the shared network pool ar
 | `network` | Network intelligence across pool members' connected accounts (reciprocal: join to use it) |
 | `brand_strategy` | LinkedIn personal brand audit and strategy |
 | `profile` | View and restore LinkedIn profile change history |
-| `scheduler` | Autonomous scheduler — status, on/off, send_from (cloud default / local opt-in), always-on |
+| `scheduler` | Autonomous scheduler — status, on/off, always-on |
 | `knowledge` | Knowledge base that grounds messages — list, add, remove, refresh, search sources. Hosted only |
 | `product` | Local git checkout only — patch this repo and/or open a PR |
 
@@ -163,7 +162,6 @@ A hot lead is a person whose reply HeyLead reads as interested.
 A connected account is a LinkedIn seat or an email mailbox. Free includes one of either.
 
 Invitation limits follow the LinkedIn account (free, Premium or Sales Navigator), not the HeyLead plan.
-Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign, 3 ICP generations.
 
 ## Privacy
 

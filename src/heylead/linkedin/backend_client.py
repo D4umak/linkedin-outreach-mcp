@@ -3923,6 +3923,18 @@ class BackendClient:
             body["name"] = name
         return await self._cloud_call("POST", "/inbox/reply", body)
 
+    async def generate_content_plan(self, focus: str = "all") -> tuple[int, dict[str, Any]]:
+        """The hosted generator owns validation and storage; an old API cannot substitute."""
+        from urllib.parse import urlencode
+        status, body = await self._cloud_call(
+            "POST", "/brand/plan?" + urlencode({"focus": focus or "all"}),
+            timeout=httpx.Timeout(150.0, connect=10.0),
+        )
+        plan = body.get("plan")
+        if status == 200 and (not isinstance(plan, dict) or plan.get("quality_version") != 1):
+            return 409, {"detail": "This server does not support validated plans yet. Update it before requesting another plan."}
+        return status, body
+
     async def apply_headline(self, headline: str = "") -> tuple[int, dict[str, Any]]:
         """POST /brand/optimize-headline with apply: the cloud sets the headline.
 

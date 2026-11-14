@@ -82,30 +82,13 @@ Update with `uv tool upgrade heylead`.
 
 ### Step 2: Set up your account
 
-**Option A — Hosted (easiest):** take the [90-second quiz](https://heylead.dev/quiz)
+HeyLead connects to heylead.dev. Take the [90-second quiz](https://heylead.dev/quiz)
 or sign in at [heylead.dev/dashboard/login](https://heylead.dev/dashboard/login).
 Your quiz personas become a draft campaign. Connect LinkedIn in
 Settings → Connected accounts, then launch from the dashboard — or copy your
 setup message from Settings → Integrations → Chat client into your AI chat.
 Nothing sends before you launch. Hosted users share a professional directory;
 campaigns and inboxes stay private.
-
-**Option B — Self-hosted:** run everything against your own accounts. You need two things first:
-
-1. **A Unipile account** — this is what talks to LinkedIn. Sign up at
-   [unipile.com](https://www.unipile.com), then put the DSN and API key from
-   the Access Tokens page, then run `heylead config set unipile_api_url <DSN>`
-   and `heylead secrets set unipile_api_key` (it prompts; the key is kept in
-   your OS keychain, never in the config file).
-2. **An LLM API key** — AI calls are billed to you. A free
-   [Gemini key](https://aistudio.google.com/apikey) is enough to start.
-
-Then open your AI chat and say:
-
-> **"Set up my HeyLead profile with this Gemini key: YOUR_KEY"**
-
-You'll get a LinkedIn authentication link. Open it, connect LinkedIn, then say
-**"finish setup"**. HeyLead fetches your profile and analyses your writing style.
 
 ### Step 3: Find leads
 
@@ -207,7 +190,7 @@ HeyLead gives your AI 22 tools:
 
 | Tool | What it does |
 |------|-------------|
-| `scheduler` | Manages the autonomous scheduler — status, on/off, send_from (cloud default / local opt-in) |
+| `scheduler` | Manages the autonomous scheduler — status, on/off |
 | `product` | Local git checkout only — patch this repo and/or open a PR |
 | `account` | Manages LinkedIn accounts — list, switch, or disconnect |
 | `organization` | Hosted orgs — list, switch, invite editor/viewer, create a client workspace |
@@ -220,7 +203,7 @@ HeyLead gives your AI 22 tools:
 
 **ICP Generation** — RAG-powered pipeline that crawls company context, generates buyer personas with pain points, fears, barriers, and maps them to LinkedIn search parameters.
 
-**Autonomous Scheduler** — Runs in the background, respects working hours and rate limits. On a hosted account, cloud is the default sender for every campaign. Launching commissions the cloud, so outreach continues with your laptop closed, inside the sending window: invitations, opening DMs, first-touch InMail, follow-ups, engagements, follows, endorsements, email fallbacks, prospect top-ups, auto-replies, inbound, warmup, signal collectors, and post-intel. This machine does not start a local scheduler engine for that work. Move the whole account here with `scheduler(action='send_from', host='local')`, which turns the cloud scheduler off. Observe still means nobody sends. Direct / self-hosted installs send from this machine only.
+**Autonomous Scheduler** — Runs in the background, respects working hours and rate limits. On a hosted account, cloud is the default sender for every campaign. Launching commissions the cloud, so outreach continues with your laptop closed, inside the sending window: invitations, opening DMs, first-touch InMail, follow-ups, engagements, follows, endorsements, email fallbacks, prospect top-ups, auto-replies, inbound, warmup, signal collectors, and post-intel. Observe means nobody sends.
 
 **Engagement Warm-ups** — Automatically engages with prospect posts before sending connection requests, building familiarity.
 
@@ -240,7 +223,6 @@ A hot lead is a person whose reply HeyLead reads as interested.
 A connected account is a LinkedIn seat or an email mailbox. Free includes one of either.
 
 Invitation limits follow the LinkedIn account (free, Premium or Sales Navigator), not the HeyLead plan.
-Self-hosted free installs have monthly quotas: 50 invitations, 20 messages, 30 engagements, 1 active campaign, 3 ICP generations.
 
 ---
 
@@ -350,7 +332,7 @@ HeyLead is designed as an MCP-native tool — built for AI agents, not humans cl
 **OpenClaw:** Add the same entry to your `openclaw.json` under `mcp.servers`.
 Also available on [ClawHub](https://clawhub.ai) — search "HeyLead".
 
-Sign in at [heylead.dev](https://heylead.dev) (hosted), or bring your own Unipile account and LLM API key (self-hosted).
+Sign in at [heylead.dev](https://heylead.dev) and connect LinkedIn.
 
 **Capabilities:** LinkedIn lead generation, cold outreach automation, ICP generation with buyer personas, voice-matched personalized messaging, multi-touch drip sequences, reply sentiment classification, engagement warm-ups, campaign analytics, and scheduled sending from the cloud with your laptop closed.
 
