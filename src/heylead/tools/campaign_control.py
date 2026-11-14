@@ -13,7 +13,7 @@ import logging
 import time
 
 from .. import config, hosted_writes
-from ..config import get_scheduler_mode, is_scheduler_enabled, set_scheduler_mode
+from ..config import get_scheduler_mode
 from ..constants import STATUS_ACTIVE, STATUS_DRAFT
 from ..db.queries import (
     get_campaign,
@@ -657,23 +657,13 @@ async def run_launch_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
                      campaign, pending_cloud_resume=observing and hosted,
                  ))
 
-    # Hosted sending is the cloud's. Direct-mode still has to turn this
-    # machine on — there is no other sender.
+    # Launch commissions hosted sending on the cloud.
     if not observing and hosted:
         config.set_sending_host(
             "cloud",
             caller="campaign_launch",
             reason=f"Launched campaign {campaign['name']}",
         )
-    scheduler_was_off = (
-        not observing and not hosted and not is_scheduler_enabled()
-    )
-    if scheduler_was_off:
-        set_scheduler_mode(
-            "full", caller="campaign_launch",
-            reason=f"Launched campaign {campaign['name']}",
-        )
-
     await run_db(
         log_action, "campaign_status_change",
         result=STATUS_ACTIVE,
@@ -733,28 +723,18 @@ async def run_launch_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
     if synced:
         await run_db(_set_pending_cloud_resume, campaign_id, False)
     logger.info(
-        "Launched campaign %s: %s (scheduler_was_off=%s, cloud_synced=%s)",
-        campaign_id, campaign["name"], scheduler_was_off, synced,
+        "Launched campaign %s: %s (cloud_synced=%s)",
+        campaign_id, campaign["name"], synced,
     )
 
-    # Launching is the opt-in to autonomous sending. Hosted accounts send
-    # from the cloud; this machine stays silent unless the user later runs
-    # send_from host=local. Best-effort: a refused commission must not
+    # Launching is the opt-in to autonomous cloud sending.
+    # Best-effort: a refused commission must not
     # fail the launch.
     from ..services.cloud_sync import commission_cloud_sending
 
     cloud_commissioned, cloud_detail = await commission_cloud_sending(
         campaign_id,
     )
-
-    # Queue the first connection request now. Waiting for the next 60s tick
-    # plus a 22-minute invite delay is why "launch" used to look idle.
-    from ..scheduler.planner import plan_campaign_work
-
-    try:
-        await plan_campaign_work(campaign_id)
-    except Exception:
-        logger.warning("Launch planning failed for %s", campaign_id, exc_info=True)
 
     # One line of confirmation, then the computed plan (the api's for a hosted
     # account, the local twin otherwise). The hand-written list it replaced
@@ -776,9 +756,6 @@ async def run_launch_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
         "",
         checkpoint,
     ]
-    if scheduler_was_off:
-        lines.append("")
-        lines.append("⚡ The scheduler was off and has been enabled.")
     if cloud_commissioned:
         lines.extend([
             "",

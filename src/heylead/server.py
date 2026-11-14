@@ -47,6 +47,11 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.515 (2026-11-14)
+- cut the nine laptop-engine seams
+- Fix: derive intake lane mappings from the API
+- Fix: deliver draft validation to its waiting builder
+
 ## v0.10.514 (2026-11-13)
 - Fix: the daemon's no-chat memory is the person's and survives a cut sweep (#6215)
 
@@ -2405,14 +2410,13 @@ def _run_stdio() -> None:
 
 @asynccontextmanager
 async def _scheduler_lifespan(app: FastMCP) -> AsyncIterator[dict]:
-    """Start/stop the autonomous scheduler + cloud sync alongside the MCP server.
+    """Start/stop cloud sync alongside the MCP server.
 
     Uses file-based leader election so only ONE process across all MCP clients
-    (Claude Code, Cursor, etc.) runs the scheduler.  Other instances serve
+    (Claude Code, Cursor, etc.) runs cloud sync. Other instances serve
     MCP tools normally in "follower" mode.
     """
     import asyncio
-    from .scheduler.engine import SchedulerEngine
     from .scheduler.leader import acquire_leader_with_handover, release_leader
 
     # With a daemon installed, MCP servers are thin clients: they serve tools
@@ -2431,43 +2435,34 @@ async def _scheduler_lifespan(app: FastMCP) -> AsyncIterator[dict]:
             pass
         return
 
-    from .services.cloud_sync import local_scheduler_engine_enabled
-
     # Waits only if it asked an older leader to stand down — see
     # acquire_leader_with_handover. Asking without waiting left nothing
     # scheduling at all.
     is_leader = await asyncio.to_thread(acquire_leader_with_handover, "mcp")
 
-    engine: SchedulerEngine | None = None
     cloud_sync_task: asyncio.Task | None = None
 
     if is_leader:
-        if local_scheduler_engine_enabled():
-            engine = SchedulerEngine()
-            await engine.start()
-            logger.info("Scheduler engine started (leader mode, enabled=%s)",
-                         config.is_scheduler_enabled())
-        else:
-            logger.info(
-                "Hosted sending_host=cloud — local engine off; cloud owns every job"
-            )
-            from .services.cloud_sync import sign_in_lapsed_line
+        logger.info(
+            "Hosted sending_host=cloud — local engine off; cloud owns every job"
+        )
+        from .services.cloud_sync import sign_in_lapsed_line
 
-            lapsed = sign_in_lapsed_line()
-            if lapsed:
-                logger.warning(lapsed)
-            try:
-                from .db.async_bridge import run_db
-                from .services.cloud_sync import (
-                    stand_down_engine_off_leftovers,
-                    warn_if_pypi_refresh_rolled_back,
-                )
-                warn_if_pypi_refresh_rolled_back()
-                cancelled = await run_db(stand_down_engine_off_leftovers)
-                if cancelled:
-                    logger.info("Cancelled %d leftover local jobs (engine off)", cancelled)
-            except Exception as e:
-                logger.debug("Cancel cloud-owned jobs failed (non-fatal): %s", e)
+        lapsed = sign_in_lapsed_line()
+        if lapsed:
+            logger.warning(lapsed)
+        try:
+            from .db.async_bridge import run_db
+            from .services.cloud_sync import (
+                stand_down_engine_off_leftovers,
+                warn_if_pypi_refresh_rolled_back,
+            )
+            warn_if_pypi_refresh_rolled_back()
+            cancelled = await run_db(stand_down_engine_off_leftovers)
+            if cancelled:
+                logger.info("Cancelled %d leftover local jobs (engine off)", cancelled)
+        except Exception as e:
+            logger.debug("Cancel cloud-owned jobs failed (non-fatal): %s", e)
 
         # Start cloud sync pull loop only for the leader
         cloud_sync_task = asyncio.create_task(_cloud_sync_loop())
@@ -2475,7 +2470,7 @@ async def _scheduler_lifespan(app: FastMCP) -> AsyncIterator[dict]:
         logger.info("Running in follower mode — scheduler delegated to leader process")
 
     try:
-        yield {"scheduler": engine, "is_leader": is_leader}
+        yield {"scheduler": None, "is_leader": is_leader}
     finally:
         if cloud_sync_task is not None:
             cloud_sync_task.cancel()
@@ -2483,9 +2478,6 @@ async def _scheduler_lifespan(app: FastMCP) -> AsyncIterator[dict]:
                 await cloud_sync_task
             except asyncio.CancelledError:
                 pass
-
-        if engine is not None:
-            await engine.stop(verify_cloud_fallback=_transport != "stdio")
 
         if is_leader:
             release_leader()

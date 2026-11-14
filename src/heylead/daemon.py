@@ -185,14 +185,12 @@ def _session_health_loop():
 
 
 async def _serve_until_stopped(stop: asyncio.Event) -> None:
-    """Hold leadership and run the scheduler until stopped or asked to yield."""
-    from . import background, config
-    from .scheduler.engine import SchedulerEngine
+    """Hold leadership and run cloud sync until stopped."""
+    from . import background
     from .scheduler.leader import release_leader
 
     from .db.async_bridge import run_db
     from .services.cloud_sync import (
-        local_scheduler_engine_enabled,
         sign_in_lapsed_line,
         stand_down_engine_off_leftovers,
         warn_if_pypi_refresh_rolled_back,
@@ -200,27 +198,19 @@ async def _serve_until_stopped(stop: asyncio.Event) -> None:
 
     warn_if_pypi_refresh_rolled_back()
 
-    engine: SchedulerEngine | None = None
-    if local_scheduler_engine_enabled():
-        engine = SchedulerEngine()
-        await engine.start()
-        logger.info(
-            "heylead daemon scheduling (pid=%d mode=%s)", os.getpid(), config.get_scheduler_mode(),
-        )
-    else:
-        logger.info(
-            "heylead daemon sync-only (pid=%d) — hosted cloud owns every job",
-            os.getpid(),
-        )
-        lapsed = sign_in_lapsed_line()
-        if lapsed:
-            logger.warning(lapsed)
-        try:
-            cancelled = await run_db(stand_down_engine_off_leftovers)
-            if cancelled:
-                logger.info("Cancelled %d leftover local jobs (engine off)", cancelled)
-        except Exception as e:
-            logger.debug("Cancel cloud-owned jobs failed (non-fatal): %s", e)
+    logger.info(
+        "heylead daemon sync-only (pid=%d) — hosted cloud owns every job",
+        os.getpid(),
+    )
+    lapsed = sign_in_lapsed_line()
+    if lapsed:
+        logger.warning(lapsed)
+    try:
+        cancelled = await run_db(stand_down_engine_off_leftovers)
+        if cancelled:
+            logger.info("Cancelled %d leftover local jobs (engine off)", cancelled)
+    except Exception as e:
+        logger.debug("Cancel cloud-owned jobs failed (non-fatal): %s", e)
 
     sync_task = asyncio.create_task(_cloud_sync_loop())
     health_task = asyncio.create_task(_session_health_loop())
@@ -232,20 +222,7 @@ async def _serve_until_stopped(stop: asyncio.Event) -> None:
 
     err_log_task = asyncio.create_task(_err_log_watch())
     try:
-        # Wait on the engine as well as the stop signal. The engine releases
-        # the lock itself when a newer process asks for it; waiting only on
-        # `stop` left the daemon alive but scheduling nothing, and because the
-        # process never exited, launchd's KeepAlive never restarted it.
-        waiters: list[asyncio.Task] = [asyncio.create_task(stop.wait())]
-        if engine is not None and engine._task is not None:
-            waiters.append(engine._task)
-        done, _ = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
-        for t in waiters:
-            if engine is None or t is not engine._task:
-                if not t.done():
-                    t.cancel()
-        if engine is not None and engine._task in done and not stop.is_set():
-            logger.warning("Scheduler engine stopped on its own — standing down")
+        await stop.wait()
     finally:
         logger.info("heylead daemon releasing leadership")
         sync_task.cancel()
@@ -263,8 +240,6 @@ async def _serve_until_stopped(stop: asyncio.Event) -> None:
             await err_log_task
         except (asyncio.CancelledError, Exception):
             pass
-        if engine is not None:
-            await engine.stop()
         release_leader()
         # Post-send checks this process's sends started: their moment before
         # the loop closes on them. Last, so leadership is released whatever

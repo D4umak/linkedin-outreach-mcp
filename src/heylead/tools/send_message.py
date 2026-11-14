@@ -92,20 +92,8 @@ async def run_send_message(
         if blocked:
             return blocked
 
-    if action == "followup":
-        from .send_followup import run_send_followup
-        return await run_send_followup(campaign_id, outreach_id, format=format)
-
-    if action == "reply":
-        from .reply_to_prospect import run_reply_to_prospect
-        return await run_reply_to_prospect(outreach_id=outreach_id, format=format)
-
     if action == "delete":
         from .delete_message import run_delete_message
         return await run_delete_message(campaign_id, outreach_id, message_id=text)
-
-    if action == "inmail":
-        from .send_inmail import run_send_inmail
-        return await run_send_inmail(campaign_id, outreach_id)
 
     return f"Unknown action: '{action}'. Use 'followup', 'reply', 'delete', or 'inmail'."

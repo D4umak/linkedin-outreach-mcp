@@ -2,27 +2,28 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .backend_client import BackendClient
+
 from .unipile import (
     NetworkPoolNotMemberError,
     UnipileAuthError,
-    UnipileClient,
     UnipileError,
     UnipileRateLimitError,
     UnipileResultFormatError,
     get_account_id,
-    get_unipile_client,
     invalidate_account_id_cache,
     set_account_id,
 )
 
 __all__ = [
-    "UnipileClient",
     "UnipileError",
     "UnipileAuthError",
     "UnipileRateLimitError",
     "UnipileResultFormatError",
     "NetworkPoolNotMemberError",
-    "get_unipile_client",
     "get_account_id",
     "set_account_id",
     "invalidate_account_id_cache",
@@ -35,15 +36,12 @@ __all__ = [
 _backend_client: object | None = None
 
 
-def get_linkedin_client() -> UnipileClient:
+def get_linkedin_client() -> BackendClient:
     """Factory: the singleton BackendClient for a signed-in install.
 
     With no sign-in token it raises the not-signed-in ``UnipileError``
-    (callers catch that type): a stored Unipile key no longer reaches LinkedIn
-    from this machine (heylead-api#2320; until then ``send_email`` sent with
-    it past every gate). ``config.is_self_hosted()`` is False in production;
-    the direct client behind it serves only the suite's tests of the engine
-    until that code is deleted (heylead-api#5712).
+    (callers catch that type). A stored Unipile key never reaches LinkedIn
+    from this machine (heylead-api#2320).
     """
     global _backend_client
     from .. import config
@@ -58,12 +56,10 @@ def get_linkedin_client() -> UnipileClient:
             and _backend_client.base_url == backend_url.rstrip("/")
             and _backend_client.jwt_token == jwt_token
         ):
-            return _backend_client  # type: ignore[return-value]
+            return _backend_client
         _backend_client = BackendClient(backend_url, jwt_token)
-        return _backend_client  # type: ignore[return-value]
+        return _backend_client
 
-    if not config.is_self_hosted():
-        from .. import hosted_writes
+    from .. import hosted_writes
 
-        raise UnipileError(hosted_writes.not_signed_in_reply("nothing was done on LinkedIn"))
-    return get_unipile_client()
+    raise UnipileError(hosted_writes.not_signed_in_reply("nothing was done on LinkedIn"))

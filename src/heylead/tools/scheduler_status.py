@@ -138,58 +138,6 @@ async def run_scheduler_status() -> str:
     else:
         lines.append("\U0001f4ed No jobs in queue\n")
 
-    # ── Next Scheduled ──
-    # A queued row is not a plan. runs_in_mode() refuses outbound job types in
-    # observe, and the stale-pending sweeper reaps them 30 min later, so listing
-    # one as "next brand_post in 5 min" promised work that could not happen —
-    # directly above the section saying observe does not send. Rows already in
-    # the queue when the mode changed are exactly the ones this hits: the
-    # planner stopped creating new ones.
-    #
-    # Filtered rather than re-queried: get_scheduler_stats already narrowed this
-    # to the five soonest pending rows, so a queue full of refused work can
-    # empty this list. Saying so under "Queued, Not Scheduled" is the honest
-    # reading of that state; silently listing the refused rows was not.
-    next_jobs = stats.get("next_jobs", [])
-    refused_jobs: list[dict[str, Any]] = []
-    if observing:
-        from ..scheduler.engine import runs_in_mode
-        refused_jobs = [
-            j for j in next_jobs if not runs_in_mode(j.get("job_type", ""), mode)
-        ]
-        next_jobs = [
-            j for j in next_jobs if runs_in_mode(j.get("job_type", ""), mode)
-        ]
-    if next_jobs:
-        lines.append("## Next Scheduled")
-        lines.append("")
-        for job in next_jobs:
-            scheduled = job["scheduled_at"]
-            delta = scheduled - now
-            if delta > 0:
-                mins = delta // 60
-                when = f"in {mins} min" if mins > 0 else "now"
-            else:
-                when = "overdue"
-
-            job_type = job["job_type"]
-            outreach = job.get("outreach_id", "")
-            target = f" (outreach: {outreach[:8]}...)" if outreach else ""
-            lines.append(f"- **{job_type}** {when}{target}")
-        lines.append("")
-
-    if refused_jobs:
-        held = sorted({j.get("job_type", "") for j in refused_jobs})
-        lines.append("## Queued, Not Scheduled")
-        lines.append("")
-        lines.append(
-            f"{len(refused_jobs)} queued job(s) the observe gate refuses "
-            f"({', '.join(held)}). They are outbound, so they will not run "
-            "until you leave observe with "
-            "`scheduler(action='toggle', enabled=True)`."
-        )
-        lines.append("")
-
     # ── Recent Activity ──
     recent = stats.get("recent", [])
     if recent:
@@ -265,17 +213,7 @@ async def run_scheduler_status() -> str:
 async def _brand_automation_section(
     stats: dict[str, Any], *, mode: str = "full",
 ) -> str:
-    """Build brand automation status section if brand plan exists.
-
-    Args:
-        stats: Scheduler stats, used for the next scheduled brand jobs.
-        mode: The current scheduler mode. Brand posts and engagements are
-            outbound, so the tick returns before scheduling them in observe and
-            runs_in_mode refuses any row already queued — the section must not
-            claim they run. Taking the mode rather than a bool keeps that
-            decision on runs_in_mode, the same rule the executor applies,
-            instead of a second hand-maintained list of what observe allows.
-    """
+    """Show brand-plan progress and automation mode without local job promises."""
     from ..formatter import progress_bar
 
     from ..db.async_bridge import run_db
@@ -296,38 +234,16 @@ async def _brand_automation_section(
         f"**Progress**: {done}/{total} actions {progress_bar(done, total, 15)}",
     ]
 
-    # Show next scheduled brand jobs from stats. In observe mode a queued
-    # brand_* row is not a plan: runs_in_mode refuses it, so listing "next
-    # brand_post in 5 min" would promise a post that cannot happen.
-    from ..scheduler.engine import runs_in_mode
-
     observing = mode == "observe"
-    next_jobs = stats.get("next_jobs", [])
-    brand_jobs = [
-        j for j in next_jobs
-        if j.get("job_type", "").startswith("brand_")
-        and runs_in_mode(j.get("job_type", ""), mode)
-    ]
-    if brand_jobs:
-        now = int(time.time())
-        for job in brand_jobs[:3]:
-            delta = job["scheduled_at"] - now
-            if delta > 0:
-                mins = delta // 60
-                when = f"in {mins} min" if mins > 0 else "now"
-            else:
-                when = "overdue"
-            lines.append(f"- Next **{job['job_type']}** {when}")
-    elif observing:
+    if observing:
         lines.append(
             "- Paused: posts and engagements are outbound, and observe mode "
             "does not send"
         )
+    elif done < total:
+        lines.append("- Posts + engagements run automatically via scheduler")
     else:
-        if done < total:
-            lines.append("- Posts + engagements run automatically via scheduler")
-        else:
-            lines.append("- All actions complete! Re-analysis scheduled at 28-day mark")
+        lines.append("- All actions complete! Re-analysis scheduled at 28-day mark")
 
     # Show automation status
     lines.append("")

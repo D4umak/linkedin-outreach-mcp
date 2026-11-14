@@ -1196,43 +1196,8 @@ class BackendClient:
             "experience": experience if isinstance(experience, list) else [],
             "posts": [],
         }
-        if not profile["experience"]:
-            identifier = public_id or str(provider_id)
-            full = await self._own_profile_sections(account_id, identifier)
-            if full.get("experience"):
-                profile["experience"] = full["experience"]
-            if full.get("summary"):
-                profile["summary"] = full["summary"]
-            if full.get("skills"):
-                profile["skills"] = full["skills"]
-            if full.get("headline"):
-                profile["headline"] = full["headline"]
         return apply_current_role(profile)
 
-    async def _own_profile_sections(
-        self, account_id: str, identifier: str,
-    ) -> dict[str, Any]:
-        """/users/me has no sections. Hosted /profile is that same thin payload.
-
-        The dated roles are on Unipile GET /users/{id}?linkedin_sections=*.
-        The backend proxy does not forward that param, so when Unipile
-        credentials exist we ask Unipile directly.
-        """
-        if not identifier:
-            return {}
-        from ..config import get_unipile_config
-        api_url, api_key = get_unipile_config()
-        if not api_url or not api_key:
-            return {}
-        from .unipile import UnipileClient
-        uni = UnipileClient(api_url, api_key)
-        try:
-            return await uni.get_profile(account_id, identifier)
-        except Exception as e:
-            logger.warning("own profile sections via Unipile failed: %s", e)
-            return {}
-        finally:
-            await uni.close()
 
     async def get_posts(
         self, account_id: str, provider_id: str = "", limit: int = 10, *, strict: bool = False,

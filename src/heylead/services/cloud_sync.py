@@ -562,50 +562,8 @@ def _campaign_has_sendable_pending(campaign_id: str) -> bool:
     return row is not None
 
 
-def _campaign_has_unmessaged_connected(campaign_id: str) -> bool:
-    """Accepted the invite, never got the opening DM — the host's first-DM hole."""
-    from ..db.schema import get_db
-
-    db = get_db()
-    row = db.execute(
-        f"""SELECT 1 FROM outreaches o
-           JOIN contacts c ON c.id = o.contact_id
-           WHERE o.campaign_id = ? AND o.status = 'connected'
-             AND COALESCE(o.followup_count, 0) = 0
-             AND NOT {queries.SDR_REAL_DM_SQL}
-           LIMIT 1""",
-        (campaign_id,),
-    ).fetchone()
-    db.close()
-    return row is not None
 
 
-def _campaign_has_due_followup(campaign_id: str) -> bool:
-    """A connected or messaged person whose next scheduled touch is due."""
-    from ..config import get_tier
-    from ..scheduler.planner import _is_followup_due
-    from .campaign_plan import effective_max_followups
-
-    campaign = queries.get_campaign(campaign_id)
-    try:
-        cfg = json.loads((campaign or {}).get("config_json") or "{}")
-        custom = cfg.get("followup_delay_days")
-        if custom and not isinstance(custom, list):
-            custom = None
-    except (TypeError, ValueError, json.JSONDecodeError):
-        cfg, custom = {}, None
-
-    tier = get_tier()
-    # The count the planner plans against (#1414): the campaign's own
-    # max_followups under the tier ceiling, 0 when follow-ups are off. The
-    # tier ceiling alone found work the planner would never plan.
-    max_fu = effective_max_followups(cfg, tier)
-    if max_fu <= 0:
-        return False
-    for candidate in queries.get_followup_candidates(campaign_id, max_fu):
-        if _is_followup_due(candidate, tier, custom_schedule=custom):
-            return True
-    return False
 
 
 def any_active_campaign_needs_refill() -> bool:
@@ -621,18 +579,6 @@ def any_active_campaign_needs_refill() -> bool:
     return False
 
 
-def _campaign_has_sendable_work(campaign_id: str) -> bool:
-    """Someone this campaign would still try to contact.
-
-    Pending invites are not the only waiting work. A quiet host that has
-    already invited everyone still owes opening DMs and due follow-ups;
-    standing down for those is how the drip goes silent.
-    """
-    return (
-        _campaign_has_sendable_pending(campaign_id)
-        or _campaign_has_unmessaged_connected(campaign_id)
-        or _campaign_has_due_followup(campaign_id)
-    )
 
 
 def outbound_ownership_predicates(campaign_id: str) -> dict[str, bool]:
@@ -1015,38 +961,10 @@ async def dashboard_freshness_lines() -> list[str]:
         lines.extend(_named(stale))
 
     lines.extend(await run_db(_pull_freshness_lines))
-    lines.extend(await run_db(_host_quiet_takeover_lines))
 
     return lines
 
 
-def _host_quiet_takeover_lines() -> list[str]:
-    """Name campaigns this machine took back because the host went silent."""
-    state = get_cloud_scheduler_state()
-    if not state["enabled"] or state.get("sending_allowed") is False:
-        return []
-    quiet = []
-    for camp in queries.list_campaigns(status=constants.STATUS_ACTIVE):
-        if camp.get("mode") != "autopilot":
-            continue
-        cid = camp["id"]
-        if cid not in get_push_log()["campaigns"]:
-            continue
-        if not _campaign_has_sendable_work(cid):
-            continue
-        if cloud_owns_outbound(cid):
-            continue
-        quiet.append(camp.get("name") or cid[:8])
-    if not quiet:
-        return []
-    return [
-        "⚠️ Host went quiet on "
-        + ", ".join(quiet)
-        + " — the cloud has not sent for it lately, and this machine never "
-        "sends for a hosted account. Check `scheduler_status(action="
-        "'diagnostics')`; if the cloud scheduler is off, "
-        "`scheduler(action='toggle', cloud=True, enabled=True)` switches it on."
-    ]
 
 
 def _pull_freshness_lines() -> list[str]:
