@@ -47,6 +47,12 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.517 (2026-11-14)
+- Fix: keep the profile redirect test on a real member id
+- Fix: validate passing proof and active controller freshness
+- Fix: require delivery proof before nonmetric outcome closure (#6465)
+- Fix: ingest signal and inbox authors into shared store
+
 ## v0.10.516 (2026-11-14)
 - Name the draft archive separately from analysis storage
 - Fix: validate hosted plans in the cloud and archive legacy drafts (#6293)

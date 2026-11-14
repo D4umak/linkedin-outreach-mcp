@@ -119,6 +119,37 @@ def save_signal(
         )
     db.commit()
     db.close()
+
+    # 14 Nov 2026: Ingest named signal authors into global_contacts
+    if (prospect_name or "").strip() and linkedin_id:
+        try:
+            from ..author_identity import author_payload_identity, public_profile
+            from ..db.global_contact_queries import keep_public_id, upsert_global_contact
+            from ..linkedin.headline_split import split_clean_headline
+
+            meta = public_profile(metadata_json or "{}")
+            prov_id, pub_id, url = author_payload_identity(meta)
+            lid = prov_id or pub_id or linkedin_id
+
+            p_title, p_company = split_clean_headline(prospect_title or "")
+            p_json = json.dumps(meta)
+            if prov_id and pub_id:
+                p_json = keep_public_id(p_json, pub_id)
+
+            upsert_global_contact(
+                linkedin_id=lid,
+                name=prospect_name.strip(),
+                title=p_title,
+                company=p_company,
+                linkedin_url=url,
+                profile_json=p_json,
+                source=f"signal_{signal_type}",
+                source_detail=source,
+                campaign_id=campaign_id or "",
+            )
+        except Exception:
+            pass
+
     return signal_id
 
 

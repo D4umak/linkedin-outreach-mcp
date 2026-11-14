@@ -12,6 +12,12 @@ from typing import Any
 from .experience import apply_current_role, experience_from_payload
 from .headline_split import split_clean_headline
 from .redirects import unwrap_linkedin_redirects
+from ..author_identity import (
+    author_payload_identity,
+    looks_like_provider_id,
+    normalize_public_slug,
+    slug_from_profile_url,
+)
 
 def _as_dict(data: Any) -> dict[str, Any]:
     if isinstance(data, list) and data:
@@ -86,57 +92,8 @@ def normalize_linkedin_profile(data: Any) -> dict[str, Any]:
     company = unwrap_linkedin_redirects(_first_text(data.get("company"), parsed_company))
 
     experience = experience_from_payload(data)
-    pub_id = _first_text(
-        data.get("public_id"),
-        data.get("public_identifier"),
-        data.get("publicIdentifier"),
-    )
-    prov_id = _first_text(
-        data.get("provider_id"), data.get("id"), data.get("member_id"),
-        data.get("linkedin_id"), data.get("sender_id"), data.get("author_id"),
-    )
 
-    prof_url = _first_text(
-        data.get("profile_url"),
-        data.get("public_profile_url"),
-        data.get("url"),
-    )
-
-    # Classify provider IDs and reject placeholders
-    if prov_id and prov_id.startswith(("ACoAA", "ACwAA", "ADoAA")):
-        # Valid provider ID: preserve case
-        pass
-    elif prov_id.lower().startswith(("acoaa", "acwaa", "adoaa")) or \
-            prov_id.lower() in ("headless", "unknown", "none", "null", "n/a", "undefined", ""):
-        prov_id = ""
-
-    if pub_id.lower() in ("headless", "unknown", "none", "null", "n/a", "undefined"):
-        pub_id = ""
-    if prof_url.lower() in ("headless", "unknown", "none", "null", "n/a", "undefined"):
-        prof_url = ""
-
-    import re
-    # If public_id or profile_url contains a provider-id shape, it's actually a provider_id
-    for candidate in (pub_id, prof_url):
-        if not prov_id:
-            candidate_id = candidate
-            if "/in/" in candidate.lower():
-                parts = re.split(r"/in/", candidate, maxsplit=1, flags=re.I)
-                tail = parts[1] if len(parts) > 1 else ""
-                candidate_id = re.split(r"[/?#]", tail, maxsplit=1)[0].strip()
-            if candidate_id.startswith(("ACoAA", "ACwAA", "ADoAA")):
-                prov_id = candidate_id
-                break
-
-    # If it was a provider ID, it's not a public slug or a canonical URL
-    if prov_id:
-        if pub_id.startswith(("ACoAA", "ACwAA", "ADoAA", "acoaa", "acwaa", "adoaa")):
-            pub_id = ""
-        if any(p in prof_url.lower() for p in ("acoaa", "acwaa", "adoaa")):
-            prof_url = ""
-
-    if not prof_url and pub_id:
-        prof_url = f"https://www.linkedin.com/in/{pub_id}"
+    prov_id, pub_id, prof_url = author_payload_identity(data)
 
     name = _first_text(data.get("name"), f"{first_name} {last_name}".strip())
     contact_info = contact_info_from_profile(data)

@@ -25,13 +25,15 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from typing import Any
 from urllib.parse import unquote
 
 # LinkedIn member provider ids look like "ACoAABt_IO4BrjSB0emJu95f…" — base64ish,
 # always starting with "AC". Nothing legitimate that short matches, and the
 # numeric ids the search feed sends never do.
-_PROVIDER_ID_RE = re.compile(r"^AC[A-Za-z0-9_-]{10,}$")
+# 14 Nov 2026: Include ACwAA and ADoAA prefixes.
+_PROVIDER_ID_RE = re.compile(r"^A[CD][owO]AA[A-Za-z0-9_-]{7,}$")
 
 # Slugs that mean "we don't actually have one" (mirrors backend_client._BAD_SLUGS).
 _BAD_SLUGS = frozenset({"undefined", "null", "none", "unknown", ""})
@@ -41,7 +43,8 @@ def looks_like_provider_id(value: Any) -> bool:
     """True when *value* is a real LinkedIn member provider id (ACoAA…)."""
     if not isinstance(value, str):
         return False
-    return bool(_PROVIDER_ID_RE.match(value.strip()))
+    val = value.strip()
+    return bool(_PROVIDER_ID_RE.match(val))
 
 
 def provider_id_from(linkedin_id: Any, profile_json: Any = "") -> str:
@@ -54,9 +57,10 @@ def provider_id_from(linkedin_id: Any, profile_json: Any = "") -> str:
     docs/incidents/2026-09-22-a-provider-id-was-read-from-one-of-the-two-places-it-lives.md.
 
     ``linkedin_id`` also holds vanity slugs, so the column counts only when it
-    actually carries a member id. Deliberately the narrow ``ACoAA`` test and
-    not ``looks_like_provider_id`` above: the callers pass this straight to
-    Unipile's classic endpoints, which reject a Sales Navigator ``AC…`` id.
+    actually carries a member id. Deliberately the narrow ``ACoAA/ACwAA/ADoAA``
+    test and not ``looks_like_provider_id`` above: the callers pass this
+    straight to Unipile's classic endpoints, which reject a Sales Navigator
+    ``AC…`` id.
 
     Pure and stdlib-only, like the rest of this module, so it is callable from
     the event-loop thread -- the reason it does not live beside the row
@@ -73,7 +77,9 @@ def provider_id_from(linkedin_id: Any, profile_json: Any = "") -> str:
         if pid:
             return pid
     raw = str(linkedin_id or "").strip()
-    return raw if raw.startswith("ACoAA") else ""
+    if raw.startswith(("ACoAA", "ACwAA", "ADoAA")):
+        return raw
+    return ""
 
 
 def contact_provider_id(contact: dict[str, Any] | None) -> str:
@@ -95,7 +101,7 @@ def normalize_public_slug(value: Any) -> str:
     Accepts a bare slug ("Jane-Doe"), a percent-encoded one, or anything with
     query-string/fragment/trailing-slash residue. Returns "" for junk
     placeholders ("undefined", "null", …), for anything carrying whitespace,
-    and for non-strings.
+    for provider-id shapes (ACoAA...), and for non-strings.
 
     Whitespace is what separates a slug from a description. LinkedIn does not
     name an anonymous profile viewer, it labels them — "Someone at ExampleBank" —
@@ -115,17 +121,19 @@ def normalize_public_slug(value: Any) -> str:
     slug = slug.split("?")[0].split("#")[0].strip("/").strip().lower()
     if slug in _BAD_SLUGS or "/" in slug or any(ch.isspace() for ch in slug):
         return ""
+    if slug.startswith(("acoaa", "acwaa", "adoaa")):
+        return ""
     return slug
 
 
 def slug_from_profile_url(url: Any) -> str:
-    """Normalised ``/in/<slug>`` segment of a LinkedIn profile URL, or "".
+    """Raw ``/in/<slug>`` segment of a LinkedIn profile URL, or "".
 
-    ``https://www.linkedin.com/in/Jane-Doe?miniProfileUrn=…`` → ``jane-doe``.
+    ``https://www.linkedin.com/in/Jane-Doe?miniProfileUrn=…`` → ``Jane-Doe``.
     """
     if not isinstance(url, str) or "/in/" not in url:
         return ""
-    return normalize_public_slug(url.split("/in/", 1)[1].split("/")[0])
+    return unquote(url).strip().split("/in/", 1)[1].split("?")[0].split("#")[0].strip("/")
 
 
 def parse_author_identity(author: dict[str, Any] | None) -> dict[str, str]:
@@ -161,18 +169,126 @@ def parse_author_identity(author: dict[str, Any] | None) -> dict[str, str]:
     # Public slug: explicit fields first, then any profile-URL variant.
     for key in ("public_identifier", "public_id"):
         raw = author.get(key)
-        candidate = normalize_public_slug(raw) or slug_from_profile_url(raw)
+        candidate = normalize_public_slug(raw) or normalize_public_slug(slug_from_profile_url(raw))
         if candidate:
             public_id = candidate
             break
     if not public_id:
         for key in ("profile_url", "public_profile_url", "url", "public_url", "linkedin_url"):
-            candidate = slug_from_profile_url(author.get(key))
+            candidate = normalize_public_slug(slug_from_profile_url(author.get(key)))
             if candidate:
                 public_id = candidate
                 break
 
     return {"provider_id": provider_id, "public_id": public_id, "numeric_id": numeric_id}
+
+
+PRIVATE_KEYS = frozenset({"content", "comment_text", "email", "phone", "contact_info", "messages"})
+
+
+def is_private_key(key: str) -> bool:
+    """True when *key* names a field that carries private PII / context."""
+    return key.lower() in PRIVATE_KEYS
+
+
+def public_profile(payload: Any) -> dict[str, Any]:
+    """Recursively strip private keys from a profile / signal metadata payload."""
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return {}
+    if not isinstance(payload, dict):
+        return {}
+
+    cleaned = {}
+    for k, v in payload.items():
+        if is_private_key(k):
+            continue
+        if isinstance(v, dict):
+            cleaned[k] = public_profile(v)
+        elif isinstance(v, list):
+            cleaned[k] = [
+                public_profile(item) if isinstance(item, dict) else item
+                for item in v
+            ]
+        else:
+            cleaned[k] = v
+    return cleaned
+
+
+def author_payload_identity(payload: Mapping[str, Any]) -> tuple[str, str, str]:
+    """Extract (provider_id, public_id, linkedin_url) from an author payload.
+
+    Provider IDs are preserved case-sensitively and never used to fabricate
+    /in/ URLs. Public IDs are normalized (lowercase).
+    """
+    prov_id = ""
+    pub_id = ""
+    url = ""
+
+    # 1. Collect all candidates
+    id_candidates = []
+    for key in ("provider_id", "id", "member_id", "author_id", "linkedin_id", "sender_id"):
+        val = _last_urn_segment(str(payload.get(key) or "").strip())
+        if val:
+            id_candidates.append(val)
+
+    slug_candidates = []
+    for key in ("public_id", "public_identifier", "publicIdentifier"):
+        val = str(payload.get(key) or "").strip()
+        if val:
+            slug_candidates.append(val)
+
+    url_candidates = []
+    for key in ("profile_url", "public_profile_url", "url", "linkedin_url"):
+        val = str(payload.get(key) or "").strip()
+        if val:
+            url_candidates.append(val)
+
+    # 2. Find provider_id (case-sensitive)
+    for val in id_candidates + slug_candidates:
+        if looks_like_provider_id(val):
+            prov_id = val
+            break
+
+    if not prov_id:
+        for val in url_candidates:
+            seg = slug_from_profile_url(val)
+            if looks_like_provider_id(seg):
+                prov_id = seg
+                break
+
+    # 3. Find public_id (normalized)
+    for val in id_candidates + slug_candidates:
+        norm = normalize_public_slug(val)
+        if norm:
+            pub_id = norm
+            break
+
+    if not pub_id:
+        for val in url_candidates:
+            norm = normalize_public_slug(slug_from_profile_url(val))
+            if norm:
+                pub_id = norm
+                break
+
+    # 4. Find linkedin_url
+    for val in url_candidates:
+        if "/in/" in val.lower():
+            seg = slug_from_profile_url(val)
+            # Must be a real vanity URL, not a provider ID in disguise
+            if not looks_like_provider_id(seg) and normalize_public_slug(seg):
+                url = val
+                break
+
+    # 5. Cross-pollinate
+    if url and not pub_id:
+        pub_id = normalize_public_slug(slug_from_profile_url(url))
+    if not url and pub_id:
+        url = f"https://www.linkedin.com/in/{pub_id}"
+
+    return prov_id, pub_id, url
 
 
 def sendable_person_id(*, provider_id: str = "", public_id: str = "") -> str:

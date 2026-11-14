@@ -1079,6 +1079,29 @@ def mark_connected(
     finally:
         db.close()
 
+    # 14 Nov 2026: Ingest named connections into global_contacts
+    if (name or "").strip() and provider_id:
+        try:
+            from ..db.global_contact_queries import keep_public_id, upsert_global_contact
+            from ..linkedin.headline_split import split_clean_headline
+
+            p_title, p_company = split_clean_headline(headline or "")
+            p_json = "{}"
+            if public_id:
+                p_json = keep_public_id(p_json, public_id)
+
+            upsert_global_contact(
+                linkedin_id=provider_id,
+                name=name.strip(),
+                title=p_title,
+                company=p_company,
+                profile_json=p_json,
+                source="connection_sync",
+                source_detail="mark_connected",
+            )
+        except Exception:
+            pass
+
 
 def get_sync_age(account_id: str) -> int | None:
     """Return seconds since last connection sync, or None if never synced."""

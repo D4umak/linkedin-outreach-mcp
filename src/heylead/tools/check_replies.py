@@ -624,9 +624,13 @@ async def _sync_silent_connections(client: Any, account_id: str) -> list[dict]:
                 await run_db(_backfill_contact, r["contact_id"], str(resolved_pid or ""), str(resolved_pub or ""), str(resolved_url or ""))
 
             if resolved_pid:
+                # 14 Nov 2026: Use keyword arguments to avoid clobbering headline,
+                # and pass the title/company from the contact row.
                 await run_db(
                     mark_connected, account_id, str(resolved_pid),
-                    r.get("name", ""), str(resolved_pub or ""),
+                    name=matched_rel.get("name") or r.get("name", ""),
+                    public_id=str(resolved_pub or ""),
+                    headline=matched_rel.get("headline") or f"{r.get('title') or ''} at {r.get('company') or ''}".strip(),
                 )
             newly_connected.append(r)
             matched_ids.add(r["outreach_id"])

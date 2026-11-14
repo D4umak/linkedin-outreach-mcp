@@ -6729,6 +6729,42 @@ def save_inbound_signal(
     )
     db.commit()
     db.close()
+
+    # 14 Nov 2026: Ingest identifiable inbound senders into global_contacts
+    if (sender_name or "").strip() and (sender_id or sender_url):
+        try:
+            from ..author_identity import author_payload_identity, public_profile
+            from ..db.global_contact_queries import keep_public_id, upsert_global_contact
+            from ..linkedin.headline_split import split_clean_headline
+
+            # Sanitize profile_json: strip private context keys
+            cleaned_profile = public_profile(profile_json or "{}")
+            prov_id, pub_id, url = author_payload_identity(cleaned_profile)
+
+            # fallback to explicit params if identity extraction from blob failed
+            prov_id = prov_id or (sender_id if sender_id.startswith("AC") else "")
+            pub_id = pub_id or (sender_id if not sender_id.startswith("AC") else "")
+            url = url or sender_url
+
+            lid = prov_id or pub_id or sender_id
+            p_title, p_company = split_clean_headline(sender_headline or "")
+            p_json = json.dumps(cleaned_profile)
+            if prov_id and pub_id:
+                p_json = keep_public_id(p_json, pub_id)
+
+            upsert_global_contact(
+                linkedin_id=lid,
+                name=sender_name.strip(),
+                title=p_title,
+                company=p_company,
+                linkedin_url=url,
+                profile_json=p_json,
+                source=f"inbound_{signal_type}",
+                source_detail="inbound_signal",
+            )
+        except Exception:
+            pass
+
     return signal_id
 
 
