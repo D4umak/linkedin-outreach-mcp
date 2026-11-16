@@ -47,6 +47,11 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.520 (2026-11-16)
+- Fix: a PR on its way counts as coming before its label; lone PRs record the gather (#6652 review)
+- New: gather green PRs briefly before a batch (#6652)
+- New: the client's rank SQL is built from the api's weights and steps (#6006)
+
 ## v0.10.519 (2026-11-16)
 - the campaign optimiser and spawner go (#6252, PR 5b)
 - Fix: the free-run reading reads staff from the snapshot and stops when unknown (#6313)

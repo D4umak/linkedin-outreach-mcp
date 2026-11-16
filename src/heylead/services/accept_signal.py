@@ -1,6 +1,11 @@
 """Likely to accept: the second signal behind the invite order (#4410).
 
 Mirror of heylead-api/app/services/accept_signal.py for the client SQLite DB.
+The weights, the prior and the steps are the api's, and the SQL below is built
+from them, so a re-fit that edits them (heylead-api #6006, applied only by a
+reviewed PR quoting a monthly reading with ``adopt: True``) moves the Python
+score and the SQL order together. tests/test_invite_rank_constants_6006.py
+holds both to the api's values and to each other.
 """
 
 from __future__ import annotations
@@ -13,6 +18,12 @@ FIT_WEIGHT = 0.4
 ACCEPT_WEIGHT = 0.6
 ACCEPT_PRIOR = 0.43
 ACCEPT_INPUTS = ("none", "profile", "research", "both")
+#: The accept score's steps and their weights: heylead-api's ``accept_signal.STEPS``.
+SIGNAL_KEYS = ("posts_crawled", "shared_5", "shared_20", "followers_2000", "open_profile", "third_degree")
+STEPS = {
+    "posts_crawled": 0.30, "shared_5": 0.25, "shared_20": 0.10,
+    "followers_2000": 0.25, "open_profile": 0.15, "third_degree": -0.15,
+}
 
 _BASE = 0.35
 _THIRD_DEGREE = frozenset({"THIRD_DEGREE", "DISTANCE_3", "OUT_OF_NETWORK"})
@@ -57,25 +68,18 @@ def likely_to_accept(profile: Any, analysis: Any = None, research_summary: Any =
     if not has_profile and not has_research:
         return None
 
-    score = _BASE
     posts_val = _num(a.get("posts_crawled"))
     posts = (_num(r.get("total_posts_analyzed")) if posts_val is None else posts_val) or 0.0
-    if posts >= 1:
-        score += 0.30
-
     shared = _num(p.get("shared_connections_count")) or 0
-    if shared >= 20:
-        score += 0.35
-    elif shared >= 5:
-        score += 0.25
-
-    if (_num(p.get("follower_count")) or 0) >= 2000:
-        score += 0.25
-    if p.get("is_open_profile") is True:
-        score += 0.15
-    if str(p.get("network_distance") or "").upper() in _THIRD_DEGREE:
-        score -= 0.15
-
+    met = {
+        "posts_crawled": posts >= 1,
+        "shared_5": shared >= 5,
+        "shared_20": shared >= 20,
+        "followers_2000": (_num(p.get("follower_count")) or 0) >= 2000,
+        "open_profile": p.get("is_open_profile") is True,
+        "third_degree": str(p.get("network_distance") or "").upper() in _THIRD_DEGREE,
+    }
+    score = _BASE + sum(STEPS[k] for k in SIGNAL_KEYS if met[k])
     return round(max(0.0, min(1.0, score)), 4)
 
 def rank(fit_score: Any, accept_score: Any) -> float:
@@ -104,19 +108,26 @@ _ANY_INPUT_SQL = (
     f"json_extract({_SAFE_RES}, '$.total_posts_analyzed') IS NOT NULL)"
 )
 
+_STEP_SQL = {
+    "posts_crawled": f"COALESCE({_POSTS_SQL}, 0) >= 1",
+    "shared_5": f"COALESCE({_SHARED_SQL}, 0) >= 5",
+    "shared_20": f"COALESCE({_SHARED_SQL}, 0) >= 20",
+    "followers_2000": f"COALESCE({_FOLLOWERS_SQL}, 0) >= 2000",
+    "open_profile": _OPEN_SQL,
+    "third_degree": f"UPPER(COALESCE({_DIST_SQL}, '')) IN ({', '.join(repr(d) for d in sorted(_THIRD_DEGREE))})",
+}
+
 ACCEPT_SCORE_SQL = (
     f"CASE WHEN NOT {_ANY_INPUT_SQL} THEN NULL ELSE "
-    f"ROUND(MIN(1.0, MAX(0.0, 0.35 + "
-    f"CASE WHEN COALESCE({_POSTS_SQL}, 0) >= 1 THEN 0.30 ELSE 0.0 END + "
-    f"CASE WHEN COALESCE({_SHARED_SQL}, 0) >= 20 THEN 0.35 WHEN COALESCE({_SHARED_SQL}, 0) >= 5 THEN 0.25 ELSE 0.0 END + "
-    f"CASE WHEN COALESCE({_FOLLOWERS_SQL}, 0) >= 2000 THEN 0.25 ELSE 0.0 END + "
-    f"CASE WHEN {_OPEN_SQL} THEN 0.15 ELSE 0.0 END - "
-    f"CASE WHEN UPPER(COALESCE({_DIST_SQL}, '')) IN ('THIRD_DEGREE', 'DISTANCE_3', 'OUT_OF_NETWORK') THEN 0.15 ELSE 0.0 END)), 4) END"
+    f"ROUND(MIN(1.0, MAX(0.0, {_BASE!r} + "
+    + " + ".join(f"CASE WHEN {_STEP_SQL[k]} THEN {STEPS[k]!r} ELSE 0.0 END" for k in SIGNAL_KEYS)
+    + ")), 4) END"
 )
 
 RANK_SQL = (
     f"(CASE WHEN COALESCE(c.fit_score, 0.0) <= 0.0 THEN 0.0 "
-    f"ELSE ROUND(0.4 * MIN(1.0, COALESCE(c.fit_score, 0.0)) + 0.6 * COALESCE({ACCEPT_SCORE_SQL}, {ACCEPT_PRIOR}), 4) END)"
+    f"ELSE ROUND({FIT_WEIGHT!r} * MIN(1.0, COALESCE(c.fit_score, 0.0)) + "
+    f"{ACCEPT_WEIGHT!r} * COALESCE({ACCEPT_SCORE_SQL}, {ACCEPT_PRIOR!r}), 4) END)"
 )
 
 INVITE_ORDER_SQL = f"{RANK_SQL} DESC, o.created_at ASC, o.rowid ASC, o.id ASC"
