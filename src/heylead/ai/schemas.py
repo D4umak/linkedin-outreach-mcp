@@ -29,6 +29,8 @@ def _obj(properties: dict[str, Any], required: list[str] | None = None) -> dict[
 
 
 _STR = {"type": "string"}
+# One LinkedIn value per item (api #6507): a comma-joined string split "London, England, United Kingdom".
+_STR_LIST = {"type": "array", "items": {"type": "string"}}
 
 
 # An outreach invitation, follow-up DM or reply. `reasoning` is a short plain
@@ -97,12 +99,12 @@ ICP_AGENT_STEP = _obj({
     "reason": _STR,
     "done": {"type": "boolean"},
     "note": _STR,
-    "titles_include": _STR,
-    "titles_exclude": _STR,
-    "locations_include": _STR,
-    "locations_exclude": _STR,
-    "industries_include": _STR,
-    "industries_exclude": _STR,
+    "titles_include": _STR_LIST,
+    "titles_exclude": _STR_LIST,
+    "locations_include": _STR_LIST,
+    "locations_exclude": _STR_LIST,
+    "industries_include": _STR_LIST,
+    "industries_exclude": _STR_LIST,
 })
 
 # Strategist replan — remaining_json is leftover planned_actions (empty = skip_today).

@@ -11,11 +11,11 @@ Tools:
 
 Decisions:
 - keep: persona 1 filters look right for the target
-- revise: change titles, locations, or industries (fill the include/exclude strings)
+- revise: change titles, locations, or industries (fill the include/exclude lists)
 - hold: a human should review (preview is junk, filters contradict the target, or you are unsure)
 - none: you cannot decide
 
-Empty patch strings mean no change. Revise only persona 1. Never create a campaign or outreach.
+Each patch field is a list. Each item is one value exactly as LinkedIn names it: "London, England, United Kingdom" is one location and "Technology, Information and Internet" is one industry, never split them. A filled list replaces that list in full, so repeat the values you keep. An empty list [] means no change. Revise only persona 1. Never create a campaign or outreach.
 Default to keep when the first page looks like the buyer. Default to hold when the preview looks like recruiters, students, or the wrong function.
 Do not name people in your reason."""
 

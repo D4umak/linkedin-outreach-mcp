@@ -7,6 +7,7 @@ The model names a tool or decides; Python runs the tool and appends the result.
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -144,6 +145,16 @@ async def run_agent_loop(
     return _failed("budget", f"no decision in {budget.max_steps} steps", exhausted=True)
 
 
+def _extra_text(value: Any) -> str:
+    """A step's extra as text. A list or object stays JSON (api #6507): ``str(list)`` wrote Python's repr,
+    and a reader that split it on commas cut "London, England, United Kingdom" into three places."""
+    if value is None:
+        return ""
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
 def _parse_step(raw: str, valid_decisions: frozenset[str]) -> dict[str, Any]:
     from .llm import loads_json_object
 
@@ -160,11 +171,7 @@ def _parse_step(raw: str, valid_decisions: frozenset[str]) -> dict[str, Any]:
         done = done.strip().lower() in {"true", "1", "yes"}
     else:
         done = bool(done)
-    extras = {
-        str(key): "" if value is None else str(value)
-        for key, value in data.items()
-        if key not in _CORE_STEP_KEYS
-    }
+    extras = {str(key): _extra_text(value) for key, value in data.items() if key not in _CORE_STEP_KEYS}
     return {
         "action": action,
         # Checked against the set only on a decide step (run_agent_loop).

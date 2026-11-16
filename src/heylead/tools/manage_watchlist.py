@@ -35,7 +35,7 @@ async def run_manage_watchlist(
         action: What to do: 'list', 'add', 'remove', 'pause', 'resume'.
         name: Watchlist name (for 'add').
         watch_type: 'keyword', 'competitor', 'company', 'person', or 'industry' (for 'add').
-        keywords: Comma-separated keywords (for 'add'). E.g., "cold outreach, SDR automation".
+        keywords: Comma-separated keywords (for 'add'). E.g., "cold outreach, outreach automation".
         watchlist_id: Watchlist ID (for 'remove', 'pause', 'resume').
         campaign_id: Optional campaign to link the watchlist to.
 
@@ -59,7 +59,7 @@ async def run_manage_watchlist(
             return (
                 "No watchlists configured yet.\n\n"
                 "Create one with: manage_watchlist action='add' name='My Keywords' "
-                "keywords='cold outreach, SDR automation'\n\n"
+                "keywords='cold outreach, outreach automation'\n\n"
                 "Watchlists are also auto-created when you generate an ICP."
             )
 

@@ -1,0 +1,2376 @@
+{
+  "version": "0.10.519",
+  "default_profile_count": 22,
+  "all_count": 48,
+  "env_for_all": "HEYLEAD_TOOLS=all",
+  "tools": [
+    {
+      "name": "account",
+      "title": "Switch, unlink or connect an account",
+      "reads_only": false,
+      "default": true,
+      "summary": "Switch the active LinkedIn account, unlink it, or connect an email account.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "\"switch\", \"switch_to\", \"unlink\", \"connect_email\" or \"refresh_tier\".",
+          "actions": [
+            "switch",
+            "switch_to",
+            "unlink",
+            "connect_email",
+            "refresh_tier"
+          ]
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "required": false,
+          "description": "The account id (switch_to)."
+        }
+      ]
+    },
+    {
+      "name": "accounts",
+      "title": "List connected LinkedIn accounts",
+      "reads_only": true,
+      "default": true,
+      "summary": "List the LinkedIn accounts connected to this HeyLead. Changes nothing.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"list\" (switching, unlinking and connecting email are the account tool).",
+          "default": "list",
+          "actions": [
+            "list"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "analytics",
+      "title": "Campaign analytics and exports",
+      "reads_only": true,
+      "default": true,
+      "summary": "Campaign analytics — reports, comparisons, and exports.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "What to do: \"report\" — Detailed analytics with outcomes, conversion rates, stale leads \"compare\" — Compare 2+ campaigns side by side \"export\" — Export campaign results as table, CSV, or JSON",
+          "default": "report",
+          "actions": [
+            "report",
+            "compare",
+            "export"
+          ]
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign. Uses active if empty."
+        },
+        {
+          "name": "campaign_ids",
+          "type": "string",
+          "required": false,
+          "description": "Comma-separated IDs (for 'compare'). Compares all if empty."
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false,
+          "description": "Output format for 'export': 'table', 'csv', or 'json'.",
+          "default": "table"
+        }
+      ]
+    },
+    {
+      "name": "answer_inbox",
+      "title": "Answer the LinkedIn inbox",
+      "reads_only": false,
+      "default": true,
+      "summary": "Reply in a LinkedIn conversation, or approve or discard a drafted reply.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "\"reply\", \"approve_draft\" or \"discard_draft\".",
+          "actions": [
+            "reply",
+            "approve_draft",
+            "discard_draft"
+          ]
+        },
+        {
+          "name": "chat_id",
+          "type": "string",
+          "required": false,
+          "description": "Which conversation, or which draft."
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "What to send, or an edited version of the draft."
+        }
+      ]
+    },
+    {
+      "name": "backfill_inbox",
+      "title": "Process unreplied LinkedIn inbox messages",
+      "reads_only": false,
+      "default": false,
+      "summary": "Process unreplied LinkedIn inbox messages through the inbound pipeline.",
+      "params": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Max conversations to scan (default 50).",
+          "default": 50
+        },
+        {
+          "name": "dry_run",
+          "type": "boolean",
+          "required": false,
+          "description": "If True (default), only classify — don't send DMs. Set False to send.",
+          "default": true
+        },
+        {
+          "name": "min_confidence",
+          "type": "number",
+          "required": false,
+          "description": "Only send DMs for signals >= this confidence (0.0-1.0).",
+          "default": 0.0
+        },
+        {
+          "name": "send_only",
+          "type": "boolean",
+          "required": false,
+          "description": "If True, skip inbox scan — process already-classified signals directly. Use after a dry_run to avoid re-scanning.",
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "book_meeting",
+      "title": "Book a meeting on Google Calendar",
+      "reads_only": false,
+      "default": true,
+      "summary": "Book a meeting on your Google Calendar and invite a prospect.",
+      "params": [
+        {
+          "name": "attendee_email",
+          "type": "string",
+          "required": true,
+          "description": "Who to invite — the prospect who replied."
+        },
+        {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "description": "When it starts, ISO 8601, e.g. 2026-09-01T10:00:00."
+        },
+        {
+          "name": "duration_minutes",
+          "type": "integer",
+          "required": false,
+          "description": "How long the meeting runs. Defaults to 30.",
+          "default": 30
+        },
+        {
+          "name": "summary",
+          "type": "string",
+          "required": false,
+          "description": "Event title. Defaults to naming the attendee."
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "description": "Optional agenda or notes included in the invitation."
+        }
+      ]
+    },
+    {
+      "name": "brand_progress",
+      "title": "Read the personal-brand plan and progress",
+      "reads_only": true,
+      "default": false,
+      "summary": "Read the personal-brand picture: the analysis, or progress against the plan.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"analyze\" or \"progress\".",
+          "default": "analyze",
+          "actions": [
+            "analyze",
+            "progress"
+          ]
+        },
+        {
+          "name": "focus",
+          "type": "string",
+          "required": false,
+          "description": "Which pillar to look at."
+        }
+      ]
+    },
+    {
+      "name": "brand_strategy",
+      "title": "Plan and run the personal-brand strategy",
+      "reads_only": false,
+      "default": false,
+      "summary": "Plan the personal-brand work, run it, or change the LinkedIn profile.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "\"plan\", \"execute\", \"upload_photo\", \"upload_cover\", \"set_link\", \"set_headline\", \"set_summary\", \"set_photo_library\" or \"set_engagement\".",
+          "actions": [
+            "plan",
+            "execute",
+            "upload_photo",
+            "upload_cover",
+            "set_link",
+            "set_headline",
+            "set_summary",
+            "set_photo_library",
+            "set_engagement"
+          ]
+        },
+        {
+          "name": "focus",
+          "type": "string",
+          "required": false,
+          "description": "Which pillar to work on."
+        },
+        {
+          "name": "photo",
+          "type": "string",
+          "required": false,
+          "description": "A file path or base64 image."
+        }
+      ]
+    },
+    {
+      "name": "campaign",
+      "title": "Launch, pause or stop a campaign",
+      "reads_only": false,
+      "default": true,
+      "summary": "Launch, pause, resume, archive, delete or emergency-stop a campaign.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "\"launch\", \"pause\", \"resume\", \"archive\", \"delete\", \"emergency_stop\", \"retry_failed\", \"repair_queue\" or \"clear_coordinator_hold\".",
+          "actions": [
+            "launch",
+            "pause",
+            "resume",
+            "archive",
+            "delete",
+            "emergency_stop",
+            "retry_failed",
+            "repair_queue",
+            "clear_coordinator_hold"
+          ]
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign. Uses the active one if empty."
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "required": false,
+          "description": "Required by the actions that destroy work.",
+          "default": false
+        },
+        {
+          "name": "icp_hold_ok",
+          "type": "boolean",
+          "required": false,
+          "description": "launch and resume only: True after the user chose \"launch anyway\" on a target the ICP research agent held.",
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "campaign_status",
+      "title": "Read a campaign's progress and history",
+      "reads_only": true,
+      "default": true,
+      "summary": "Watch a campaign run, show its plan, or read its status history. Changes nothing.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"monitor\" (live progress; a draft is started with campaign(action='launch')), \"plan\" (what happens after launch, step by step: finding, warm-up, invitations, opening message, follow-ups, replies, leads) or \"status_history\".",
+          "default": "monitor",
+          "actions": [
+            "monitor",
+            "launch",
+            "plan",
+            "status_history"
+          ]
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign. Uses the active one if empty."
+        }
+      ]
+    },
+    {
+      "name": "check_replies",
+      "title": "Check LinkedIn replies and inbound invitations",
+      "reads_only": false,
+      "default": true,
+      "summary": "Read new LinkedIn replies and record what they mean.",
+      "params": []
+    },
+    {
+      "name": "contacts",
+      "title": "Search and read contacts",
+      "reads_only": true,
+      "default": true,
+      "summary": "Search, browse and read your contacts, and export them. Changes nothing.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"list\", \"search\", \"view\", \"stats\", \"export\", \"linkedin_search\" or \"my_connections\".",
+          "default": "list",
+          "actions": [
+            "list",
+            "search",
+            "view",
+            "stats",
+            "export",
+            "linkedin_search",
+            "my_connections"
+          ]
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": false,
+          "description": "Search text for \"search\", \"linkedin_search\" and \"my_connections\". For \"linkedin_search\" the query is passed to LinkedIn as KEYWORDS, matched literally — a company name, a job title, a person's name, or a combination such as 'Acme Corp CTO' or 'Jane Doe'. A natural-language question ('who is the CTO of Acme?') is sent through unchanged and usually comes back empty, so prefer keywords. Nothing is filtered out locally. An empty result and a failed search are reported in different words, so a \"no matches\" line means LinkedIn really returned nobody rather than \"the search broke\". Results are capped at 25 per call because every result costs a profile fetch and a LinkedIn read."
+        },
+        {
+          "name": "contact_id",
+          "type": "string",
+          "required": false,
+          "description": "Which contact (view)."
+        },
+        {
+          "name": "lifecycle_stage",
+          "type": "string",
+          "required": false,
+          "description": "Filter by stage."
+        },
+        {
+          "name": "min_fit_score",
+          "type": "number",
+          "required": false,
+          "description": "Only those scoring at least this.",
+          "default": 0.0
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "How many.",
+          "default": 25
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false,
+          "description": "\"table\", \"csv\" or \"json\" (export).",
+          "default": "table"
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Filter by campaign."
+        },
+        {
+          "name": "connected_since",
+          "type": "string",
+          "required": false,
+          "description": "Only those connected on or after this date."
+        },
+        {
+          "name": "connected_before",
+          "type": "string",
+          "required": false,
+          "description": "Only those connected before this date."
+        }
+      ]
+    },
+    {
+      "name": "create_campaign",
+      "title": "Create a LinkedIn outreach campaign (draft)",
+      "reads_only": false,
+      "default": true,
+      "summary": "Create a LinkedIn outreach campaign from a natural language description.",
+      "params": [
+        {
+          "name": "target_description",
+          "type": "string",
+          "required": true,
+          "description": "Who to target (e.g., \"CTOs at fintech startups\", \"freelance UX designers in London\", \"yoga studio owners in California\")"
+        },
+        {
+          "name": "campaign_name",
+          "type": "string",
+          "required": false,
+          "description": "Optional name for the campaign."
+        },
+        {
+          "name": "icp_id",
+          "type": "string",
+          "required": false,
+          "description": "Optional ID of a saved ICP from generate_icp. If provided, uses the saved ICP's enriched LinkedIn codes for precise targeting instead of generating a new one."
+        },
+        {
+          "name": "company_context",
+          "type": "string",
+          "required": false,
+          "description": "Optional. Your website URL or 1-2 sentences about your product/company. Copied into project_brief when project_brief is omitted."
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "Always autopilot (copilot mode was removed). Whether opening DMs, follow-ups and answers to replies wait for a person is the WORKSPACE's approval mode, not this: a hosted workspace that never chose sends them without review; scheduler(action='approval_mode', mode='require_approval') holds them (inspect(action='waiting') lists what waits).",
+          "default": "autopilot"
+        },
+        {
+          "name": "company_url",
+          "type": "string",
+          "required": false,
+          "description": "Optional LinkedIn company URL for account-based targeting. Searches for employees at that specific company matching the ICP. Example: \"https://www.linkedin.com/company/google\""
+        },
+        {
+          "name": "voice_mode",
+          "type": "string",
+          "required": false,
+          "description": "\"text_only\". Messages are text.",
+          "default": "text_only"
+        },
+        {
+          "name": "connections_only",
+          "type": "string",
+          "required": false,
+          "description": "\"on\" to create a DM-only campaign targeting existing LinkedIn connections. Skips invitations and warm-up — sends DMs directly to people you're already connected with. Use when user says \"existing connections\", \"DM my network\", \"message my connections\"."
+        },
+        {
+          "name": "exclude_connections",
+          "type": "string",
+          "required": false,
+          "description": "ON BY DEFAULT for a new campaign: nobody who was already a 1st-degree connection before this campaign started is reached — refused at enrolment and skipped at send time rather than DMed. People who accept this campaign's own invitation still get the opener. Pass \"off\" to include existing connections (or turn it off later in the campaign settings). Defaults off only for a connections_only campaign. Use \"off\" when the user says \"include my existing connections\"; the old \"on\" is still accepted for \"don't message my existing connections\", \"cold only\", \"skip people I already know\". Cannot be combined with connections_only, which is its exact inverse."
+        },
+        {
+          "name": "project_brief",
+          "type": "string",
+          "required": false,
+          "description": "Optional. Full project paste the model sees, in the goal's words. sell: what you offer and who it is for. job_search: the role, the kind of company, what you bring. hire: the role, who fits it, what it offers. partner: what you want from a partner, what you bring. buy: what you need, by when and how much, what a vendor must confirm. research: what you research, who you want to hear from, what you ask. Required before launch, resume, or auto-send."
+        },
+        {
+          "name": "campaign_type",
+          "type": "string",
+          "required": false,
+          "description": "Prompt family: \"outbound\" (default) or \"job_search\". job_search writes a job-search campaign: the invitation note and the first DM may name the recipient's company and the role, use one credible proof point at most and never list a CV. InMail is not routed by this switch. Pair with connections_only=\"on\" to write to people the sender is already connected to."
+        },
+        {
+          "name": "people",
+          "type": "string",
+          "required": false,
+          "description": "LinkedIn profile URLs or public identifiers, comma or newline separated (e.g. \"linkedin.com/in/jane-doe, linkedin.com/in/john-doe\"). The campaign is seeded from exactly these people: no LinkedIn search runs, the goal <-> ICP audit is skipped (the audience is stated, not inferred), a low ICP score does not drop anybody, and discovery stays off so nothing tops the queue up with strangers. Use it whenever the user names who to reach. Cannot be combined with connections_only."
+        },
+        {
+          "name": "force",
+          "type": "boolean",
+          "required": false,
+          "description": "True to create the campaign even when the goal <-> ICP audit returns `mismatch` (the ICP holds no plausible buyer for the goal). Leave False; a `partial` verdict never blocks, it only warns.",
+          "default": false
+        },
+        {
+          "name": "goal",
+          "type": "string",
+          "required": false,
+          "description": "What the campaign is for: \"sell\" (default), \"job_search\", \"hire\", \"partner\", \"buy\" or \"research\". It sets campaign_type and campaign_intent, picks whose profile the ICP describes, and picks the fit question the goal <-> ICP audit asks. hire, partner and research run on your project_brief until their message sets exist."
+        },
+        {
+          "name": "message_language",
+          "type": "string",
+          "required": false,
+          "description": "The language every message to a prospect is written in: \"en\", \"prospect\" (their latest message, else their LinkedIn profile's language, else English) or a code: uk, de, fr, es, pl, pt, it. Never set this without asking the user. Empty leaves it unset: messages go out in English, and launch asks once when the brief is in another language."
+        }
+      ]
+    },
+    {
+      "name": "create_post",
+      "title": "Publish a post to LinkedIn",
+      "reads_only": false,
+      "default": false,
+      "summary": "Generate and publish a voice-matched post to LinkedIn.",
+      "params": [
+        {
+          "name": "topic",
+          "type": "string",
+          "required": false,
+          "description": "What to post about (e.g., \"share a tip about cold outreach\", \"comment on AI in sales\", \"share a success story\")."
+        },
+        {
+          "name": "tone",
+          "type": "string",
+          "required": false,
+          "description": "Post tone: \"professional\", \"casual\", \"thought-leader\", \"storytelling\".",
+          "default": "professional"
+        },
+        {
+          "name": "platforms",
+          "type": "string",
+          "required": false,
+          "description": "\"linkedin\" (the only one).",
+          "default": "linkedin"
+        },
+        {
+          "name": "image",
+          "type": "string",
+          "required": false,
+          "description": "Path to a photo to attach. png, jpg, gif or webp, up to 10MB."
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "The post's exact words, 30 to 3,000 characters. Nothing is rewritten; the draft is checked against them before it is published. `topic` is then only its label (default: first line)."
+        },
+        {
+          "name": "video",
+          "type": "string",
+          "required": false,
+          "description": "Path to a short video to attach. mp4 only, up to 25MB. Needs `text` and a cloud account, and cannot be combined with `image`. The draft is read back, and it is published only when the words and the video match what you gave; if your workspace asks for approval, it is held as a draft instead."
+        }
+      ]
+    },
+    {
+      "name": "crm_sync",
+      "title": "Sync contacts and deals to HubSpot",
+      "reads_only": false,
+      "default": false,
+      "summary": "Sync campaign contacts and deals with HubSpot CRM, both ways.",
+      "params": [
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Campaign to sync. Uses the most recent if empty."
+        },
+        {
+          "name": "filter",
+          "type": "string",
+          "required": false,
+          "description": "Which contacts to sync: \"won\" (default), \"hot_leads\", or \"all\".",
+          "default": "won"
+        },
+        {
+          "name": "hubspot_api_key",
+          "type": "string",
+          "required": false,
+          "description": "Optional — your HubSpot Private App access token. Only needed on first use; saved for future syncs."
+        },
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"push\" (default) sends contacts and deals to HubSpot. \"pull\" reads deals back for contacts already sent: a closed-won deal records its amount and marks the outreach won. A pull never un-wins an outreach.",
+          "default": "push",
+          "actions": [
+            "push",
+            "pull"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "edit_campaign",
+      "title": "Edit campaign settings",
+      "reads_only": false,
+      "default": true,
+      "summary": "Change one running or drafted campaign's settings.",
+      "params": [
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign to edit. Edits the first active campaign if empty."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "New campaign name. Leave empty to keep current name."
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "required": false,
+          "description": "Only \"autopilot\" supported (copilot mode was removed). Whether messages wait for a person is the workspace's approval mode: scheduler(action=\"approval_mode\")."
+        },
+        {
+          "name": "booking_link",
+          "type": "string",
+          "required": false,
+          "description": "Calendar/booking URL (e.g., \"https://cal.com/you/15min\"). Used in reply_to_prospect() for positive replies to suggest meetings."
+        },
+        {
+          "name": "offerings",
+          "type": "string",
+          "required": false,
+          "description": "What you offer (products, services, value props). Used in follow-up messages."
+        },
+        {
+          "name": "case_studies",
+          "type": "string",
+          "required": false,
+          "description": "Brief case studies or success stories. Used for social proof in messages."
+        },
+        {
+          "name": "social_proofs",
+          "type": "string",
+          "required": false,
+          "description": "Social proof (logos, metrics, testimonials). Used in follow-up messages."
+        },
+        {
+          "name": "campaign_preferences",
+          "type": "string",
+          "required": false,
+          "description": "Custom messaging preferences (tone, topics to avoid, etc.)."
+        },
+        {
+          "name": "campaign_intent",
+          "type": "string",
+          "required": false,
+          "description": "Message stance: \"sell\", \"buy\", \"partner\", \"recruit\" or \"research\"."
+        },
+        {
+          "name": "campaign_type",
+          "type": "string",
+          "required": false,
+          "description": "Prompt family: \"outbound\" (default) or \"job_search\". job_search replaces the intent-specific invitation note and first DM with ones that may name the company and the role, use one credible proof point at most and never list a CV. InMail is not routed by this switch, and campaign_intent still selects the system prompt. Empty keeps the current value."
+        },
+        {
+          "name": "goal",
+          "type": "string",
+          "required": false,
+          "description": "What the campaign is for: \"sell\", \"job_search\", \"hire\", \"partner\", \"buy\" or \"research\". Rewrites campaign_type and campaign_intent to match. Empty keeps the current value."
+        },
+        {
+          "name": "project_brief",
+          "type": "string",
+          "required": false,
+          "description": "Full project paste the model sees. Required before launch, resume, or auto-send."
+        },
+        {
+          "name": "offer_outcome",
+          "type": "string",
+          "required": false,
+          "description": "The Offer card's outcome: what changes for the reader, in their words. Editing it unconfirms the card."
+        },
+        {
+          "name": "offer_how",
+          "type": "string",
+          "required": false,
+          "description": "The Offer card's how: what the sender does, said only in a reply. Editing it unconfirms the card."
+        },
+        {
+          "name": "offer_proof",
+          "type": "string",
+          "required": false,
+          "description": "The Offer card's proof, used at most once per thread. Editing it unconfirms the card."
+        },
+        {
+          "name": "offer_ask",
+          "type": "string",
+          "required": false,
+          "description": "The Offer card's one question. Editing it unconfirms the card."
+        },
+        {
+          "name": "offer_confirm",
+          "type": "string",
+          "required": false,
+          "description": "\"on\" confirms the Offer card; first messages resume."
+        },
+        {
+          "name": "product",
+          "type": "string",
+          "required": false,
+          "description": "Optional structured fact: product / what you buy or sell."
+        },
+        {
+          "name": "go_live",
+          "type": "string",
+          "required": false,
+          "description": "Optional structured fact: go-live date."
+        },
+        {
+          "name": "volume",
+          "type": "string",
+          "required": false,
+          "description": "Optional structured fact: volume model."
+        },
+        {
+          "name": "must_confirm",
+          "type": "string",
+          "required": false,
+          "description": "Optional comma-separated questions a vendor must confirm."
+        },
+        {
+          "name": "voice_mode",
+          "type": "string",
+          "required": false,
+          "description": "\"text_only\". Messages are text. Leave empty to keep current value."
+        },
+        {
+          "name": "voice_noise",
+          "type": "string",
+          "required": false,
+          "description": ""
+        },
+        {
+          "name": "voice_humanize",
+          "type": "string",
+          "required": false,
+          "description": ""
+        },
+        {
+          "name": "enable_profile_views",
+          "type": "string",
+          "required": false,
+          "description": "View prospect profiles before following: \"on\" or \"off\"."
+        },
+        {
+          "name": "enable_follows",
+          "type": "string",
+          "required": false,
+          "description": "Follow prospects before inviting: \"on\" or \"off\"."
+        },
+        {
+          "name": "enable_endorsements",
+          "type": "string",
+          "required": false,
+          "description": "Endorse skills before inviting: \"on\" or \"off\"."
+        },
+        {
+          "name": "enable_engagements",
+          "type": "string",
+          "required": false,
+          "description": "Comment/react on posts before inviting: \"on\" or \"off\"."
+        },
+        {
+          "name": "enable_followups",
+          "type": "string",
+          "required": false,
+          "description": "Send follow-up DMs after connection: \"on\" or \"off\"."
+        },
+        {
+          "name": "enable_auto_replies",
+          "type": "string",
+          "required": false,
+          "description": "\"on\" or \"off\". On: HeyLead answers replies itself, or holds each answer in Approvals when the workspace reviews every message. Off: HeyLead answers no reply and drafts none; every reply waits for you in Needs attention, and no booking link or calendar invite goes out. To read answers before they go, keep it on with review mode, not off."
+        },
+        {
+          "name": "enable_invitations",
+          "type": "string",
+          "required": false,
+          "description": "Send connection invitations: \"on\" or \"off\". When off, campaign only DMs existing connections (no invitations sent)."
+        },
+        {
+          "name": "enable_discovery",
+          "type": "string",
+          "required": false,
+          "description": "Auto-find and enrol new prospects: \"on\" or \"off\"."
+        },
+        {
+          "name": "exclude_connections",
+          "type": "string",
+          "required": false,
+          "description": "\"on\" to never message anyone who was already a 1st-degree connection before this campaign started — they are refused at enrolment and skipped at send time instead of being DMed. People who accept this campaign's own invitation still get the opener. Turning it on turns connections_only off."
+        },
+        {
+          "name": "connections_only",
+          "type": "string",
+          "required": false,
+          "description": "\"on\" to target only your existing 1st-degree connections (DM-only, no invitations). Turning it on turns exclude_connections off. Turn off for curated campaigns with a fixed, hand-picked list."
+        },
+        {
+          "name": "exclude_competitors",
+          "type": "string",
+          "required": false,
+          "description": "\"on\" to never first-touch people who work at competing companies. Default on. Empty list excludes nobody until research or competitor_companies names them."
+        },
+        {
+          "name": "competitor_companies",
+          "type": "string",
+          "required": false,
+          "description": "Comma-separated employer names to skip."
+        },
+        {
+          "name": "enable_reply_agent",
+          "type": "string",
+          "required": false,
+          "description": "Reply exception agent: \"on\" (act), \"off\", or \"observe\". Empty keeps the current value. Unset defaults to act."
+        },
+        {
+          "name": "enable_strategist_replan_agent",
+          "type": "string",
+          "required": false,
+          "description": "Strategist replan: \"on\", \"off\", or \"observe\". Empty keeps the current value."
+        },
+        {
+          "name": "enable_hot_lead_closer",
+          "type": "string",
+          "required": false,
+          "description": "Hot-lead closer: \"on\", \"off\", or \"observe\". Empty keeps the current value. Unset defaults to observe. It never sends a calendar invite from this computer: \"on\" notes a call that is ready for you to book."
+        },
+        {
+          "name": "enable_coordinator_agent",
+          "type": "string",
+          "required": false,
+          "description": "Coordinator digest/hold: \"on\", \"off\", or \"observe\". Empty keeps the current value."
+        },
+        {
+          "name": "engagement_mode",
+          "type": "string",
+          "required": false,
+          "description": "Engagement style: \"auto\" (30% react / 70% comment), \"comment_only\", or \"react_only\"."
+        },
+        {
+          "name": "max_followups",
+          "type": "integer",
+          "required": false,
+          "description": "Max follow-up messages (1-5). 0 to keep current.",
+          "default": 0
+        },
+        {
+          "name": "weekly_meeting_target",
+          "type": "integer",
+          "required": false,
+          "description": "Meetings this campaign should book per week. The daily report reads it as the Key Result and says whether the campaign is on track. 0 means no goal this week; -1 keeps current.",
+          "default": -1
+        },
+        {
+          "name": "followup_delay_days",
+          "type": "string",
+          "required": false,
+          "description": "Custom day intervals as comma-separated list (e.g., \"1,3,7,14\"). Leave empty to keep current."
+        },
+        {
+          "name": "invite_note",
+          "type": "string",
+          "required": false,
+          "description": "Invitations carry a note: \"on\" (default) or \"off\". Off sends the bare invitation; the first words are the DM a working day after they accept."
+        },
+        {
+          "name": "withdraw_stale_invites",
+          "type": "string",
+          "required": false,
+          "description": "Withdraw an unanswered invitation on LinkedIn after stale_invite_days: \"on\" (default) or \"off\"."
+        },
+        {
+          "name": "stale_invite_days",
+          "type": "integer",
+          "required": false,
+          "description": "Days before withdrawing stale invites (7-60). 0 to keep current.",
+          "default": 0
+        },
+        {
+          "name": "inmail_fallback",
+          "type": "string",
+          "required": false,
+          "description": "Escalate quiet invitations with one InMail: \"on\" or \"off\". Free tier sends only to Open Profile members (zero credits)."
+        },
+        {
+          "name": "inmail_fallback_days",
+          "type": "integer",
+          "required": false,
+          "description": "Quiet days before the InMail (1-60). 0 to keep current.",
+          "default": 0
+        },
+        {
+          "name": "inmail_first_touch",
+          "type": "string",
+          "required": false,
+          "description": "InMail as first touch: \"on\" or \"off\". Unset follows inmail_fallback."
+        },
+        {
+          "name": "send_in_business_hours",
+          "type": "string",
+          "required": false,
+          "description": "Send only in business hours: \"on\" or \"off\". On by default (weekdays 08:00-22:00 in your own timezone, or London when it is unknown, unless the workspace set its own window)."
+        },
+        {
+          "name": "active_days",
+          "type": "string",
+          "required": false,
+          "description": "Active send days as comma-separated numbers (0=Mon, 6=Sun). E.g., \"0,1,2,3,4\" for weekdays. Leave empty to keep current."
+        },
+        {
+          "name": "message_language",
+          "type": "string",
+          "required": false,
+          "description": "The language every message to a prospect is written in: \"en\", \"prospect\" (their latest message, else their LinkedIn profile's language, else English) or a code: uk, de, fr, es, pl, pt, it. Never set this without asking the user. Any explicit value, \"en\" included, answers launch's language question. Empty keeps the current value."
+        },
+        {
+          "name": "booking_link_page_ok",
+          "type": "boolean",
+          "required": false,
+          "description": "Explicitly keep a website page as the booking link.",
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "engage_prospect",
+      "title": "Comment, react, follow or endorse on LinkedIn",
+      "reads_only": false,
+      "default": false,
+      "summary": "Comment on, react to, follow, or endorse a prospect on LinkedIn to build trust.",
+      "params": [
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign to engage from. Uses active campaign if empty."
+        },
+        {
+          "name": "outreach_id",
+          "type": "string",
+          "required": false,
+          "description": "Specific outreach to engage with. Auto-picks next if empty."
+        },
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"auto\" (comment if post has text, react otherwise), \"comment\" (always comment), \"react\" or \"like\" (just like the post), \"view\" (view their LinkedIn profile — lightest warm-up signal), \"follow\" (follow their LinkedIn profile as a warm-up signal), \"endorse\" (endorse their skills — highest visibility warm-up), \"reply_comment\" (reply to prospect's response on your comment thread).",
+          "default": "auto",
+          "actions": [
+            "auto",
+            "comment",
+            "react",
+            "like",
+            "view",
+            "follow",
+            "endorse",
+            "reply_comment"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "generate_and_send",
+      "title": "Generate and send one LinkedIn message",
+      "reads_only": false,
+      "default": false,
+      "summary": "Generate a personalized LinkedIn message and send it (or queue for review).",
+      "params": [
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign to send from. Uses active campaign if empty."
+        }
+      ]
+    },
+    {
+      "name": "generate_icp",
+      "title": "Generate an ideal customer or candidate profile",
+      "reads_only": false,
+      "default": true,
+      "summary": "Generate a rich Ideal Customer Profile with buyer personas.",
+      "params": [
+        {
+          "name": "target_description",
+          "type": "string",
+          "required": true,
+          "description": "Who to target (e.g., \"CTOs at fintech startups\", \"freelance UX designers in London\", \"yoga studio owners in California\")"
+        },
+        {
+          "name": "company_context",
+          "type": "string",
+          "required": false,
+          "description": "Optional URL or text about your company/product. Providing this makes the ICP more precise and evidence-backed."
+        },
+        {
+          "name": "focus_query",
+          "type": "string",
+          "required": false,
+          "description": "Optional focus (e.g., \"enterprise segment only\", \"focus on pain points around compliance\")"
+        },
+        {
+          "name": "decision_makers_only",
+          "type": "boolean",
+          "required": false,
+          "description": "Keep every persona's seniority to people who hold budget authority — owner, cxo, vp, director. Default True. Pass False only when the target really is individual contributors (developers, designers, analysts); the ICP then keeps whatever levels the description implies. Applies only to sell, partner and buy; managers hire, so a job search keeps them.",
+          "default": true
+        },
+        {
+          "name": "goal",
+          "type": "string",
+          "required": false,
+          "description": "What the campaign is for, which decides whose profile this is: \"sell\" (customers, the default), \"job_search\" (the people who hire for or refer into the role), \"hire\" (candidates), \"partner\" (who can sign a partnership or invest), \"buy\" (vendors), \"research\" (participants). Always pass it; a job search with goal=\"sell\" produces peers, not hiring managers.",
+          "default": "sell"
+        }
+      ]
+    },
+    {
+      "name": "icp",
+      "title": "Preview or audit a saved ICP",
+      "reads_only": true,
+      "default": false,
+      "summary": "Preview a saved ICP against LinkedIn, or audit it against a campaign goal, without creating anything.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"preview\" shows matched profiles, the exact filters sent to LinkedIn with their resolved code names, a per-filter contribution readout, and the fit scores. \"goal_match\" runs no search at all: it asks whether the ICP's personas are the people who decide for the campaign's goal: who holds budget for a sale, who hires for a job search, who would take the role for hiring, and so on. A sale is grounded in the shipped sales-methodology knowledge base. It returns match / partial / mismatch with the coverage and concrete fixes.",
+          "default": "preview",
+          "actions": [
+            "preview",
+            "goal_match"
+          ]
+        },
+        {
+          "name": "icp_id",
+          "type": "string",
+          "required": false,
+          "description": "ID of a saved ICP from generate_icp (a truncated id works). Leave empty to list your saved ICPs."
+        },
+        {
+          "name": "persona",
+          "type": "integer",
+          "required": false,
+          "description": "Which persona of the ICP to search with, 1-based (default 1). An ICP usually holds 2-4; each has its own filters.",
+          "default": 1
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "How many matched profiles to list, 1-50 (default 10). The search itself always fetches one full page regardless.",
+          "default": 10
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "goal_match only — take the goal and the offer from this campaign's config/context instead of typing them."
+        },
+        {
+          "name": "target_description",
+          "type": "string",
+          "required": false,
+          "description": "goal_match only — the goal to audit against when there is no campaign yet. Falls back to the ICP's own target."
+        },
+        {
+          "name": "goal",
+          "type": "string",
+          "required": false,
+          "description": "goal_match only: which question to ask (sell, job_search, hire, partner, buy, research). Read from the campaign when campaign_id is given."
+        }
+      ]
+    },
+    {
+      "name": "import_prospects",
+      "title": "Import prospects from CSV or XLSX",
+      "reads_only": false,
+      "default": false,
+      "summary": "Import prospects from a CSV/XLSX file into a campaign.",
+      "params": [
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Campaign to import into. Leave empty for the most recent."
+        },
+        {
+          "name": "csv_data",
+          "type": "string",
+          "required": false,
+          "description": "CSV text with headers. Only use for a handful of rows — prefer file_path, which has no size limit. Ignored if file_path is given."
+        },
+        {
+          "name": "linkedin_enrich",
+          "type": "boolean",
+          "required": false,
+          "description": "If true, fetch full LinkedIn profiles for imported prospects (slower but better personalization). Default: false.",
+          "default": false
+        },
+        {
+          "name": "file_path",
+          "type": "string",
+          "required": false,
+          "description": "Path to a .csv or .xlsx file on disk. Preferred over csv_data — a large lead list must never be pasted through this argument, since anything that does not fit is silently lost."
+        },
+        {
+          "name": "sheet",
+          "type": "string",
+          "required": false,
+          "description": "Worksheet name for .xlsx files. Defaults to the first sheet."
+        },
+        {
+          "name": "dry_run",
+          "type": "boolean",
+          "required": false,
+          "description": "If true, report the full per-row disposition without creating any contacts or outreaches and without fetching any LinkedIn profiles — linkedin_enrich is not run. Your own connection list is still read, so the preview matches the real import. Default: false.",
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "inbox",
+      "title": "Read the LinkedIn inbox",
+      "reads_only": true,
+      "default": true,
+      "summary": "Read any conversation in your LinkedIn inbox, and the drafted replies.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"list\", \"read\", \"open_file\" (save the files a person sent, to read them) or \"comment_drafts\".",
+          "default": "list",
+          "actions": [
+            "list",
+            "read",
+            "open_file",
+            "comment_drafts"
+          ]
+        },
+        {
+          "name": "chat_id",
+          "type": "string",
+          "required": false,
+          "description": "Which conversation."
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Find the conversation by the person's name."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "How many to show.",
+          "default": 30
+        }
+      ]
+    },
+    {
+      "name": "inspect",
+      "title": "Inspect what the outreach agents decided",
+      "reads_only": true,
+      "default": false,
+      "summary": "Read-only digest of what the in-process agents decided — never writes.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "What to show: \"agents\" — one-screen digest of holds, replans, closer, skips, jobs (default) \"holds\" — people held for you (the hold subset of \"waiting\") and coordinator campaign holds \"replans\" — today's strategist_replan_decision rows \"closer\" — today's hot_lead_closer_decision rows \"skips\" — recent reply skips (hard gates, cap, dedup, agent skip) \"jobs\" — pending scheduler jobs and recent gated-job refusals \"commons\" — digest, beats (including product), live notes, coordinator hold, stale liveness \"journal\" — hosted agent diary (cloud workers). Self-hosted: use the other actions. \"waiting\" — who is waiting on you (Needs attention's people), then messages held for your approval (hosted) \"autonomy\" — effective agent settings and independent sending/approval gates; grants no authority",
+          "default": "agents",
+          "actions": [
+            "agents",
+            "holds",
+            "waiting",
+            "replans",
+            "closer",
+            "skips",
+            "jobs",
+            "commons",
+            "journal",
+            "autonomy"
+          ]
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Optional campaign filter (full id or prefix)."
+        },
+        {
+          "name": "outreach_id",
+          "type": "string",
+          "required": false,
+          "description": "Optional outreach filter (full id or prefix)."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Max rows per slice, 1-100 (default 20).",
+          "default": 20
+        }
+      ]
+    },
+    {
+      "name": "knowledge",
+      "title": "Read what HeyLead knows about your offer",
+      "reads_only": true,
+      "default": false,
+      "summary": "List or search what HeyLead knows about your offer. Changes nothing.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"list\" or \"search\".",
+          "default": "list",
+          "actions": [
+            "list",
+            "search"
+          ]
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "required": false,
+          "description": "\"all\" or a campaign's scope.",
+          "default": "all"
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign."
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": false,
+          "description": "What to search for."
+        },
+        {
+          "name": "kinds",
+          "type": "string",
+          "required": false,
+          "description": "Restrict to these kinds of entry."
+        },
+        {
+          "name": "top_k",
+          "type": "integer",
+          "required": false,
+          "description": "How many results.",
+          "default": 6
+        }
+      ]
+    },
+    {
+      "name": "manage_watchlist",
+      "title": "Manage signal keyword watchlists",
+      "reads_only": false,
+      "default": false,
+      "summary": "Add, remove, and list signal keyword watchlists.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "What to do: 'list', 'add', 'remove', 'pause', 'resume'.",
+          "default": "list",
+          "actions": [
+            "list",
+            "add",
+            "remove",
+            "pause",
+            "resume"
+          ]
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Watchlist name (for 'add')."
+        },
+        {
+          "name": "watch_type",
+          "type": "string",
+          "required": false,
+          "description": "'keyword', 'competitor', 'company', 'person', or 'industry' (for 'add').",
+          "default": "keyword"
+        },
+        {
+          "name": "keywords",
+          "type": "string",
+          "required": false,
+          "description": "Comma-separated keywords (for 'add'). E.g., \"cold outreach, outreach automation\"."
+        },
+        {
+          "name": "watchlist_id",
+          "type": "string",
+          "required": false,
+          "description": "Watchlist ID (for 'remove', 'pause', 'resume')."
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Optional campaign to link the watchlist to."
+        }
+      ]
+    },
+    {
+      "name": "network",
+      "title": "Read the shared network pool",
+      "reads_only": true,
+      "default": false,
+      "summary": "Network Intelligence — read a reciprocal pool of members' connected accounts.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "What to read: \"status\" — Pool health, member accounts, your participation \"contact\" — Members only: get email/phone via a 1st-degree connected pool account \"search\" — Members only: distributed search across pool (merged, deduplicated) \"reach\" — Members only: show which pool accounts can reach a prospect \"intros\" — Members only: find warm introduction paths to a prospect \"insights\" — Members only: query aggregated message insights (objections, trends, patterns) \"trends\" — Members only: industry trend analysis from cross-account conversations \"patterns\" — Members only: objection and response patterns with timing data Joining and refreshing are update_network: \"opt_in\" — Join the network pool (share your connections; this is what opens the members-only actions) \"opt_out\" — Leave the network pool (also ends your access to it) \"enrich\" — Members only: smart profile lookup via closest-connected pool account \"parallel\" — Members only: enrich up to 100 profiles in parallel across pool",
+          "default": "status",
+          "actions": [
+            "status",
+            "contact",
+            "search",
+            "reach",
+            "intros",
+            "insights",
+            "trends",
+            "patterns",
+            "opt_in",
+            "opt_out",
+            "enrich",
+            "parallel"
+          ]
+        },
+        {
+          "name": "linkedin_id",
+          "type": "string",
+          "required": false,
+          "description": "Target prospect's LinkedIn provider_id (contact, reach, intros)."
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": false,
+          "description": "Search keywords (search)."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "description": "Job title filter (search)."
+        },
+        {
+          "name": "insight_type",
+          "type": "string",
+          "required": false,
+          "description": "Which kind of insight."
+        },
+        {
+          "name": "segment",
+          "type": "string",
+          "required": false,
+          "description": "Which segment."
+        },
+        {
+          "name": "min_confidence",
+          "type": "number",
+          "required": false,
+          "description": "Only results at least this confident.",
+          "default": 0.0
+        }
+      ]
+    },
+    {
+      "name": "organization",
+      "title": "List or switch HeyLead workspaces",
+      "reads_only": false,
+      "default": false,
+      "summary": "List, switch, or manage hosted HeyLead organizations.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "list | switch | members | invite | remove_member | create",
+          "default": "list",
+          "actions": [
+            "list",
+            "switch",
+            "members",
+            "invite",
+            "remove_member",
+            "create"
+          ]
+        },
+        {
+          "name": "org_id",
+          "type": "string",
+          "required": false,
+          "description": "Organization id (required for switch; optional if already switched)."
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "required": false,
+          "description": "Invitee email (invite), or the new org name (create)."
+        },
+        {
+          "name": "role",
+          "type": "string",
+          "required": false,
+          "description": "editor or viewer (invite).",
+          "default": "editor"
+        },
+        {
+          "name": "user_id",
+          "type": "string",
+          "required": false,
+          "description": "Member to remove (remove_member)."
+        }
+      ]
+    },
+    {
+      "name": "partner",
+      "title": "Track a partner, vendor or investor follow-up",
+      "reads_only": false,
+      "default": false,
+      "summary": "Record a partner, vendor or investor follow-up, or change one.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "\"add\", \"update\", \"complete\", \"snooze\" or \"cancel\".",
+          "actions": [
+            "add",
+            "update",
+            "complete",
+            "snooze",
+            "cancel"
+          ]
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": false,
+          "description": "Who."
+        },
+        {
+          "name": "company",
+          "type": "string",
+          "required": false,
+          "description": "Where."
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "required": false,
+          "description": "Their address."
+        },
+        {
+          "name": "context",
+          "type": "string",
+          "required": false,
+          "description": "What it is about."
+        },
+        {
+          "name": "next_followup",
+          "type": "string",
+          "required": false,
+          "description": "When to come back to it."
+        },
+        {
+          "name": "partner_id",
+          "type": "string",
+          "required": false,
+          "description": "Which one (update, complete, snooze, cancel)."
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": false,
+          "description": "What happened."
+        }
+      ]
+    },
+    {
+      "name": "partners",
+      "title": "List partner, vendor and investor follow-ups",
+      "reads_only": true,
+      "default": false,
+      "summary": "List the partner, vendor and investor follow-ups you are tracking.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"list\" (adding and updating are the partner tool).",
+          "default": "list",
+          "actions": [
+            "list"
+          ]
+        },
+        {
+          "name": "days",
+          "type": "integer",
+          "required": false,
+          "description": "Only those due within this many days.",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "product",
+      "title": "Patch the local HeyLead checkout (developers)",
+      "reads_only": false,
+      "default": false,
+      "summary": "Local-only product agent — patch this HeyLead git checkout or open a PR.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"status\" (default) or \"tick\".",
+          "default": "status",
+          "actions": [
+            "status",
+            "tick"
+          ]
+        },
+        {
+          "name": "request",
+          "type": "string",
+          "required": false,
+          "description": "What to change. Required for action='tick'."
+        }
+      ]
+    },
+    {
+      "name": "profile",
+      "title": "Read LinkedIn profile change history",
+      "reads_only": true,
+      "default": false,
+      "summary": "Read the history of changes to your LinkedIn profile, or what is on it now.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"history\" or \"current\".",
+          "default": "history",
+          "actions": [
+            "history",
+            "current"
+          ]
+        },
+        {
+          "name": "field",
+          "type": "string",
+          "required": false,
+          "description": "Which field."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "How many changes to show.",
+          "default": 20
+        }
+      ]
+    },
+    {
+      "name": "profile_signals",
+      "title": "Compile targeting evidence from LinkedIn profiles",
+      "reads_only": false,
+      "default": false,
+      "summary": "Compile a targeting request into LinkedIn recall + profile evidence.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "compile (default), preview, or schools (exact LinkedIn school names).",
+          "default": "compile",
+          "actions": [
+            "compile",
+            "preview"
+          ]
+        },
+        {
+          "name": "request",
+          "type": "string",
+          "required": false,
+          "description": "e.g. \"Ukrainians in the US\" or \"classic car lovers\"."
+        },
+        {
+          "name": "titles",
+          "type": "string",
+          "required": false,
+          "description": "Optional comma-separated titles for recall queries."
+        },
+        {
+          "name": "location_codes",
+          "type": "string",
+          "required": false,
+          "description": "Optional comma-separated LinkedIn location codes."
+        },
+        {
+          "name": "profiles_json",
+          "type": "string",
+          "required": false,
+          "description": "preview only — JSON list of full profiles to score."
+        }
+      ]
+    },
+    {
+      "name": "prospect",
+      "title": "Skip, close or dismiss a prospect",
+      "reads_only": false,
+      "default": true,
+      "summary": "Skip a prospect, close one with an outcome, or dismiss it.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "\"skip\", \"close\" or \"dismiss\".",
+          "actions": [
+            "skip",
+            "close",
+            "dismiss"
+          ]
+        },
+        {
+          "name": "outreach_id",
+          "type": "string",
+          "required": false,
+          "description": "Which outreach."
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign. Uses the active one if empty."
+        },
+        {
+          "name": "outcome",
+          "type": "string",
+          "required": false,
+          "description": "\"won\", \"lost\" or \"opt_out\". Required for close; there is no default."
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false,
+          "description": "Why, recorded with the outcome."
+        },
+        {
+          "name": "meeting_link",
+          "type": "string",
+          "required": false,
+          "description": "The booked meeting, recorded with a won outcome."
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "required": false,
+          "description": "Required where the action cannot be undone.",
+          "default": false
+        },
+        {
+          "name": "reason_code",
+          "type": "string",
+          "required": false,
+          "description": "Why, for skip and close: \"not_a_fit\", \"negative_reply\", \"asked_to_stop\", \"handled_elsewhere\" or \"other\"."
+        },
+        {
+          "name": "reason_note",
+          "type": "string",
+          "required": false,
+          "description": "A free note alongside the code."
+        },
+        {
+          "name": "deal_value",
+          "type": "null/number",
+          "required": false,
+          "description": "What the won deal is worth (close with outcome=\"won\")."
+        },
+        {
+          "name": "deal_currency",
+          "type": "string",
+          "required": false,
+          "description": "Three-letter code, e.g. USD. Defaults to the last deal's."
+        }
+      ]
+    },
+    {
+      "name": "prospect_view",
+      "title": "Read one prospect's conversation or timeline",
+      "reads_only": true,
+      "default": true,
+      "summary": "Read the message thread with one prospect, or their timeline. Changes nothing.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"conversation\" or \"timeline\".",
+          "default": "conversation",
+          "actions": [
+            "conversation",
+            "timeline"
+          ]
+        },
+        {
+          "name": "outreach_id",
+          "type": "string",
+          "required": false,
+          "description": "Which outreach."
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign. Uses the active one if empty."
+        }
+      ]
+    },
+    {
+      "name": "restore_profile",
+      "title": "Restore a previous LinkedIn profile field",
+      "reads_only": false,
+      "default": false,
+      "summary": "Put a LinkedIn profile field back to what it was before a change.",
+      "params": [
+        {
+          "name": "change_id",
+          "type": "string",
+          "required": false,
+          "description": "Which change to undo, from profile(action=\"history\")."
+        }
+      ]
+    },
+    {
+      "name": "scheduler",
+      "title": "Turn the autonomous scheduler on or off",
+      "reads_only": false,
+      "default": true,
+      "summary": "Turn the autonomous scheduler on or off, or change how it runs.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "\"toggle\", \"observe\", \"always_on\", \"backfill_cloud\", \"send_from\" or \"report\".",
+          "actions": [
+            "toggle",
+            "observe",
+            "always_on",
+            "backfill_cloud",
+            "send_from",
+            "report"
+          ]
+        },
+        {
+          "name": "enabled",
+          "type": "boolean",
+          "required": false,
+          "description": "True to enable, False to disable (toggle, report).",
+          "default": true
+        },
+        {
+          "name": "cloud",
+          "type": "boolean",
+          "required": false,
+          "description": "Act on the hosted scheduler rather than this machine's.",
+          "default": false
+        },
+        {
+          "name": "host",
+          "type": "string",
+          "required": false,
+          "description": "\"cloud\" (send_from); a hosted account never sends from here."
+        },
+        {
+          "name": "hours",
+          "type": "integer/null",
+          "required": false,
+          "description": "The reporting interval (report)."
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign (report)."
+        }
+      ]
+    },
+    {
+      "name": "scheduler_status",
+      "title": "Read the autonomous scheduler",
+      "reads_only": true,
+      "default": true,
+      "summary": "Read the scheduler: status, logs, activity, diagnostics or the daily report.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"status\", \"logs\", \"activity\" or \"diagnostics\". The daily report is the scheduler tool: it switches reporting on and off.",
+          "default": "status",
+          "actions": [
+            "status",
+            "logs",
+            "activity",
+            "diagnostics"
+          ]
+        },
+        {
+          "name": "cloud",
+          "type": "boolean",
+          "required": false,
+          "description": "Read the hosted scheduler rather than this machine's.",
+          "default": false
+        },
+        {
+          "name": "hours",
+          "type": "integer/null",
+          "required": false,
+          "description": "Lookback window in hours."
+        },
+        {
+          "name": "event_type",
+          "type": "string",
+          "required": false,
+          "description": "Filter the log by event type."
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Filter by campaign."
+        }
+      ]
+    },
+    {
+      "name": "send_email",
+      "title": "Send an email from the connected mailbox",
+      "reads_only": false,
+      "default": false,
+      "summary": "Send an email through the connected Unipile mailbox (Gmail/Outlook).",
+      "params": [
+        {
+          "name": "to",
+          "type": "string",
+          "required": true,
+          "description": "Recipient email address."
+        },
+        {
+          "name": "subject",
+          "type": "string",
+          "required": true,
+          "description": "Subject line."
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "required": true,
+          "description": "Body text (HTML is fine)."
+        },
+        {
+          "name": "to_name",
+          "type": "string",
+          "required": false,
+          "description": "Optional display name for the recipient."
+        }
+      ]
+    },
+    {
+      "name": "send_message",
+      "title": "Send a LinkedIn follow-up, reply or InMail",
+      "reads_only": false,
+      "default": true,
+      "summary": "Send follow-ups, replies, or InMail to prospects.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "What to do: \"followup\" — Send a follow-up DM after connection accepted \"reply\" — Reply to a prospect who has messaged you \"delete\" — Delete a recently sent message (within 60 min on LinkedIn) \"inmail\" — Send an InMail to a NON-connection. Preconditions (each fails closed with no send): prospect has a provider_id; they are NOT a 1st-degree connection (use followup/DM for those); no InMail already sent on this outreach; InMail credits remaining > 0. A pending invitation to the same person is allowed — that is the escalation path. Requires outreach_id.",
+          "default": "followup",
+          "actions": [
+            "followup",
+            "reply",
+            "delete",
+            "inmail"
+          ]
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign to send from. Uses active if empty."
+        },
+        {
+          "name": "outreach_id",
+          "type": "string",
+          "required": false,
+          "description": "Specific outreach to target. Required for inmail."
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false,
+          "description": "'text'. For followup/reply.",
+          "default": "text"
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "For followup/reply on a hosted account: the message to send, required; the cloud sends it as is in the outreach's LinkedIn chat (the same route as answer_inbox reply). Without a backend the message is generated. For delete: optionally pass a Unipile message_id directly."
+        }
+      ]
+    },
+    {
+      "name": "setup_profile",
+      "title": "Set up HeyLead and connect LinkedIn",
+      "reads_only": false,
+      "default": true,
+      "summary": "Set up HeyLead by connecting your LinkedIn account and analyzing your writing style.",
+      "params": [
+        {
+          "name": "llm_api_key",
+          "type": "string",
+          "required": false,
+          "description": "Optional — only if you want to use your own AI key instead of the backend's."
+        },
+        {
+          "name": "llm_provider",
+          "type": "string",
+          "required": false,
+          "description": "Which AI to use if providing your own key: \"gemini\", \"claude\", or \"openai\".",
+          "default": "gemini"
+        },
+        {
+          "name": "backend_url",
+          "type": "string",
+          "required": false,
+          "description": "HeyLead Backend API URL. Leave empty — defaults to production server."
+        },
+        {
+          "name": "backend_jwt",
+          "type": "string",
+          "required": false,
+          "description": "Your authentication token from HeyLead."
+        }
+      ]
+    },
+    {
+      "name": "show_status",
+      "title": "Show outreach status",
+      "reads_only": true,
+      "default": true,
+      "summary": "Show your outreach dashboard — campaigns, stats, hot leads, account health.",
+      "params": [
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Show stats for a specific campaign. Shows all if empty."
+        }
+      ]
+    },
+    {
+      "name": "signals",
+      "title": "Read LinkedIn buying signals",
+      "reads_only": true,
+      "default": false,
+      "summary": "Read the buying signals found for your campaigns. Changes nothing.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "\"show\", \"report\", \"website_stats\" or \"optimize_history\".",
+          "default": "show",
+          "actions": [
+            "show",
+            "report",
+            "website_stats",
+            "optimize_history"
+          ]
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign."
+        },
+        {
+          "name": "signal_type",
+          "type": "string",
+          "required": false,
+          "description": "Which kind of signal."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "description": "Filter by status."
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "How many to show.",
+          "default": 20
+        },
+        {
+          "name": "days",
+          "type": "integer",
+          "required": false,
+          "description": "Over how many days.",
+          "default": 30
+        }
+      ]
+    },
+    {
+      "name": "suggest_next_action",
+      "title": "Suggest the next outreach action",
+      "reads_only": true,
+      "default": true,
+      "summary": "Suggest the best next action for your outreach.",
+      "params": [
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Focus on a specific campaign. Analyzes all active if empty."
+        }
+      ]
+    },
+    {
+      "name": "telegram",
+      "title": "Read Telegram chats and send approved messages",
+      "reads_only": false,
+      "default": false,
+      "summary": "The workspace's own Telegram account: read chats, send approved messages.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "",
+          "actions": [
+            "connect",
+            "chats",
+            "read",
+            "queue",
+            "outbox",
+            "approve",
+            "discard"
+          ]
+        },
+        {
+          "name": "chat_id",
+          "type": "string",
+          "required": false,
+          "description": ""
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": ""
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "required": false,
+          "description": ""
+        },
+        {
+          "name": "chat_name",
+          "type": "string",
+          "required": false,
+          "description": ""
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "description": ""
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "",
+          "default": 30
+        }
+      ]
+    },
+    {
+      "name": "tune_signals",
+      "title": "Tune how buying signals are found and scored",
+      "reads_only": false,
+      "default": false,
+      "summary": "Change how signals are found, scored or acted on.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "\"strategy\", \"feedback\", \"website_setup\", \"optimize\", \"optimize_rollback\" or \"optimize_weights\".",
+          "actions": [
+            "strategy",
+            "feedback",
+            "website_setup",
+            "optimize",
+            "optimize_rollback",
+            "optimize_weights"
+          ]
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign."
+        },
+        {
+          "name": "signal_type",
+          "type": "string",
+          "required": false,
+          "description": "Which kind of signal."
+        },
+        {
+          "name": "signal_id",
+          "type": "string",
+          "required": false,
+          "description": "Which signal (feedback, rollback)."
+        },
+        {
+          "name": "feedback",
+          "type": "string",
+          "required": false,
+          "description": "What was wrong with it."
+        }
+      ]
+    },
+    {
+      "name": "update_contact",
+      "title": "Tag, note or re-stage a contact",
+      "reads_only": false,
+      "default": true,
+      "summary": "Change one contact: tag it, note it, move its stage, or link it to a campaign.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "\"tag\", \"note\", \"stage\", \"link\" or \"enrich\".",
+          "actions": [
+            "tag",
+            "note",
+            "stage",
+            "link",
+            "enrich"
+          ]
+        },
+        {
+          "name": "contact_id",
+          "type": "string",
+          "required": false,
+          "description": "Which contact."
+        },
+        {
+          "name": "lifecycle_stage",
+          "type": "string",
+          "required": false,
+          "description": "The stage to move it to."
+        },
+        {
+          "name": "tag",
+          "type": "string",
+          "required": false,
+          "description": "The tag to add."
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "required": false,
+          "description": "The note to record."
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign (link)."
+        },
+        {
+          "name": "match",
+          "type": "string",
+          "required": false,
+          "description": "How to match when linking.",
+          "default": "name"
+        },
+        {
+          "name": "dry_run",
+          "type": "boolean",
+          "required": false,
+          "description": "Show what would change without changing it.",
+          "default": true
+        }
+      ]
+    },
+    {
+      "name": "update_knowledge",
+      "title": "Add, remove or refresh knowledge",
+      "reads_only": false,
+      "default": false,
+      "summary": "Add, remove or refresh what HeyLead knows about your offer.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "\"add\", \"remove\" or \"refresh\".",
+          "actions": [
+            "add",
+            "remove",
+            "refresh"
+          ]
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "description": "A name for the entry (add)."
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "The content (add)."
+        },
+        {
+          "name": "source_uri",
+          "type": "string",
+          "required": false,
+          "description": "A page to read instead of text (add)."
+        },
+        {
+          "name": "source_id",
+          "type": "string",
+          "required": false,
+          "description": "Which entry (remove, refresh)."
+        },
+        {
+          "name": "scope",
+          "type": "string",
+          "required": false,
+          "description": "\"all\" or a campaign's scope.",
+          "default": "all"
+        },
+        {
+          "name": "campaign_id",
+          "type": "string",
+          "required": false,
+          "description": "Which campaign the entry belongs to."
+        },
+        {
+          "name": "sync",
+          "type": "boolean",
+          "required": false,
+          "description": "Re-read the source before storing.",
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "update_network",
+      "title": "Opt in or out of the shared network, and sync it",
+      "reads_only": false,
+      "default": false,
+      "summary": "Join or leave the shared network pool, sync it, or enrich a profile.",
+      "params": [
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "\"opt_in\", \"opt_out\", \"sync\", \"opt_in_all\", \"sync_all\", \"enrich\" or \"parallel\".",
+          "actions": [
+            "opt_in",
+            "opt_out",
+            "sync",
+            "opt_in_all",
+            "sync_all",
+            "enrich",
+            "parallel"
+          ]
+        },
+        {
+          "name": "linkedin_id",
+          "type": "string",
+          "required": false,
+          "description": "One profile."
+        },
+        {
+          "name": "linkedin_ids",
+          "type": "string",
+          "required": false,
+          "description": "Several, comma separated."
+        },
+        {
+          "name": "max_accounts",
+          "type": "integer",
+          "required": false,
+          "description": "How many accounts to work through.",
+          "default": 5
+        },
+        {
+          "name": "force_refresh",
+          "type": "boolean",
+          "required": false,
+          "description": "Re-read profiles already known.",
+          "default": false
+        }
+      ]
+    }
+  ]
+}

@@ -69,12 +69,86 @@ def icp_research_mode(config: dict[str, Any] | None) -> Literal["off", "observe"
     return "act"
 
 
+#: Fields whose LinkedIn names carry commas ("London, England, United Kingdom"): a comma-joined
+#: string cannot say where one value ends (api #6507, the hosted twin in heylead-api icp_research).
+_COMMA_NAMED_FIELDS = frozenset({"locations", "industries"})
+
+
+def _rejoin(pieces: list[str], known: list[str]) -> list[str] | None:
+    """Pieces of a comma-split string joined back into values the list already holds; None when one cannot be."""
+    canon = {v.casefold(): v for v in known}
+    out: list[str] = []
+    i = 0
+    while i < len(pieces):
+        for j in range(len(pieces), i, -1):
+            hit = canon.get(", ".join(pieces[i:j]).casefold())
+            if hit is not None:
+                out.append(hit)
+                i = j
+                break
+        else:
+            return None
+    return out
+
+
+def patch_lists(patch: dict[str, Any], data: dict[str, Any] | None = None) -> dict[str, list[str]]:
+    """Each changed field of a revise patch as the whole values it sets (api #6507).
+
+    A JSON list is taken as given. A plain string is split on commas; for locations and industries the
+    pieces must join back into values the field already holds, else the field is left unchanged.
+    """
+    icps = (data or {}).get("icps") or []
+    persona = icps[0] if icps and isinstance(icps[0], dict) else {}
+    out: dict[str, list[str]] = {}
+    for key, (field, _side) in _PATCH_MAP.items():
+        raw = (patch or {}).get(key)
+        values: list[str] | None
+        if isinstance(raw, list):
+            values = [str(v).strip() for v in raw if str(v or "").strip()]
+        else:
+            text = str(raw or "").strip()
+            if not text:
+                continue
+            loaded: Any = None
+            if text.startswith("["):
+                try:
+                    loaded = json.loads(text)
+                except ValueError:
+                    loaded = None
+            if isinstance(loaded, list):
+                values = [str(v).strip() for v in loaded if str(v or "").strip()]
+            else:
+                values = [part.strip() for part in text.split(",") if part.strip()]
+                if field in _COMMA_NAMED_FIELDS and len(values) > 1:
+                    bucket = persona.get(field) if isinstance(persona.get(field), dict) else {}
+                    known = [str(v) for v in (bucket.get("include") or []) + (bucket.get("exclude") or [])]
+                    values = _rejoin(values, known)
+        seen: set[str] = set()
+        kept = [v for v in values or [] if not (v.casefold() in seen or seen.add(v.casefold()))]
+        if kept:
+            out[key] = kept
+    return out
+
+
 def apply_persona_patch(data: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
-    """Apply flat include/exclude strings to persona 1. Empty values leave the field."""
+    """Apply a revise patch's lists to persona 1. Empty values leave the field (``patch_lists``)."""
     out = copy.deepcopy(data)
     icps = out.get("icps") or []
     if not icps or not isinstance(icps[0], dict):
         return out
+    persona = icps[0]
+    changed = False
+    for key, values in patch_lists(patch, data).items():
+        field, side = _PATCH_MAP[key]
+        bucket = persona.get(field)
+        if not isinstance(bucket, dict):
+            bucket = {"include": [], "exclude": []}
+            persona[field] = bucket
+        bucket[side] = values
+        changed = True
+    if changed:
+        persona["linkedin_enriched_params"] = None
+    return out
     persona = icps[0]
     changed = False
     for key, (field, side) in _PATCH_MAP.items():

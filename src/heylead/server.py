@@ -47,6 +47,10 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.519 (2026-11-16)
+- the campaign optimiser and spawner go (#6252, PR 5b)
+- Fix: the free-run reading reads staff from the snapshot and stops when unknown (#6313)
+
 ## v0.10.518 (2026-11-16)
 - the strategy engine and pattern detector go (#6252, PR 5a)
 - name every file the illustration guard already allows to mention an image
@@ -3270,8 +3274,8 @@ async def create_campaign(
             buy: what you need, by when and how much, what a vendor must confirm.
             research: what you research, who you want to hear from, what you ask.
             Required before launch, resume, or auto-send.
-        mode: Always autopilot (copilot mode was removed). Whether opening DMs
-            and follow-ups wait for a person is the WORKSPACE's approval mode,
+        mode: Always autopilot (copilot mode was removed). Whether opening
+            DMs, follow-ups and answers to replies wait for a person is the WORKSPACE's approval mode,
             not this: a hosted workspace that never chose sends them without
             review; scheduler(action='approval_mode', mode='require_approval')
             holds them (inspect(action='waiting') lists what waits).
@@ -4687,7 +4691,7 @@ async def manage_watchlist(
         action: What to do: 'list', 'add', 'remove', 'pause', 'resume'.
         name: Watchlist name (for 'add').
         watch_type: 'keyword', 'competitor', 'company', 'person', or 'industry' (for 'add').
-        keywords: Comma-separated keywords (for 'add'). E.g., "cold outreach, SDR automation".
+        keywords: Comma-separated keywords (for 'add'). E.g., "cold outreach, outreach automation".
         watchlist_id: Watchlist ID (for 'remove', 'pause', 'resume').
         campaign_id: Optional campaign to link the watchlist to.
     """
@@ -4928,7 +4932,7 @@ async def _network_impl(
     Args:
         action: What to do:
             "status"     — Pool health, member accounts, your participation
-            "opt_in"     — Join the network pool (share your connections; this is what unlocks the members-only actions)
+            "opt_in"     — Join the network pool (share your connections; this is what opens the members-only actions)
             "opt_out"    — Leave the network pool (also ends your access to it)
             "sync"       — Refresh your connection graph snapshot
             "opt_in_all" — Admin: opt in all connected LinkedIn accounts
@@ -5701,7 +5705,7 @@ async def network(
             "trends"     — Members only: industry trend analysis from cross-account conversations
             "patterns"   — Members only: objection and response patterns with timing data
             Joining and refreshing are update_network:
-            "opt_in"     — Join the network pool (share your connections; this is what unlocks the members-only actions)
+            "opt_in"     — Join the network pool (share your connections; this is what opens the members-only actions)
             "opt_out"    — Leave the network pool (also ends your access to it)
             "enrich"     — Members only: smart profile lookup via closest-connected pool account
             "parallel"   — Members only: enrich up to 100 profiles in parallel across pool
