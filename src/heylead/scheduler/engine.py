@@ -99,7 +99,6 @@ from ..constants import (
     SCHEDULER_AB_EVAL_SECONDS,
     SCHEDULER_EXPERIMENT_SECONDS,
     SCHEDULER_PARTNER_REMINDER_SECONDS,
-    SCHEDULER_STRATEGY_SECONDS,
     SCHEDULER_BACKFILL_PROFILES_SECONDS,
     SCHEDULER_CAMPAIGN_REFILL_SECONDS,
     SCHEDULER_TICK_SECONDS,
@@ -1502,21 +1501,7 @@ class SchedulerEngine:
                 logger.debug("Experiment analysis failed: %s", e)
             self._set_timer("experiment", now)
 
-        # 13. Periodic: strategy engine cycle (every 4 hours)
-        if now - self._timer("strategy_cycle") >= SCHEDULER_STRATEGY_SECONDS:
-            try:
-                from ..services.strategy_engine import run_strategy_cycle
-                result = await run_strategy_cycle()
-                if result:
-                    logger.info(
-                        "Strategy cycle: %d patterns, %d optimizations, %d spawned",
-                        result.get("patterns_detected", 0),
-                        result.get("optimizations", 0),
-                        result.get("campaigns_spawned", 0),
-                    )
-            except Exception as e:
-                logger.debug("Strategy cycle failed: %s", e)
-            self._set_timer("strategy_cycle", now)
+        # 13. The local strategy engine cycle was deleted (heylead-api#6252).
 
         # 13b. Periodic: communication strategist — once per local day, at or
         # after STRATEGIST_PLANNING_HOUR. The old "24h since last run" timer

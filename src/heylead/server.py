@@ -47,6 +47,14 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.518 (2026-11-16)
+- the strategy engine and pattern detector go (#6252, PR 5a)
+- name every file the illustration guard already allows to mention an image
+- say which raw pictures the illustration guard allows
+- place the connect tile only where it is shown
+- match the illustration rule to the tiles on screen
+- record the launch-tile illustration style
+
 ## v0.10.517 (2026-11-14)
 - Fix: keep the profile redirect test on a real member id
 - Fix: validate passing proof and active controller freshness
