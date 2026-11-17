@@ -47,6 +47,9 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.521 (2026-11-16)
+- the signal optimiser goes; the guard covers all six (#6252, PR 6)
+
 ## v0.10.520 (2026-11-16)
 - Fix: a PR on its way counts as coming before its label; lone PRs record the gather (#6652 review)
 - New: gather green PRs briefly before a batch (#6652)

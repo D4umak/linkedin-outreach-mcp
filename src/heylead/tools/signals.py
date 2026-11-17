@@ -6,7 +6,6 @@ Thin dispatcher that routes to existing run_* functions based on the action para
 from __future__ import annotations
 
 import logging
-from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -302,25 +301,9 @@ async def _handle_optimize() -> str:
     from .. import config
     if config.is_backend_mode():
         return _HOSTED_OPTIMISER
-    from ..services.signal_optimizer import run_signal_optimization
-
-    result = await run_signal_optimization()
-    parts = []
-    if result["weights_adjusted"]:
-        parts.append(f"**{result['weights_adjusted']} signal weights** adjusted")
-    if result["keywords_added"]:
-        parts.append(f"**{result['keywords_added']} keywords** discovered and added")
-    if result["warmup_changes"]:
-        parts.append(f"**{count_noun(result['warmup_changes'], 'campaign')}** had warm-up disabled")
-    if result["threshold_changes"]:
-        parts.append(f"**{result['threshold_changes']} thresholds** tuned")
-    if result.get("errors"):
-        parts.append(f"Errors: {', '.join(result['errors'])}")
-
-    if not parts:
-        return "Signal optimization ran — no changes needed. All weights, thresholds, keywords, and warm-up settings are performing well."
-
-    return "## Signal Optimization Results\n\n" + "\n".join(f"- {p}" for p in parts) + "\n\nUse `signals(action='optimize_history')` to see all changes."
+    # The local optimiser could not run since v0.10.506 and was deleted (heylead-api#6252).
+    from ..hosted_writes import not_signed_in_reply
+    return not_signed_in_reply("nothing was optimised")
 
 
 async def _handle_optimize_history(signal_type: str = "", limit: int = 30) -> str:

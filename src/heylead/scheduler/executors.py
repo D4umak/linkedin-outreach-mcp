@@ -2882,23 +2882,8 @@ async def _execute_tune_watchlists(job: dict[str, Any]) -> str:
 
 
 async def _execute_optimize_signals(job: dict[str, Any]) -> str:
-    """Execute daily signal self-optimization (weights, keywords, warmup, thresholds)."""
-    from ..services.signal_optimizer import run_signal_optimization
-
-    logger.info("Scheduler: running signal optimization")
-    result = await run_signal_optimization()
-    parts = []
-    if result["weights_adjusted"]:
-        parts.append(f"{result['weights_adjusted']} weights")
-    if result["keywords_added"]:
-        parts.append(f"{result['keywords_added']} keywords")
-    if result["warmup_changes"]:
-        parts.append(f"{result['warmup_changes']} warmup")
-    if result["threshold_changes"]:
-        parts.append(f"{result['threshold_changes']} thresholds")
-    summary = ", ".join(parts) if parts else "no changes"
-    logger.info("Scheduler: signal optimization done: %s", summary)
-    return f"Signal optimization: {summary}"
+    """The local signal optimiser was deleted (heylead-api#6252); the cloud optimises signals."""
+    return "Signal optimization: skipped, the cloud optimises signals (heylead-api#6252)"
 
 
 # ──────────────────────────────────────────────
