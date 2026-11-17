@@ -47,6 +47,16 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.522 (2026-11-17)
+- S2 promise, voice from posts and opt-in own messages (heylead-api#6554)
+- keep the designer lessons at 15 lines; index the new line as no-case
+- review lesson for UI QA round 1 F1
+- lessons keyed to F1, oldest designer line archived, index entries
+- review lessons from UI QA round 1 (F1, F2, F4 missed)
+- Fix: refusal speaks to the run, not to a person changing the question (api #6532)
+- Fix: a repeat check's run cannot schedule a copy of it (api #6532)
+- Fix: open the narrow popup under a fresh name and check its width (#6542)
+
 ## v0.10.521 (2026-11-16)
 - the signal optimiser goes; the guard covers all six (#6252, PR 6)
 

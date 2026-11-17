@@ -60,7 +60,7 @@ HeyLead sends from your own LinkedIn account at a human pace: at most 20 invitat
 
 When the user asks what happens after launch, give them the campaign's plan from the create_campaign or launch result. Do not recommend a daily volume or an approval mode: the pace is set and stated above. If asked about LinkedIn's terms, point to https://heylead.dev/terms. Do not call the pace safe or unsafe for the account; say what HeyLead does.
 
-HeyLead reads the user's LinkedIn posts only to learn their voice. It never publishes on their profile unless they ask for a post.
+HeyLead learns the user's voice from their own LinkedIn posts. On heylead.dev, the user can also let it learn from messages they wrote themselves on LinkedIn: that is off until they turn it on, it never learns from messages other people sent them, and it never quotes those messages. It never publishes on their profile unless they ask for a post.
 
 In-process agents default to act. Use `edit_campaign(enable_reply_agent="observe")`, `edit_campaign(enable_strategist_replan_agent="observe")`, `edit_campaign(enable_hot_lead_closer="observe")`, or `edit_campaign(enable_coordinator_agent="observe")` to return to logging-only, `"off"` to disable. `product(action='tick')` can patch this git checkout and open a PR — never from the send path; cloud workers and `uvx` installs without `.git` refuse.
 

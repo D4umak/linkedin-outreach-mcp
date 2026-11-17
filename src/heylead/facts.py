@@ -188,8 +188,11 @@ MODEL_PACE_INSTRUCTION = (
 # A silent capability is assumed to be on: the same user assumed HeyLead would
 # start publishing posts from his profile.
 NO_POSTING_SENTENCE = (
-    "HeyLead reads the user's LinkedIn posts only to learn their voice. It never "
-    "publishes on their profile unless they ask for a post."
+    "HeyLead learns the user's voice from their own LinkedIn posts. On heylead.dev, "
+    "the user can also let it learn from messages they wrote themselves on LinkedIn: "
+    "that is off until they turn it on, it never learns from messages other people "
+    "sent them, and it never quotes those messages. It never publishes on their "
+    "profile unless they ask for a post."
 )
 
 # What a first campaign can expect, from the founder's own workspace on
