@@ -218,7 +218,8 @@ async def collect_watchlist_web_signals() -> str:
         upsert_signal_account,
     )
 
-    watchlists = await run_db(list_watchlists, is_active=True)
+    from ..services.watchlist_topics import searchable
+    watchlists = searchable(await run_db(list_watchlists, is_active=True))
     if not watchlists:
         return "No active watchlists."
 

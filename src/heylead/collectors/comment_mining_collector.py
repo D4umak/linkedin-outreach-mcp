@@ -96,7 +96,9 @@ async def mine_post_comments() -> str:
     now = int(time.time())
 
     # Get competitor and keyword watchlists
-    watchlists = await run_db(list_watchlists, is_active=True)
+    # Fragment lists are dropped before the rotation and the per-run cap.
+    from ..services.watchlist_topics import searchable
+    watchlists = searchable(await run_db(list_watchlists, is_active=True))
     competitor_wls = [w for w in watchlists if w.get("watch_type") == "competitor"]
     keyword_wls = [
         w for w in watchlists if w.get("watch_type") in ("keyword", "industry")

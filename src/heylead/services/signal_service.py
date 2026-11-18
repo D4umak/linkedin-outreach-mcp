@@ -25,12 +25,18 @@ def create_watchlists_from_icp(
     campaign_id: str | None = None,
     icp_name: str = "",
 ) -> list[str]:
-    """Auto-create signal watchlists from ICP keywords, pain points, and competitors.
+    """Auto-create signal watchlists from an ICP's topic terms and competitors.
 
-    Extracts relevant terms from the ICP and creates watchlists:
-    1. Pain point keywords → 'keyword' watchlist
+    For each persona (``icps``) and each search segment (``segments``):
+    1. Topic terms → one 'keyword' watchlist (``watchlist_topics.topic_terms``:
+       the persona's keywords minus its name, titles, industries and
+       locations). A persona with no topic term gets no keyword list.
     2. Competitor names → 'competitor' watchlist
-    3. Industry keywords → 'keyword' watchlist
+    3. Target companies → 'company' watchlists
+
+    Pain-point sentences are never turned into keywords: a list of their first
+    four words ("The team has ideas") found any post about a team
+    (D4umak/heylead-api#6820).
 
     Args:
         icp_json: ICP data (JSON string or dict).
@@ -41,6 +47,7 @@ def create_watchlists_from_icp(
         List of created watchlist IDs.
     """
     from ..db.signal_queries import list_watchlists, save_watchlist
+    from .watchlist_topics import searchable, topic_terms
 
     # Parse ICP data
     if isinstance(icp_json, str):
@@ -51,14 +58,27 @@ def create_watchlists_from_icp(
     else:
         parsed = icp_json
 
-    # Handle nested ICP structure (icps list or single ICP)
-    icps_list = parsed.get("icps", [parsed]) if isinstance(parsed, dict) else [parsed]
+    # An ICP carries personas (``icps``), search segments (``segments``, what
+    # create_campaign passes), both, or is itself one persona. Without
+    # ``icps`` the top level is read as a persona too, as it always was: an
+    # older ICP keeps its keywords, competitors and companies there.
+    if isinstance(parsed, dict):
+        icps_list = []
+        for key in ("icps", "segments"):
+            group = parsed.get(key)
+            if isinstance(group, list):
+                icps_list.extend(group)
+        if not isinstance(parsed.get("icps"), list):
+            icps_list.append(parsed)
+    else:
+        icps_list = [parsed]
 
     created_ids: list[str] = []
     existing_keywords: set[str] = set()
 
-    # Gather existing keywords to avoid duplicates
-    for wl in list_watchlists(is_active=True, campaign_id=campaign_id):
+    # Gather existing keywords to avoid duplicates. A fragment list is searched
+    # by nobody, so a term it holds is not "already tracked".
+    for wl in searchable(list_watchlists(is_active=True, campaign_id=campaign_id)):
         for kw in wl.get("keywords_list", []):
             existing_keywords.add(kw.lower().strip())
 
@@ -66,23 +86,21 @@ def create_watchlists_from_icp(
         if not isinstance(icp, dict):
             continue
 
-        persona_name = icp.get("name", icp_name or "ICP")
+        persona_name = icp.get("name") or icp_name or "ICP"
 
-        # 1. Pain point keywords
-        pain_points = icp.get("pain_points", [])
-        if pain_points:
-            # Extract short keyword phrases from pain points
-            pain_keywords = _extract_keywords_from_phrases(pain_points)
-            new_pain = [k for k in pain_keywords if k.lower().strip() not in existing_keywords]
-            if new_pain:
-                wl_id = save_watchlist(
-                    name=f"{persona_name} — Pain Points",
-                    watch_type="keyword",
-                    keywords=new_pain[:10],  # Cap at 10 keywords
-                    campaign_id=campaign_id,
-                )
-                created_ids.append(wl_id)
-                existing_keywords.update(k.lower() for k in new_pain)
+        # 1. Topic terms (never titles, industries, locations or pain points)
+        new_topics = [
+            t for t in topic_terms(icp) if t.lower().strip() not in existing_keywords
+        ]
+        if new_topics:
+            wl_id = save_watchlist(
+                name=f"{persona_name} — Topic Keywords",
+                watch_type="keyword",
+                keywords=new_topics,
+                campaign_id=campaign_id,
+            )
+            created_ids.append(wl_id)
+            existing_keywords.update(k.lower() for k in new_topics)
 
         # 2. Competitor names
         competitors = icp.get("competitors", [])
@@ -117,21 +135,7 @@ def create_watchlists_from_icp(
                 created_ids.append(wl_id)
                 existing_keywords.update(n.lower() for n in comp_names)
 
-        # 3. Industry/topic keywords
-        keywords = icp.get("keywords", [])
-        if keywords:
-            new_kw = [k for k in keywords if isinstance(k, str) and k.lower().strip() not in existing_keywords]
-            if new_kw:
-                wl_id = save_watchlist(
-                    name=f"{persona_name} — Industry Keywords",
-                    watch_type="industry",
-                    keywords=new_kw[:10],
-                    campaign_id=campaign_id,
-                )
-                created_ids.append(wl_id)
-                existing_keywords.update(k.lower() for k in new_kw)
-
-        # 4. Target company watchlists (for company page monitoring)
+        # 3. Target company watchlists (for company page monitoring)
         # NOTE: The ICP generator does NOT populate target_companies.
         # Primary company watchlist creation now happens in create_campaign.py
         # Step 6a-extra (auto-creates from top prospect companies).
@@ -160,25 +164,6 @@ def create_watchlists_from_icp(
                     existing_keywords.add(name.lower())
 
     return created_ids
-
-
-def _extract_keywords_from_phrases(phrases: list[str], max_words: int = 4) -> list[str]:
-    """Extract concise keyword phrases from longer pain point descriptions.
-
-    Keeps phrases short enough for effective LinkedIn post search.
-    """
-    keywords: list[str] = []
-    for phrase in phrases:
-        if not isinstance(phrase, str):
-            continue
-        phrase = phrase.strip()
-        words = phrase.split()
-        if len(words) <= max_words:
-            keywords.append(phrase)
-        else:
-            # Take the first max_words as a keyword phrase
-            keywords.append(" ".join(words[:max_words]))
-    return keywords
 
 
 # ──────────────────────────────────────────────
@@ -252,12 +237,13 @@ def format_signal_dashboard(days: int = 7) -> str:
         list_signals,
         list_watchlists,
     )
+    from .watchlist_topics import searchable
 
     stats = get_signal_funnel_stats(days=days)
     total = stats.get("total", 0)
 
     if total == 0:
-        watchlists = list_watchlists(is_active=True)
+        watchlists = searchable(list_watchlists(is_active=True))
         if not watchlists:
             return ""  # No signal system active yet
         return (
@@ -269,8 +255,8 @@ def format_signal_dashboard(days: int = 7) -> str:
     lines: list[str] = []
     lines.append(f"\n\u2500\u2500 Signal Intelligence \u2500\u2500")
 
-    # Watchlist health
-    watchlists = list_watchlists(is_active=True)
+    # Watchlist health (lists that are searched; a fragment list is not)
+    watchlists = searchable(list_watchlists(is_active=True))
     total_keywords = sum(len(wl.get("keywords_list", [])) for wl in watchlists)
     lines.append(f"Active watchlists: {len(watchlists)} ({total_keywords} keywords tracked)")
 

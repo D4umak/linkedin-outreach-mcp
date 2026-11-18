@@ -50,6 +50,14 @@ async def run_manage_watchlist(
         update_watchlist,
     )
 
+    from ..services.watchlist_topics import (
+        NOT_SEARCHED_STATUS,
+        added_not_searched_lines,
+        is_fragment_list,
+        not_searched_reason,
+        stays_unsearched_line,
+    )
+
     action = action.lower().strip()
 
     # ── List ──
@@ -66,6 +74,12 @@ async def run_manage_watchlist(
         lines = [f"Signal Watchlists ({len(watchlists)}):\n"]
         for wl in watchlists:
             status = "Active" if wl.get("is_active") else "Paused"
+            # A fragment list is not searched, switched on or paused: "Active"
+            # beside a list the collectors skip would say two things at once.
+            # heylead-api's list text reads the same way.
+            fragment = is_fragment_list(wl)
+            if fragment:
+                status = NOT_SEARCHED_STATUS
             wt = wl.get("watch_type", "keyword")
             kws = wl.get("keywords_list", [])
             kw_str = ", ".join(f'"{k}"' for k in kws[:5])
@@ -74,6 +88,8 @@ async def run_manage_watchlist(
 
             lines.append(f"  [{wl['id']}] {wl.get('name', 'Unnamed')} ({wt}, {status})")
             lines.append(f"    Keywords: {kw_str}")
+            if fragment:
+                lines.append(f"    {not_searched_reason(wl, watchlists)}")
             if wl.get("campaign_id"):
                 lines.append(f"    Linked to campaign: {wl['campaign_id']}")
             last_polled = wl.get("last_polled_at")
@@ -105,6 +121,15 @@ async def run_manage_watchlist(
             watch_type=watch_type,
             keywords=kw_list,
             campaign_id=campaign_id or None,)
+
+        if is_fragment_list({"name": name, "watch_type": watch_type}):
+            return (
+                f"Watchlist created: [{wl_id}] {name}\n"
+                f"  Type: {watch_type}\n"
+                f"  Keywords: {', '.join(kw_list)}\n"
+                f"  Status: {NOT_SEARCHED_STATUS}\n\n"
+                f"{added_not_searched_lines()}"
+            )
 
         return (
             f"Watchlist created: [{wl_id}] {name}\n"
@@ -161,6 +186,13 @@ async def run_manage_watchlist(
         if not wl:
             return f"Watchlist '{watchlist_id}' not found."
         await run_db(update_watchlist, watchlist_id, is_active=1)
+        if is_fragment_list(wl):
+            # The switch is stored as the owner set it; the list is still
+            # skipped where posts are searched.
+            return (
+                f"Watchlist resumed: [{watchlist_id}] {wl.get('name', 'Unnamed')}\n"
+                f"{stays_unsearched_line()}"
+            )
         return f"Watchlist resumed: [{watchlist_id}] {wl.get('name', 'Unnamed')}"
 
     return f"Unknown action: '{action}'. Use 'list', 'add', 'remove', 'pause', or 'resume'."

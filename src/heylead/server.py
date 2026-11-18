@@ -47,6 +47,15 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.524 (2026-11-18)
+- Fix: the owner's words for a list that is not searched match heylead-api, in four states (api #6820)
+- Fix: keep reading an older ICP's top level beside its segments (api #6820)
+- Fix: keyword watchlists hold topic terms, never pain-point fragments (api #6820)
+- #6806: the floor test names the claims reader without reading as a queue test
+- Fix: the hand-off hook reads an advisor turn as one context (#6833)
+- #6806: the shepherd's run reads a merged PR's files from its own hub, once a run, and only in the three repositories
+- WIP #6806: proof floor ignores docs-only and tests-only merges (saved from the stopped chat, unreviewed)
+
 ## v0.10.523 (2026-11-18)
 - Fix: use non-colliding mock value in brand progress test
 - Fix: the anchor report runs through heylead.background.spawn

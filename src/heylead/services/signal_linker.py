@@ -458,7 +458,9 @@ def analyze_signal_coverage(icp_json: str | dict) -> dict[str, Any]:
 
     # Gather all existing watchlist keywords
     existing_keywords: set[str] = set()
-    watchlists = list_watchlists(is_active=True)
+    from .watchlist_topics import searchable
+    # A fragment list is searched by nobody: its keywords cover nothing.
+    watchlists = searchable(list_watchlists(is_active=True))
     relevant_count = 0
     for wl in watchlists:
         wl_keywords = {k.lower().strip() for k in wl.get("keywords_list", [])}

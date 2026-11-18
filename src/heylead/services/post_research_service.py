@@ -421,7 +421,11 @@ async def auto_tune_watchlists() -> str:
     """
     from ..db.schema import get_db
 
-    watchlists = await run_db(list_watchlists, is_active=True, watch_type="keyword")
+    from .watchlist_topics import searchable
+    # A fragment list is not searched, so there is nothing to tune on it.
+    watchlists = searchable(
+        await run_db(list_watchlists, is_active=True, watch_type="keyword")
+    )
     if not watchlists:
         return "No active keyword watchlists to tune."
 

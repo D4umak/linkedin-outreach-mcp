@@ -1739,7 +1739,8 @@ async def plan_keyword_signal_collection() -> None:
 
     # Only schedule if there are active watchlists
     from ..db.signal_queries import list_watchlists
-    watchlists = await run_db(list_watchlists, is_active=True)
+    from ..services.watchlist_topics import searchable
+    watchlists = searchable(await run_db(list_watchlists, is_active=True))
     if not watchlists:
         return
 

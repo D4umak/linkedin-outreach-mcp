@@ -170,8 +170,10 @@ async def collect_keyword_signals() -> str:
     if not account_id:
         return "No LinkedIn account connected."
 
-    # Get active watchlists
-    watchlists = await run_db(list_watchlists, is_active=True)
+    # Get active watchlists. Fragment lists are dropped here, before the
+    # queue, the cursor and the budget, so a skipped list never holds a slot.
+    from ..services.watchlist_topics import searchable
+    watchlists = searchable(await run_db(list_watchlists, is_active=True))
     if not watchlists:
         return "No active watchlists configured."
 
