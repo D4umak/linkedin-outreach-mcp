@@ -3564,6 +3564,56 @@ async def request_hosted_json(
         return payload if isinstance(payload, dict) else {"value": payload}
 
 
+# ── The free run's Pro link, reported as shown (api #6496) ──
+
+#: The api's signed Pro redirect (heylead-api free_run_words.LINK_PATH + "?t="): a route, not
+#: copy, so a word change cannot move it. tests/test_anchor_shown_assistant_6496.py pins it.
+FREE_RUN_PRO_LINK = "/api/v1/r/pro?t="
+#: The unsigned fallback the api prints when it has no signing secret (billing_landing).
+FREE_RUN_PRO_FALLBACK = "?start=pro&source=free_run_status"
+_ANCHOR_TIMEOUT = httpx.Timeout(3.0, connect=2.0)
+ANCHOR_TASK = "paywall-anchor-shown"
+
+
+def holds_free_run_pro_link(line: str) -> bool:
+    """Whether the api's free-run line carries its Pro link. A member who cannot buy, and the
+    1st-hot-lead line, get the line without one: that is no anchor."""
+    text = str(line or "")
+    return FREE_RUN_PRO_LINK in text or FREE_RUN_PRO_FALLBACK in text
+
+
+async def _post_anchor_shown() -> None:
+    from .. import __version__
+
+    try:
+        async with httpx.AsyncClient(timeout=_ANCHOR_TIMEOUT) as client:
+            await client.post(
+                f"{_base_url()}/api/v1/paywall/events",
+                headers={**_headers(), "X-HeyLead-Client": f"heylead/{__version__}"},
+                json={"event": "anchor_shown", "source": "free_run_status", "surface": "assistant"},
+            )
+    except Exception as e:  # never retried; the answer it rode on has already been returned
+        logger.debug("paywall anchor not reported: %s", e)
+
+
+def report_free_run_anchor(line: str) -> None:
+    """Tell the api the assistant printed the free run's Pro link (``paywall.anchor_shown``,
+    source ``free_run_status``, surface ``assistant``), so a click on it has a denominator.
+
+    Fire-and-forget: scheduled, never awaited, never retried, so show_status and
+    suggest_next_action answer the same and no later whatever the api does. Backend mode
+    only, and only when the printed line holds the link.
+    """
+    try:
+        if not config.is_backend_mode() or not holds_free_run_pro_link(line):
+            return
+        from ..background import spawn
+
+        spawn(_post_anchor_shown(), name=ANCHOR_TASK)
+    except Exception as e:
+        logger.debug("paywall anchor not scheduled: %s", e)
+
+
 # ── Live Stats: Fetch dashboard data directly from backend ──
 
 

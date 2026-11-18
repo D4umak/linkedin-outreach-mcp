@@ -47,6 +47,21 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.523 (2026-11-18)
+- Fix: use non-colliding mock value in brand progress test
+- Fix: the anchor report runs through heylead.background.spawn
+- #6576 F1 caught-ignored, dark tile paint (now #6763)
+- signals.action_taken comment names what the activator writes (#6744)
+- #6702 UI QA F1, designer named the resync only for a new version
+- New: weekly ChatGPT fetch reading from Cloudflare on heylead-ci (#6734)
+- New: the assistant reports the free run's Pro link as shown (fire-and-forget POST)
+- brand §8 says one picture family; drop stale Planned notes (heylead-api#6576 designer-4-1)
+- the site rule for product tiles, in the same words in all three docs (heylead-api#6576)
+- proofs: the homepage reading tests only at its two looks, on the days before each (api #6719)
+- proofs: weekly reading of the homepage A/B test (api #6719)
+- keep the designer section at 15 lines; index #6554 F1
+- #6554 UI QA F1, designer missed the tap-target size
+
 ## v0.10.522 (2026-11-17)
 - S2 promise, voice from posts and opt-in own messages (heylead-api#6554)
 - keep the designer lessons at 15 lines; index the new line as no-case

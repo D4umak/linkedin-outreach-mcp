@@ -1012,6 +1012,10 @@ async def run_suggest_next_action(campaign_id: str = "") -> str:
     if free_run_line:
         output.append(free_run_line)
         output.append("")
+        # Printed holding the Pro link: tell the api it was shown (api #6496).
+        from ..services.cloud_sync import report_free_run_anchor
+
+        report_free_run_anchor(free_run_line)
 
     offer_line = await _upgrade_offer_line()
     if offer_line:

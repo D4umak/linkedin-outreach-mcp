@@ -1349,6 +1349,10 @@ async def _show_overview_from_backend(data: dict) -> str:
     if free_run_line:
         output.append(free_run_line)
         output.append("")
+        # Printed holding the Pro link: tell the api it was shown (api #6496).
+        from ..services.cloud_sync import report_free_run_anchor
+
+        report_free_run_anchor(free_run_line)
 
     # After the workspace's first reply: the two upgrades, in the api's words,
     # with the page that carries the comparison (api #2328). "" until then.

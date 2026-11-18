@@ -393,7 +393,9 @@ CREATE TABLE IF NOT EXISTS signals (
 
     -- State
     status         TEXT DEFAULT 'new',        -- 'new', 'classified', 'actioned', 'dismissed', 'expired'
-    action_taken   TEXT,                      -- 'campaign_created', 'outreach_triggered', 'engaged', NULL
+    action_taken   TEXT,                      -- what activation did: 'outreach_created', 'campaign_added',
+                                             -- 'priority_boosted_existing', 'no_matching_campaign', ... (see
+                                             -- signal_activator / signal_linker); NULL until actioned
     actioned_at    INTEGER,
     expires_at     INTEGER,                   -- Signal freshness expiry (auto-decay)
 
