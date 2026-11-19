@@ -725,6 +725,13 @@ def _format_project_brief_variable(ctx: dict[str, Any]) -> str:
     return format_project_brief_block(str(ctx.get("project_brief") or ""), facts)
 
 
+def _thread_trigger_variable(analysis: dict[str, Any] | None) -> str:
+    from .thread_trigger import thread_trigger_block
+
+    block = thread_trigger_block(analysis)
+    return f"\n{block}" if block else ""
+
+
 def build_context_block(
     sender: dict[str, Any],
     prospect: dict[str, Any],
@@ -864,6 +871,10 @@ def build_context_block(
             if analysis else "",
         # Signal-specific messaging strategy
         "signal_strategy": _build_signal_strategy(analysis),
+        # Replies and follow-ups: the gated reason the thread exists (api #6896).
+        # Glued to the end of a line in the templates, so it brings its own
+        # line break and an empty one leaves the prompt byte-identical.
+        "thread_trigger": _thread_trigger_variable(analysis),
         # News context (from SERPER API, Sprint 15)
         "news_context": news_context or "",
         # Conversation memory (from memory_json, Sprint 16)

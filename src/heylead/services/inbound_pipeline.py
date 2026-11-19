@@ -1451,6 +1451,7 @@ async def _send_discovery_dm(
                 sentiment=sentiment if content else "neutral",
                 signal=signal,
                 conversation_history=inbound_history,
+                outreach_id=outreach_id,
             )
             refused = ""
         if not dm_text:
@@ -1736,6 +1737,7 @@ async def _generate_contextual_reply(
     sentiment: str,
     signal: dict[str, Any],
     conversation_history: list[dict[str, Any]] | None = None,
+    outreach_id: str = "",
 ) -> str:
     """Generate a contextual reply using the shared reply pipeline.
 
@@ -1761,6 +1763,12 @@ async def _generate_contextual_reply(
         except Exception:
             pass
 
+    # The gated reason this thread exists, never a cached signal (api #6896).
+    from ..ai.thread_trigger import thread_context
+
+    prospect_analysis = await run_db(
+        thread_context, None, outreach_id, channel="inbound",
+    )
     try:
         dm_text, _, validation = await run_reply_pipeline(
             prospect=prospect,
@@ -1770,6 +1778,7 @@ async def _generate_contextual_reply(
             conversation_history=conversation_history,
             reply_text=content,
             sentiment=sentiment,
+            prospect_analysis=prospect_analysis,
             max_chars=500,
         )
         if not dm_text:

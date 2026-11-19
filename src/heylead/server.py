@@ -47,6 +47,13 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.526 (2026-11-19)
+- self-hosted thread trigger cited ungated (api #6896)
+- Fix: self-hosted replies and follow-ups get the gated thread trigger, never the cached signal (api #6896)
+- New: cap the needs-you lines at 10 and check the api's routed verdicts (#6999)
+- New: the morning line on after-release checks, each fail with its owner (#6999)
+- wip(thread-trigger): client helper ported from api #6846, gate on the outreach's signal row (api #6896)
+
 ## v0.10.525 (2026-11-19)
 - New: Pro is sold on reaching new people only; the plan limits stated once (#6596)
 - Fix: the follow-up cap line never names Pro, and a semgrep rule guards the shape (#6596)

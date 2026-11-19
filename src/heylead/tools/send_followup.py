@@ -590,25 +590,17 @@ async def run_send_followup(
         except Exception as e:
             logger.warning(f"Prospect analysis failed, proceeding without: {e}")
 
-    # The cached signal_context describes whichever of the prospect's signals
-    # last scored highest, not the one that created this outreach — so a
-    # follow-up would reference a different post than the first touch did.
-    # The invitation and InMail paths already correct for this; this one was
-    # missed, which is how the thread that opens with a stadium post ends up
-    # following up about someone else's AI funding round.
-    try:
-        trigger_signal_id = ((await db.get_outreach(outreach_id) or {}).get("signal_id") or "").strip()
-        if trigger_signal_id:
-            from ..db.signal_queries import get_signal
-            from ..services.signal_activator import apply_trigger_signal_context
+    # A later message never reads the cached signal: it describes whichever
+    # signal last scored highest, possibly one we dismissed or one stamped on
+    # after our first message. It gets the gated reason instead, read from
+    # outreaches.signal_id (api #6896). That replaces the 21 Aug rebuild of
+    # signal_context from the same row, which had no gate. Before the brief,
+    # whose must_say would otherwise be the opener's hook.
+    from ..ai.thread_trigger import thread_context
 
-            trigger_signal = await run_db(get_signal, trigger_signal_id)
-            if trigger_signal:
-                prospect_analysis = apply_trigger_signal_context(
-                    prospect_analysis, trigger_signal
-                )
-    except Exception as e:
-        logger.debug("Trigger signal context rebuild failed (non-critical): %s", e)
+    prospect_analysis = await run_db(
+        thread_context, prospect_analysis, outreach_id, channel="followup",
+    )
 
     # Format conversation history for the generator
     conversation_history = [

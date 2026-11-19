@@ -606,7 +606,12 @@ def _build_intelligence_text(prospect_analysis: dict[str, Any] | None) -> str:
             parts.append(f"Their jargon: {', '.join(jargon[:5])}")
     if pain_points and isinstance(pain_points, list):
         parts.append(f"Likely pain points: {'; '.join(str(p) for p in pain_points[:3])}")
-    return "\n".join(parts) if parts else "No analysis available — use profile data only."
+    text = "\n".join(parts) if parts else "No analysis available — use profile data only."
+    # The gated reason the thread exists (api #6896); "" leaves the text as it was.
+    from .thread_trigger import thread_trigger_block
+
+    block = thread_trigger_block(prospect_analysis)
+    return f"{text}\n\n{block}" if block else text
 
 
 async def generate_reply(

@@ -820,6 +820,14 @@ async def run_reply_to_prospect(
         except Exception as e:
             logger.warning(f"Prospect analysis failed, proceeding without: {e}")
 
+    # The reply never reads the cached signal; it gets the gated reason
+    # instead (api #6896). After the save above: the stripped copy is never stored.
+    from ..ai.thread_trigger import thread_context
+
+    prospect_analysis = await run_db(
+        thread_context, prospect_analysis, outreach_id, channel="reply",
+    )
+
     # Format conversation history for the generator
     conversation_history = [
         {

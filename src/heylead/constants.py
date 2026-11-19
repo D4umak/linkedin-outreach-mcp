@@ -81,8 +81,7 @@ FREE_MAX_LINKEDIN_ACCOUNTS = 1
 # Pro Tier
 # ──────────────────────────────────────────────
 
-PRO_PRICE_MONTHLY = 29               # USD
-PRO_PRICE_ANNUAL_MONTHLY = 24        # USD (billed annually)
+PRO_PRICE_MONTHLY = 29               # USD per connected account, monthly; Stripe has no annual price (api #6812)
 PRO_MAX_FOLLOWUPS = 5
 PRO_MAX_LINKEDIN_ACCOUNTS = 5
 PRO_FOLLOWUP_SCHEDULE_DAYS = [1, 3, 7, 14]
