@@ -1255,7 +1255,7 @@ async def _plan_followups(campaign_id: str, now: int, tier: str) -> None:
     # The count the plan promises and the hosted scheduler keeps (#1414): the
     # campaign's max_followups under the tier ceiling. This used to take any
     # stored 1-5 as is, so a Free campaign storing 4 (every new campaign)
-    # planned 4 against the published "up to 2 follow-ups" (facts.FREE_PLAN_LINE).
+    # planned 4 against the published "up to 2 follow-ups" (facts.PLAN_FACTS_LINE).
     from ..services.campaign_plan import effective_max_followups
 
     max_followups = effective_max_followups(config, tier)

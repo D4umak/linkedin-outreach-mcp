@@ -61,32 +61,36 @@ FREE_QUOTA_LIST = (
 
 # Pro is priced per connected account, a LinkedIn seat or an email mailbox, the
 # way Unipile bills (billing.billable_quantity_for_org; Denys, 7 Oct 2026, api
-# #2366), monthly. Never "$29/mo" and
-# never "unlimited": the follow-up count and the seat count are the caps.
+# #2366), monthly. Never "$29/mo" and never "unlimited".
 PRO_PRICE = f"${_c.PRO_PRICE_MONTHLY} per connected account per month"
 # Hosted Free runs until the workspace's 2nd hot lead (api #5890, 10 Nov 2026):
 # from then HeyLead keeps the open conversations going and reaches new people
-# on Pro. Denys approved these words one by one; change none of them without
-# his yes. The short form is for a line in the client, the two long lines and
-# the definition (once per page) are what every listing prints
+# on Pro. Pro is sold on that alone: never on the follow-up count, the campaign
+# count or a second connected account (Denys, 12 Nov 2026: "We DO NOT sell
+# follow-ups"; api #6596). Those limits are stated once, as plain facts, in
+# PLAN_FACTS_LINE. Denys approved these words one by one (api #6596 comment
+# 6983917491); change none of them without his yes. Every listing prints the
+# two long lines, PLAN_FACTS_LINE once after them, and the definition once
 # (tests/test_listings_carry_the_facts.py).
-FREE_PLAN_LINE = (
-    f"Free: $0, up to {_c.FREE_MAX_FOLLOWUPS} follow-ups per prospect, "
-    "new outreach until your 2nd hot lead (hosted)"
-)
 FREE_HOSTED_LINE = (
     "$0, one connected account (a LinkedIn seat or an email mailbox), cloud "
-    f"sending included, up to {_c.FREE_MAX_FOLLOWUPS} follow-ups per person, until your "
-    "2nd hot lead. From then HeyLead keeps working the conversations already "
-    "open and reaches new people on Pro."
+    "sending included, until your 2nd hot lead. From then HeyLead keeps working "
+    "the conversations already open and reaches new people on Pro."
 )
 PRO_HOSTED_LINE = (
     f"{PRO_PRICE} (a LinkedIn seat or an email mailbox). HeyLead keeps "
-    "reaching new people after your 2nd hot lead, runs more than 1 active campaign and follows up to "
-    f"{_c.PRO_MAX_FOLLOWUPS} times. Monthly, cancel any time, no setup fee."
+    "reaching new people after your 2nd hot lead. Monthly, cancel any time, no setup fee."
 )
 HOT_LEAD_DEFINITION = "A hot lead is a person whose reply HeyLead reads as interested."
-PRO_PLAN_LINE = f"Pro: {PRO_PRICE}, up to {_c.PRO_MAX_FOLLOWUPS} follow-ups per prospect"
+# One plain literal, character for character the dashboard's PLAN_FACTS_LINE
+# (src/marketing/facts.ts); its md5 is pinned in both repos' tests, and its
+# figures are checked against constants.FREE/PRO_MAX_FOLLOWUPS there.
+PLAN_FACTS_LINE = (
+    "Plan limits. Active campaigns at once: 1 on Free, more than 1 on Pro. "
+    "Follow-ups per person: up to 2 on Free, up to 5 on Pro. Connected accounts "
+    "in one workspace: one on Free (a LinkedIn seat or an email mailbox), a "
+    "LinkedIn seat and an email mailbox together on Pro."
+)
 # What the unit is, under every price table (api #2366): Stripe counts one
 # seat per connected LinkedIn account or email mailbox in the workspace.
 CONNECTED_ACCOUNT_SENTENCE = (
@@ -102,10 +106,7 @@ INVITE_LIMITS_LINE = (
 # 7 Oct 2026 seven tools said "Upgrade to Pro ($29/mo) for unlimited ...", the
 # two forms this module forbids above (api #2328); Pro lifts the install's
 # monthly quota, and the LinkedIn account's invitation ceiling still applies.
-PRO_UPGRADE_LINE = (
-    f"Pro ({PRO_PRICE}) lifts this monthly quota and sends up to "
-    f"{_c.PRO_MAX_FOLLOWUPS} follow-ups per prospect. {INVITE_LIMITS_LINE}"
-)
+PRO_UPGRADE_LINE = f"Pro ({PRO_PRICE}) lifts this monthly quota. {INVITE_LIMITS_LINE}"
 
 
 # The six things a campaign can be for, in the order the dashboard shows them.

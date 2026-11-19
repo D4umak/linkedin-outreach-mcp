@@ -215,8 +215,10 @@ HeyLead gives your AI 22 tools:
 
 ## Pricing
 
-- **Free:** $0, one connected account (a LinkedIn seat or an email mailbox), cloud sending included, up to 2 follow-ups per person, until your 2nd hot lead. From then HeyLead keeps working the conversations already open and reaches new people on Pro.
-- **Pro:** $29 per connected account per month (a LinkedIn seat or an email mailbox). HeyLead keeps reaching new people after your 2nd hot lead, runs more than 1 active campaign and follows up to 5 times. Monthly, cancel any time, no setup fee.
+- **Free:** $0, one connected account (a LinkedIn seat or an email mailbox), cloud sending included, until your 2nd hot lead. From then HeyLead keeps working the conversations already open and reaches new people on Pro.
+- **Pro:** $29 per connected account per month (a LinkedIn seat or an email mailbox). HeyLead keeps reaching new people after your 2nd hot lead. Monthly, cancel any time, no setup fee.
+
+Plan limits. Active campaigns at once: 1 on Free, more than 1 on Pro. Follow-ups per person: up to 2 on Free, up to 5 on Pro. Connected accounts in one workspace: one on Free (a LinkedIn seat or an email mailbox), a LinkedIn seat and an email mailbox together on Pro.
 
 A hot lead is a person whose reply HeyLead reads as interested.
 

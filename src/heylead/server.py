@@ -47,6 +47,10 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.525 (2026-11-19)
+- New: Pro is sold on reaching new people only; the plan limits stated once (#6596)
+- Fix: the follow-up cap line never names Pro, and a semgrep rule guards the shape (#6596)
+
 ## v0.10.524 (2026-11-18)
 - Fix: the owner's words for a list that is not searched match heylead-api, in four states (api #6820)
 - Fix: keep reading an older ICP's top level beside its segments (api #6820)

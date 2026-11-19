@@ -31,10 +31,8 @@ from ..ai.prospect_analyzer import analyze_prospect, is_data_gap_analysis
 from ..config import apply_free_monthly_caps, get_tier
 from ..constants import (
     COPILOT_APPROVAL_THRESHOLD,
-    FREE_MAX_FOLLOWUPS,
     FREE_MONTHLY_MESSAGES,
     PRO_FOLLOWUP_SCHEDULE_DAYS,
-    PRO_MAX_FOLLOWUPS,
     TIER_PRO,
 )
 from ..db import aio as db
@@ -74,15 +72,10 @@ def _cap_refusal(max_followups: int, followup_count: int, tier: str) -> str:
     # follow-ups sent. Up to N means N after that opener (#1444).
     if followup_count < max_followups + 1:
         return ""
-    # A hosted workspace's plan lives in the api, and its tier never reaches
-    # this install's config (it reads "free" on a paying workspace), so the
-    # upgrade line is self-hosted only, like every other cap (#2328).
-    upgrade = apply_free_monthly_caps() and tier != TIER_PRO and max_followups >= FREE_MAX_FOLLOWUPS
-    return (
-        f"Max follow-ups reached ({max_followups}) for this outreach.\n"
-        + (f"Upgrade to Pro for up to {PRO_MAX_FOLLOWUPS} follow-ups." if upgrade
-           else "Maximum follow-ups sent.")
-    )
+    # The cap states the cap and never names Pro: follow-ups are a plan fact,
+    # not a reason to buy (api #6596). The self-hosted branch that printed
+    # "Upgrade to Pro for up to 5 follow-ups." is gone.
+    return f"Max follow-ups reached ({max_followups}) for this outreach.\nMaximum follow-ups sent."
 
 
 async def run_send_followup(
