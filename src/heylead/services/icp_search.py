@@ -15,6 +15,8 @@ import logging
 import re
 from typing import Any
 
+from . import job_titles
+
 logger = logging.getLogger(__name__)
 
 # Page sizes and page budgets create_campaign searches with. Shared so a
@@ -68,11 +70,7 @@ def _diaspora_identity_token(segment: dict[str, Any]) -> str | None:
     blob = f"{segment.get('name') or ''} {segment.get('keywords') or ''}".lower()
     if "ukrainian" not in blob and "ukraine" not in blob:
         return None
-    tokens = [
-        t.strip()
-        for t in str(segment.get("keywords") or "").replace(";", ",").split(",")
-        if t.strip()
-    ]
+    tokens = job_titles.split_list_text(str(segment.get("keywords") or ""))
     by_low = {t.lower(): t for t in tokens}
     if "ukrainian" in by_low:
         return by_low["ukrainian"]
@@ -87,7 +85,7 @@ def _product_stems_for_search(segment: dict[str, Any]) -> str:
     Diaspora ICPs keep one identity token (Ukrainian preferred) after stems.
     """
     raw = segment.get("keywords") or ""
-    tokens = [t.strip() for t in str(raw).replace(";", ",").split(",") if t.strip()]
+    tokens = job_titles.split_list_text(str(raw))
     titles = {str(t).lower() for t in (segment.get("titles") or [])}
     location_names = {str(x).lower() for x in (segment.get("locations") or [])}
     kept: list[str] = []

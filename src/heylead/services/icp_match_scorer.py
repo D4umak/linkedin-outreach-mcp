@@ -333,7 +333,8 @@ def _segment_to_icp(seg: dict[str, Any]) -> dict[str, Any]:
     # Keywords: segment stores as comma-separated string, ICP as list
     keywords_raw = seg.get("keywords", "")
     if isinstance(keywords_raw, str):
-        keywords = [k.strip() for k in keywords_raw.split(",") if k.strip()]
+        from . import job_titles
+        keywords = job_titles.split_list_text(keywords_raw)
     elif isinstance(keywords_raw, list):
         keywords = keywords_raw
     else:

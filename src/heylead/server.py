@@ -47,6 +47,14 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.528 (2026-11-20)
+- Fix PR review findings for #6793: test expectation and semgrep rule parity
+- Fix: update pattern in main checkout #6793 Co-Authored-By: Claude Code <noreply@anthropic.com>
+- Fix: deduplicate removals and fix semgrep patterns #6793 Co-Authored-By: Claude Code <noreply@anthropic.com>
+- Fix: use split_list_text in patch_lists #6793 Co-Authored-By: Claude Code <noreply@anthropic.com>
+- Strip headcount fragments from ICP job titles #6793
+- Strip headcount fragments from ICP job titles #6793
+
 ## v0.10.527 (2026-11-20)
 - Fix: no replan on an acceptance whose leftover is only the first DM (heylead-api#7123)
 - Fix: review round 1 — outreaches and follow-up days counted

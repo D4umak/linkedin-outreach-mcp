@@ -692,6 +692,7 @@ def _dict_to_icp_result(
     reads only the keys it knows, so target_role itself is dropped here.
     """
     from .. import goals
+    from ..services.job_titles import clean_titles
 
     target_role = data.get("target_role")
     if goal == goals.JOB_SEARCH and isinstance(target_role, str) and target_role.strip():
@@ -705,7 +706,7 @@ def _dict_to_icp_result(
             fears=icp_data.get("fears", []),
             barriers=icp_data.get("barriers", []),
             industries=_to_search_param(icp_data.get("industries")),
-            job_titles=_to_search_param(icp_data.get("job_titles")),
+            job_titles=_to_search_param(icp_data.get("job_titles"), is_titles=True),
             locations=_to_search_param(icp_data.get("locations")),
             departments=_to_search_param(icp_data.get("departments")),
             company_headcount=HeadcountParam(
@@ -758,9 +759,7 @@ def _convert_legacy_icp(
             industries=LinkedinSearchParam(
                 include=seg.get("industries", []),
             ),
-            job_titles=LinkedinSearchParam(
-                include=seg.get("titles", []),
-            ),
+            job_titles=_to_search_param(seg.get("titles", []), is_titles=True),
             locations=LinkedinSearchParam(
                 include=seg.get("geography", []),
             ),
@@ -804,18 +803,26 @@ def _build_fallback(target_description: str) -> IcpResult:
 # Helpers
 # ──────────────────────────────────────────────
 
-def _to_search_param(data: Any) -> LinkedinSearchParam:
+def _to_search_param(data: Any, is_titles: bool = False) -> LinkedinSearchParam:
     """Convert a dict or None to LinkedinSearchParam."""
+    from ..services.job_titles import clean_titles
+
     if data is None:
         return LinkedinSearchParam()
     if isinstance(data, dict):
+        include = data.get("include", []) or []
+        exclude = data.get("exclude", []) or []
+        if is_titles:
+            include = clean_titles(include)
+            exclude = clean_titles(exclude)
         return LinkedinSearchParam(
-            include=data.get("include", []) or [],
-            exclude=data.get("exclude", []) or [],
+            include=include,
+            exclude=exclude,
         )
     if isinstance(data, list):
         # Legacy format: bare list → include only
-        return LinkedinSearchParam(include=data)
+        include = clean_titles(data) if is_titles else data
+        return LinkedinSearchParam(include=include)
     return LinkedinSearchParam()
 
 

@@ -93,8 +93,10 @@ INVESTOR_BRIEF_TERMS: tuple[str, ...] = (
 
 
 def _clean(values: Any) -> list[str]:
+    from .job_titles import split_list_text
+
     if isinstance(values, str):
-        values = values.split(",")
+        values = split_list_text(values)
     if not isinstance(values, (list, tuple)):
         return []
     return [str(v).strip() for v in values if str(v or "").strip()]

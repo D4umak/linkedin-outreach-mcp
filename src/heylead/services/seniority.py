@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import re
 
+from . import job_titles
 from ..constants import ROLE_OWNER_NOUNS, SENIORITY_KEYWORDS
 from ..textutil import contains_term
 
@@ -119,7 +120,7 @@ def normalize_seniority(value: str | None) -> str | None:
 def normalize_seniority_list(values: object) -> list[str]:
     """Normalize a list (or comma string) of levels, dropping unreadable ones."""
     if isinstance(values, str):
-        raw = [v for v in values.split(",")]
+        raw = job_titles.split_list_text(values)
     elif isinstance(values, (list, tuple, set, frozenset)):
         raw = list(values)
     else:
@@ -270,7 +271,8 @@ def buying_role(titles: object) -> tuple[str, list[str]] | None:
 # A brief is split into its roles at these, so "CTOs and engineering
 # managers" names two levels. "lead generation" is what the product sells,
 # not a team lead, and is taken out before the levels are read.
-_BRIEF_PARTS = re.compile(r"\s*(?:,|;|/|&|\band\b|\bor\b|\bplus\b)\s*", re.IGNORECASE)
+# Thousands commas in "51-1,000 staff" are not split (api #6793).
+_BRIEF_PARTS = re.compile(r"\s*(?:(?<!\d),|,(?!\d{3}\b)|;|/|&|\band\b|\bor\b|\bplus\b)\s*", re.IGNORECASE)
 _NOT_A_ROLE = re.compile(r"\blead(?:s)?\s+gen(?:eration)?\b", re.IGNORECASE)
 _BRIEF_WORD = re.compile(r"[A-Za-z0-9.'-]+")
 
@@ -293,6 +295,10 @@ def levels_named(text: str | None) -> list[str]:
     cleaned = _NOT_A_ROLE.sub(" ", str(text or ""))
     found: set[str] = set()
     for part in _BRIEF_PARTS.split(cleaned):
+        from .job_titles import is_job_title
+
+        if not is_job_title(part):
+            continue
         phrase = " ".join(_singular(w.lower()) for w in _BRIEF_WORD.findall(part))
         level = infer_seniority_level(phrase)
         if level:

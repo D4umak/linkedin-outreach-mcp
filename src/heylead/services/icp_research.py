@@ -97,6 +97,8 @@ def patch_lists(patch: dict[str, Any], data: dict[str, Any] | None = None) -> di
     A JSON list is taken as given. A plain string is split on commas; for locations and industries the
     pieces must join back into values the field already holds, else the field is left unchanged.
     """
+    from .job_titles import clean_titles
+
     icps = (data or {}).get("icps") or []
     persona = icps[0] if icps and isinstance(icps[0], dict) else {}
     out: dict[str, list[str]] = {}
@@ -118,11 +120,14 @@ def patch_lists(patch: dict[str, Any], data: dict[str, Any] | None = None) -> di
             if isinstance(loaded, list):
                 values = [str(v).strip() for v in loaded if str(v or "").strip()]
             else:
-                values = [part.strip() for part in text.split(",") if part.strip()]
+                from .job_titles import split_list_text
+                values = split_list_text(text)
                 if field in _COMMA_NAMED_FIELDS and len(values) > 1:
                     bucket = persona.get(field) if isinstance(persona.get(field), dict) else {}
                     known = [str(v) for v in (bucket.get("include") or []) + (bucket.get("exclude") or [])]
                     values = _rejoin(values, known)
+        if field == "job_titles":
+            values = clean_titles(values)
         seen: set[str] = set()
         kept = [v for v in values or [] if not (v.casefold() in seen or seen.add(v.casefold()))]
         if kept:
@@ -140,24 +145,6 @@ def apply_persona_patch(data: dict[str, Any], patch: dict[str, Any]) -> dict[str
     changed = False
     for key, values in patch_lists(patch, data).items():
         field, side = _PATCH_MAP[key]
-        bucket = persona.get(field)
-        if not isinstance(bucket, dict):
-            bucket = {"include": [], "exclude": []}
-            persona[field] = bucket
-        bucket[side] = values
-        changed = True
-    if changed:
-        persona["linkedin_enriched_params"] = None
-    return out
-    persona = icps[0]
-    changed = False
-    for key, (field, side) in _PATCH_MAP.items():
-        raw = patch.get(key)
-        if raw is None or not str(raw).strip():
-            continue
-        values = [part.strip() for part in str(raw).split(",") if part.strip()]
-        if not values:
-            continue
         bucket = persona.get(field)
         if not isinstance(bucket, dict):
             bucket = {"include": [], "exclude": []}

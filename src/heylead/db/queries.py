@@ -4430,6 +4430,16 @@ def save_icp(
     confidence: float = 0.5,
 ) -> str:
     """Create a new ICP and return its ID."""
+    from ..services import job_titles
+
+    try:
+        data = json.loads(icp_json)
+        if isinstance(data, dict):
+            job_titles.strip_non_titles(data)
+            icp_json = json.dumps(data)
+    except (TypeError, ValueError):
+        pass
+
     icp_id = str(uuid.uuid4())
     now = int(time.time())
     db = get_db()
@@ -4489,6 +4499,17 @@ _VALID_ICP_COLS = frozenset({
 
 def update_icp(icp_id: str, **kwargs: Any) -> None:
     """Update an ICP's fields."""
+    from ..services import job_titles
+
+    if "icp_json" in kwargs:
+        try:
+            data = json.loads(kwargs["icp_json"])
+            if isinstance(data, dict):
+                job_titles.strip_non_titles(data)
+                kwargs["icp_json"] = json.dumps(data)
+        except (TypeError, ValueError):
+            pass
+
     db = get_db()
     kwargs["updated_at"] = int(time.time())
     bad_keys = set(kwargs) - _VALID_ICP_COLS

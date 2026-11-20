@@ -2041,6 +2041,8 @@ async def _sync_watchlists_to_cloud() -> None:
 
 async def _sync_icps_to_cloud() -> None:
     """Copy local ICPs onto Postgres so hosted classify can use them."""
+    from . import job_titles
+
     icps = await run_db(queries.list_icps)
     if not icps:
         return
@@ -2054,6 +2056,13 @@ async def _sync_icps_to_cloud() -> None:
                 raw = {}
         if not isinstance(raw, dict):
             raw = {}
+
+        removed = job_titles.strip_non_titles(raw)
+        if removed:
+            icp_id = icp.get("id") or ""
+            if icp_id:
+                await run_db(queries.update_icp, icp_id, icp_json=json.dumps(raw))
+
         payload.append({
             "id": icp.get("id") or "",
             "name": icp.get("name") or "",
