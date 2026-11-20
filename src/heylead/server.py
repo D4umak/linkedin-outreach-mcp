@@ -47,6 +47,9 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.530 (2026-11-20)
+- Fix: Luca keeps only the filters a brief asked for (client)
+
 ## v0.10.529 (2026-11-20)
 - Fix: restore is_backend_mode in read paths and revert unrelated edits (#5553)
 - Fix: fix undefined config in scheduler_status.py (#5553)

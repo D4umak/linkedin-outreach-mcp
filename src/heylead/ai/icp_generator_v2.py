@@ -79,7 +79,9 @@ Strict formatting for each field:
 Do NOT use regional terms like "EMEA", "APAC", or "North America".
 - **job_titles**: use specific but simple wordings. \
 Example: "Director of Sales" not "Director of Sales Operations".
-- **departments**: short terms, 1-2 words only: "Sales", "Business Development", "Marketing".
+- **departments**: short terms, 1-2 words, and only when the persona's own job is that function \
+(a Head of Engineering works in Engineering). Founders, CEOs and owners run the whole company: \
+their departments are null unless the brief names one.
 - **industries**: 1-3 words maximum: "Staffing", "Coaching", "Consulting".
 
 ## TASK
@@ -99,13 +101,14 @@ Use include/exclude pattern for precise targeting:
 - **industries**: {{"include": ["Financial Services", "Fintech"], "exclude": []}}
 - **job_titles**: {{"include": ["CTO", "VP Engineering"], "exclude": ["Intern"]}}
 - **locations**: {{"include": ["United States"], "exclude": []}}
-- **departments**: {{"include": ["Engineering"], "exclude": []}} or null
+- **departments**: {{"include": ["Engineering"], "exclude": []}} only for a persona whose job is that \
+function; otherwise null
 - **company_headcount**: {{"min": 51, "max": 500}} \
 (valid mins: 1,11,51,201,501,1001,5001,10001; valid maxes: 10,50,200,500,1000,5000,10000)
 - **company_types**: list from: self_employed, self_owned, government_agency, \
 public_company, privately_held, non_profit, educational_institution, partnership
 - **company_locations**: {{"include": [...], "exclude": []}} or null
-- **tenure**: {{"min": 1, "max": 5}} (valid mins: 0,1,3,6,10; valid maxes: 1,2,5,10)
+- **tenure**: null. Never guess how long someone has been in their role; the search does not use it.
 - **seniority**: {{"include": ["cxo", "vp", "director"], "exclude": ["manager", "senior", "entry"]}} \
 (use these exact keys and no others: owner, cxo, vp, director, manager, senior, entry. \
 {seniority_rule})
@@ -146,11 +149,11 @@ Return ONLY valid JSON:
             "industries": {{"include": ["..."], "exclude": []}},
             "job_titles": {{"include": ["..."], "exclude": []}},
             "locations": {{"include": ["..."], "exclude": []}},
-            "departments": {{"include": ["..."], "exclude": []}},
+            "departments": null,
             "company_headcount": {{"min": 51, "max": 500}},
             "company_types": ["privately_held"],
             "company_locations": null,
-            "tenure": {{"min": 1, "max": 5}},
+            "tenure": null,
             "seniority": {{"include": ["cxo", "vp"], "exclude": []}},
             "keywords": ["fintech", "payments"],
             "spotlight_filters": {{"changed_jobs": true, "posted_recently": false}},
@@ -694,9 +697,14 @@ def _dict_to_icp_result(
     from .. import goals
     from ..services.job_titles import clean_titles
 
+    from .icp_example_fields import drop_unasked_fields
+
     target_role = data.get("target_role")
     if goal == goals.JOB_SEARCH and isinstance(target_role, str) and target_role.strip():
         goals.exclude_target_role(data, target_role)
+    # Copied example tenure and unasked founder departments go before any
+    # enrichment looks them up (D4umak/heylead-api#7114).
+    data = drop_unasked_fields(data, target_description)
     icps = []
     for icp_data in data.get("icps", []):
         icp = SingleIcp(
