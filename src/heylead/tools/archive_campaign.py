@@ -35,6 +35,12 @@ async def run_archive_campaign(campaign_id: str = "", force: bool = False) -> st
     force=True is passed.
     """
 
+    from .. import hosted_writes
+
+    signed_out = hosted_writes.refuse_if_not_signed_in("the campaign was not archived")
+    if signed_out:
+        return signed_out
+
     setup_done = await run_db(get_setting, "setup_complete", False)
     if not setup_done:
         return (
@@ -96,7 +102,7 @@ async def run_archive_campaign(campaign_id: str = "", force: bool = False) -> st
     # On a hosted account the workspace sends from this campaign: archive it
     # there first, read it back, and archive this computer's copy only once
     # the workspace has (heylead-api #1415, the same shape as delete).
-    if config.is_backend_mode():
+    if not config.is_self_hosted():
         kind, detail = await hosted_campaign_lifecycle("archive", campaign_id)
         if kind == "failed":
             logger.warning(

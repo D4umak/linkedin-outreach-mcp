@@ -40,7 +40,7 @@ def local_voice_state() -> str:
     """This install's voice state: UNKNOWN when hosted, else from its own voice_signature."""
     from .. import config
 
-    hosted = config.is_backend_mode()
+    hosted = not config.is_self_hosted()
     if hosted:
         return UNKNOWN
     from ..db.queries import get_setting

@@ -589,11 +589,13 @@ def outbound_ownership_predicates(campaign_id: str) -> dict[str, bool]:
     cannot be debugged; this map names the failed check.
     """
     backend_mode = config.is_backend_mode()
-    sending_host = config.get_sending_host() if backend_mode else "local"
+    sending_host = config.get_sending_host()
     campaign = queries.get_campaign(campaign_id) if campaign_id else None
     return {
         "has_campaign_id": bool(campaign_id),
         "backend_mode": backend_mode,
+        "sign_in_lapsed": bool(config.sign_in_lapsed()),
+        "sending_host": sending_host,
         "sending_host_cloud": sending_host == "cloud",
         "campaign_exists": bool(campaign),
         "autopilot_active": bool(

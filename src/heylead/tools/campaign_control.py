@@ -57,7 +57,7 @@ async def _sync_active_to_host(
         campaign_id, STATUS_ACTIVE, caller=caller, reason=reason,
         icp_hold_ok=icp_hold_ok,
     )
-    if synced or not config.is_backend_mode():
+    if synced or config.sign_in_lapsed():
         return synced, detail
     if detail:
         return False, detail
@@ -231,7 +231,7 @@ async def resume_observed_campaigns_in_cloud(
 
     Hosted accounts only; returns [] otherwise. Never raises.
     """
-    if not config.is_backend_mode():
+    if config.sign_in_lapsed():
         return []
     local = []
     for c in await run_db(list_campaigns, status=STATUS_ACTIVE):
@@ -405,6 +405,13 @@ async def run_pause_campaign(campaign_id: str = "") -> str:
     If no campaign_id is provided, pauses the first active campaign found.
     """
 
+    # Before anything changes: with no sign-in this used to mark the campaign
+    # active, plan local jobs nothing runs and answer "is now live"
+    # (heylead-api#2320, #5553).
+    signed_out = hosted_writes.refuse_if_not_signed_in("nothing was paused")
+    if signed_out:
+        return signed_out
+
     setup_done = await run_db(get_setting, "setup_complete", False)
     if not setup_done:
         return (
@@ -430,7 +437,7 @@ async def run_pause_campaign(campaign_id: str = "") -> str:
     # Check current status
     status = campaign.get("status", "")
     if status == "paused":
-        if config.is_backend_mode():
+        if not config.is_self_hosted():
             # Pausing again is the retry the failure warning names, so it has
             # to reach the cloud. A pause is idempotent there.
             synced = await sync_campaign_status(
@@ -487,7 +494,7 @@ async def run_pause_campaign(campaign_id: str = "") -> str:
     # Push the parked queue (skipped + campaign_paused) before the next
     # 15-minute tick. /pause only flips campaign status; without this the
     # host never sees the marker and cannot unpark on resume.
-    if config.is_backend_mode():
+    if not config.is_self_hosted():
         try:
             from ..services.cloud_sync import sync_to_cloud
             await sync_to_cloud(campaign_id=campaign_id)
@@ -650,7 +657,7 @@ async def run_launch_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
 
     status = campaign.get("status", "")
     observing = get_scheduler_mode() == "observe"
-    hosted = config.is_backend_mode()
+    hosted = not config.is_self_hosted()
 
     await run_db(update_campaign, campaign_id, status=STATUS_ACTIVE,
                  config_json=_config_without_cloud_stop(
@@ -762,7 +769,7 @@ async def run_launch_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
             "☁️ Sending from the cloud — this campaign keeps going every 5 "
             "minutes with your laptop closed.",
         ])
-    elif config.is_backend_mode():
+    elif not config.is_self_hosted():
         lines.extend([
             "",
             f"⚠️ Cloud sending could not be switched on ({cloud_detail}). "
@@ -850,7 +857,7 @@ async def run_campaign_plan(campaign_id: str = "") -> str:
         if campaign is None:
             return "No campaign yet. create_campaign() builds a draft and shows its plan."
         campaign_id = str(campaign["id"])
-    if campaign is None and not config.is_backend_mode():
+    if campaign is None and config.sign_in_lapsed():
         return f"Campaign not found: {campaign_id}"
     name = str((campaign or {}).get("name") or campaign_id)
     return f"Campaign '{name}'\n\n" + await plan_text_for(campaign_id, campaign)
@@ -907,7 +914,7 @@ async def run_resume_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
                 "nothing.\n\n"
                 "Use show_status() to see what has come in."
             )
-        if config.is_backend_mode():
+        if not config.is_self_hosted():
             # Resuming again is the retry every failed launch or resume names,
             # and since heylead-api #328 the periodic push cannot lift a cloud
             # pause, so this must reach the cloud. Resume is idempotent there,
@@ -967,7 +974,7 @@ async def run_resume_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
     cfg.pop("pause_reason", None)
     cfg.pop("paused_at", None)
     cfg.pop("cloud_stop", None)
-    if observing and config.is_backend_mode():
+    if observing and not config.is_self_hosted():
         # The cloud stays paused until leaving observe sends the resume; the
         # flag keeps the status refresh from undoing this one meanwhile.
         cfg[PENDING_CLOUD_RESUME_KEY] = True
@@ -1000,7 +1007,7 @@ async def run_resume_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
             "Resumed campaign %s: %s in observe mode (no cloud resume)",
             campaign_id, campaign["name"],
         )
-        if config.is_backend_mode():
+        if not config.is_self_hosted():
             cloud_lines = [
                 "It stays paused in the cloud. No cloud resume was issued, "
                 "because that request is what makes the backend send from this "
@@ -1032,7 +1039,7 @@ async def run_resume_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
             *status_footer("campaign", campaign_id, fresh=True),
         ])
 
-    if config.is_backend_mode():
+    if not config.is_self_hosted():
         config.set_sending_host(
             "cloud",
             caller="campaign_resume",
@@ -1075,16 +1082,22 @@ async def run_resume_campaign(campaign_id: str = "", icp_hold_ok: bool = False) 
             "\n\n☁️ Sending from the cloud — this campaign keeps going with "
             "your laptop closed."
         )
-    elif config.is_backend_mode():
+    elif not config.is_self_hosted():
         cloud_note += (
             f"\n\n⚠️ Cloud sending could not be switched on ({cloud_detail}). "
             "This machine will not take over. Retry "
             "`scheduler(action='toggle', cloud=True, enabled=True)` later."
         )
 
+    resume_msg = (
+        "The cloud scheduler will resume sending for this campaign."
+        if not config.is_self_hosted()
+        else "Outreach will resume. Use generate_and_send() to send the next message."
+    )
+
     return (
         f"Campaign '{campaign['name']}' is now active again.\n\n"
         f"{restored} parked outreaches returned to the queue.\n"
-        f"Outreach will resume. Use generate_and_send() to send the next message.{cloud_note}"
+        f"{resume_msg}{cloud_note}"
         + "\n".join(["", *status_footer("campaign", campaign_id, fresh=True)])
     )

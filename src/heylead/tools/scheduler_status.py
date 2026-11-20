@@ -14,7 +14,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-from .. import facts
+from .. import config, facts
 from ..config import (
     get_scheduler_mode,
     is_backend_mode,
@@ -31,11 +31,21 @@ async def run_scheduler_status() -> str:
 
     If in backend mode, also shows cloud scheduler status.
     """
+    from .. import config, hosted_writes
     from ..config import is_scheduler_always_on
 
     mode = get_scheduler_mode()
     enabled = mode == "full"
     observing = mode == "observe"
+
+    if config.sign_in_lapsed() and not observing:
+        return (
+            "# ⚠️ Sign-in required\n\n"
+            "**Sending from the cloud** — this machine never sends for a "
+            "hosted account.\n\n"
+            + hosted_writes.not_signed_in_reply("it cannot check your cloud scheduler")
+        )
+
     always_on = is_scheduler_always_on()
     stats = await db.get_scheduler_stats()
     now = int(time.time())
@@ -61,7 +71,6 @@ async def run_scheduler_status() -> str:
     # Every hosted account sends from the cloud, signed in or not. Until
     # heylead-api#5541 this asked the token, so a machine whose sign-in had
     # lapsed lost the line exactly when the header still read "Enabled".
-    from .. import config
 
     if not config.is_self_hosted():
         lines.append(
@@ -157,26 +166,27 @@ async def run_scheduler_status() -> str:
         lines.append("")
 
     # ── 24h Metrics Summary ──
-    metrics = await db.get_job_metrics(24)
-    if metrics:
-        total_jobs = sum(m["total"] for m in metrics.values())
-        total_ok = sum(m["success"] for m in metrics.values())
-        total_skip = sum(m.get("skipped", 0) + m.get("deferred", 0) + m.get("permanent_failure", 0) for m in metrics.values())
-        total_fail = sum(m["failed"] for m in metrics.values())
-        attempted = total_jobs - total_skip
-        overall_rate = round(total_ok / attempted * 100, 1) if attempted > 0 else 0
-        lines.append("## 24h Metrics")
-        lines.append("")
-        lines.append(
-            f"Jobs: **{total_jobs}** | Success: **{total_ok}** | "
-            f"Skipped: **{total_skip}** | Failed: **{total_fail}** | "
-            f"Rate: **{overall_rate}%**"
-        )
-        if total_fail > 0:
+    if config.is_self_hosted():
+        metrics = await db.get_job_metrics(24)
+        if metrics:
+            total_jobs = sum(m["total"] for m in metrics.values())
+            total_ok = sum(m["success"] for m in metrics.values())
+            total_skip = sum(m.get("skipped", 0) + m.get("deferred", 0) + m.get("permanent_failure", 0) for m in metrics.values())
+            total_fail = sum(m["failed"] for m in metrics.values())
+            attempted = total_jobs - total_skip
+            overall_rate = round(total_ok / attempted * 100, 1) if attempted > 0 else 0
+            lines.append("## 24h Metrics")
+            lines.append("")
             lines.append(
-                f"\nUse `scheduler(action='logs')` to see failure details."
+                f"Jobs: **{total_jobs}** | Success: **{total_ok}** | "
+                f"Skipped: **{total_skip}** | Failed: **{total_fail}** | "
+                f"Rate: **{overall_rate}%**"
             )
-        lines.append("")
+            if total_fail > 0:
+                lines.append(
+                    f"\nUse `scheduler(action='logs')` to see failure details."
+                )
+            lines.append("")
 
     # ── Brand Automation ──
     brand_section = await _brand_automation_section(stats, mode=mode)
@@ -327,7 +337,7 @@ async def _dashboard_freshness() -> list[str]:
 
 async def _cloud_status_section() -> str:
     """Build cloud scheduler status section if in backend mode."""
-    if not is_backend_mode():
+    if config.is_self_hosted():
         return ""
 
     try:
@@ -388,6 +398,12 @@ async def run_toggle_scheduler(enabled: bool, cloud: bool = False) -> str:
                running with the laptop closed and sends inside the sending window.
                If False, toggle the local (in-process) scheduler.
     """
+    from .. import config, hosted_writes
+
+    signed_out = hosted_writes.refuse_if_not_signed_in("nothing was changed on this machine or in the cloud")
+    if signed_out:
+        return signed_out
+
     if cloud:
         from ..config import set_sending_host
         from ..services.cloud_sync import toggle_cloud_scheduler
@@ -405,8 +421,8 @@ async def run_toggle_scheduler(enabled: bool, cloud: bool = False) -> str:
     # user who tried Off here before #3545 already has it at "off" -- and the
     # reply is the cloud's answer alone, so it never says "off" while the
     # workspace is still on.
-    from ..config import is_backend_mode
-    if not enabled and is_backend_mode():
+    from ..config import is_self_hosted
+    if not enabled and not is_self_hosted():
         from ..services.cloud_sync import toggle_cloud_scheduler
 
         answer = await toggle_cloud_scheduler(False)
@@ -530,34 +546,16 @@ async def run_toggle_scheduler(enabled: bool, cloud: bool = False) -> str:
 
 async def run_send_from(host: str) -> str:
     """Move all campaign outbound to the cloud or to this machine."""
-    from .. import config
-    from ..config import set_scheduler_mode
-    from ..services.cloud_sync import toggle_cloud_scheduler
 
     host = str(host or "").strip().lower()
     if host not in ("cloud", "local"):
         return "host must be 'cloud' or 'local'."
 
-    if config.is_self_hosted():
-        if host == "cloud":
-            return (
-                "This install has no hosted account. Sending stays on this "
-                "machine."
-            )
-        set_scheduler_mode(
-            "full", caller="mcp_tool", reason="send_from local",
-        )
-        return "Sending is on this machine. There is no cloud scheduler here."
+    from .. import hosted_writes
 
-    if not config.is_backend_mode():
-        # A hosted install whose sign-in lapsed: no token and no Unipile key.
-        # Until heylead-api#5541 it read as self-hosted here, told Claude
-        # "Sending is on this machine" and set the local scheduler to full on
-        # a machine that cannot send. host='cloud' would need the sign-in, so
-        # the cloud scheduler is left as it is too.
-        from ..hosted_writes import not_signed_in_reply
-
-        return not_signed_in_reply("nothing was changed on this machine or in the cloud")
+    signed_out = hosted_writes.refuse_if_not_signed_in("nothing was changed on this machine or in the cloud")
+    if signed_out:
+        return signed_out
 
     if host == "local":
         # Refused without touching the cloud. Until 5 Oct 2026 this switched
@@ -573,6 +571,7 @@ async def run_send_from(host: str) -> str:
             "the cloud scheduler on if it is off."
         )
 
+    from ..services.cloud_sync import toggle_cloud_scheduler
     cloud_msg = await toggle_cloud_scheduler(True)
     return (
         "Sending runs in the cloud.\n\n"
@@ -596,6 +595,12 @@ async def run_set_observe_mode() -> str:
             "- `scheduler(action='toggle', enabled=True)` \u2014 leave observe and start sending\n"
             "- `scheduler(action='toggle', enabled=False)` \u2014 stop collecting too"
         )
+
+    from .. import config, hosted_writes
+
+    signed_out = hosted_writes.refuse_if_not_signed_in("the scheduler was set to observe")
+    if signed_out:
+        return signed_out
 
     set_scheduler_mode(
         "observe",
@@ -650,6 +655,12 @@ async def run_toggle_always_on(enabled: bool) -> str:
         state = "enabled" if enabled else "disabled"
         return f"Scheduler always-on mode is already {state}. No change made."
 
+    from .. import config, hosted_writes
+
+    signed_out = hosted_writes.refuse_if_not_signed_in("always-on mode was not changed")
+    if signed_out:
+        return signed_out
+
     set_scheduler_always_on(enabled)
 
     if enabled:
@@ -697,9 +708,9 @@ async def run_toggle_always_on(enabled: bool) -> str:
 
 async def _sync_always_on_to_cloud(enabled: bool) -> None:
     """Sync the always_on preference to the backend (if in backend mode)."""
-    from ..config import is_backend_mode
+    from ..config import is_self_hosted
 
-    if not is_backend_mode():
+    if is_self_hosted():
         return
 
     try:

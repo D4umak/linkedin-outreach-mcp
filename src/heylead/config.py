@@ -392,7 +392,7 @@ def apply_free_monthly_caps() -> bool:
     not cap them. Self-hosted Pro is uncapped. Self-hosted free stays at
     the production monthly row (invites, messages, engagements).
     """
-    return (not is_backend_mode()) and get_tier() != constants.TIER_PRO
+    return is_self_hosted() and get_tier() != constants.TIER_PRO
 
 
 def _system_timezone() -> str:
@@ -648,6 +648,8 @@ def sign_in_lapsed() -> str:
     if not jwt:
         # "could be read", not "is stored": a keychain that times out with no
         # file copy also reads as no token (secret_store.get_secret, #4261).
+        if is_backend_mode():
+            return ""
         return "no sign-in token could be read"
     if backend_jwt_expired(jwt):
         return "the sign-in token expired"

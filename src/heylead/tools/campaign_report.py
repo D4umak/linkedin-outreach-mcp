@@ -53,6 +53,13 @@ async def run_campaign_report(
         campaign_id: Which campaign to report on. Uses the active campaign if empty.
     """
 
+    from .. import config
+    lapsed = config.sign_in_lapsed()
+    lapsed_notice = ""
+    if lapsed:
+        from ..hosted_writes import not_signed_in_reply
+        lapsed_notice = not_signed_in_reply("this report shows cached local data") + "\n\n"
+
     # ── Pre-checks ──
     setup_done = await db.get_setting("setup_complete", False)
     if not setup_done:
@@ -62,13 +69,12 @@ async def run_campaign_report(
         )
 
     # ── Sync from backend before reading local DB ──
-    try:
-        from .. import config
-        if config.is_backend_mode():
+    if config.is_backend_mode() and not lapsed:
+        try:
             from ..services.cloud_sync import ensure_synced
             await ensure_synced()
-    except Exception as e:
-        logger.debug("Pre-report sync failed: %s", e)
+        except Exception as e:
+            logger.debug("Pre-report sync failed: %s", e)
 
     # ── Resolve campaign ──
     campaign, err = await db.find_active_campaign(campaign_id)
@@ -76,17 +82,18 @@ async def run_campaign_report(
         campaigns = await db.list_campaigns()
         if not campaigns:
             return (
+                lapsed_notice +
                 "No campaigns to report on.\n\n"
                 "Create one first: create_campaign(\"your target description\")"
             )
         campaign = campaigns[0]
     elif not campaign:
-        return err
+        return lapsed_notice + err
 
     campaign_id = campaign["id"]
-    config = {}
+    cfg = {}
     try:
-        config = json.loads(campaign.get("config_json", "{}") or "{}")
+        cfg = json.loads(campaign.get("config_json", "{}") or "{}")
     except (json.JSONDecodeError, TypeError):
         pass
 
@@ -108,7 +115,7 @@ async def run_campaign_report(
     output = [
         f"\U0001f4ca Campaign Report: **{campaign['name']}** (Day {days})",
         f"   Mode: {mode_str} | Status: {status_str}",
-        f"   Target: {config.get('target_description', 'N/A')}",
+        f"   Target: {cfg.get('target_description', 'N/A')}",
         "",
     ]
 
@@ -592,4 +599,4 @@ async def run_campaign_report(
 
     # campaign_id is the resolved campaign, not the (possibly empty) argument.
     output.extend(status_footer("campaign", campaign_id))
-    return "\n".join(output)
+    return lapsed_notice + "\n".join(output)

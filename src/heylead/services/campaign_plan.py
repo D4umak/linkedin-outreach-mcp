@@ -503,7 +503,7 @@ def _local_state() -> dict[str, Any]:
     from .. import config
 
     cfg = config.load_config()
-    hosted = config.is_backend_mode()
+    hosted = not config.is_self_hosted()
     return {
         "tier": local_tier(),
         "send_approval_mode": "" if hosted else MODE_AUTOPILOT,
@@ -525,7 +525,7 @@ def _local_voice_state() -> str:
 def _local_seat() -> dict[str, Any]:
     from .. import config
 
-    if config.is_backend_mode():
+    if not config.is_self_hosted():
         return {}
     # The local sender enforces a daily ceiling and no weekly one; the api's
     # free-seat week stands in until a hosted payload says otherwise.
@@ -566,7 +566,7 @@ async def _hosted_plan(campaign_id: str) -> dict[str, Any]:
     """The api's plan payload for a hosted account; {} when not hosted or it failed."""
     from .. import config
 
-    if not (config.is_backend_mode() and campaign_id):
+    if not (config.is_backend_mode() and not config.sign_in_lapsed() and campaign_id):
         return {}
     try:
         from urllib.parse import quote
@@ -616,7 +616,7 @@ def _local_checkpoint(now: datetime) -> str:
     except Exception as exc:
         logger.info("Local plan settings unreadable: %s", exc)
         state = {}
-    hosted = config.is_backend_mode()
+    hosted = not config.is_self_hosted()
     zone = str(effective_working_hours(state).get("timezone") or "")
     if not hosted and not str(state.get("timezone") or "").strip():
         # A self-hosted install with no zone set: this machine's own.

@@ -74,7 +74,9 @@ def refuse_if_not_signed_in(outcome: str) -> str | None:
     half of #5553). ``is_self_hosted()`` is False in production; the suite's
     direct-install tests keep it true until that code is deleted (#5712).
     """
-    if config.is_backend_mode() or config.is_self_hosted():
+    if config.is_self_hosted():
+        return None
+    if not config.sign_in_lapsed():
         return None
     return not_signed_in_reply(outcome)
 

@@ -14,7 +14,7 @@ import logging
 from typing import Any
 
 from ..flags import flag_enabled
-from .. import config
+from .. import config, constants
 from ..config import get_tier
 from ..constants import (
     FREE_MAX_CAMPAIGNS,
@@ -71,7 +71,7 @@ def _monthly_usage_lines(usage: dict, *, active_campaigns: int) -> list[str]:
             f"└── Campaigns: {active_campaigns}/{FREE_MAX_CAMPAIGNS}",
             "",
         ]
-    if config.is_backend_mode():
+    if not config.is_self_hosted():
         return [
             "Usage this month (counts only, not capped on hosted accounts):",
             f"├── Invitations: {inv_used}",
@@ -320,7 +320,15 @@ async def run_show_status(campaign_id: str = "") -> str:
 
 
 async def _show_status_body(campaign_id: str = "") -> str:
-    if config.is_backend_mode():
+    lapsed = config.sign_in_lapsed()
+    # A lapsed sign-in on a hosted account still shows the local dashboard
+    # (heylead-api#5541). Prepend the notice and skip the backend calls.
+    lapsed_notice = ""
+    if lapsed:
+        from ..hosted_writes import not_signed_in_reply
+        lapsed_notice = not_signed_in_reply("this dashboard shows cached local data") + "\n\n"
+
+    if not config.is_self_hosted() and not lapsed:
         try:
             from ..services.cloud_sync import ensure_hosted_sending_default
             await ensure_hosted_sending_default()
@@ -344,7 +352,7 @@ async def _show_status_body(campaign_id: str = "") -> str:
     # ── Backend mode: try live stats first, then sync ──
     backend_offline = False
 
-    if config.is_backend_mode() and not campaign_id:
+    if not config.is_self_hosted() and not lapsed and not campaign_id:
         try:
             from ..services.cloud_sync import BackendAuthError, fetch_live_stats
             live = await fetch_live_stats()
@@ -373,7 +381,7 @@ async def _show_status_body(campaign_id: str = "") -> str:
             backend_offline = True
             logger.debug("ensure_synced failed: %s", e)
 
-    elif config.is_backend_mode() and campaign_id:
+    elif not config.is_self_hosted() and not lapsed and campaign_id:
         # For campaign detail, just ensure synced before reading local
         try:
             from ..services.cloud_sync import BackendAuthError, ensure_synced
@@ -386,27 +394,18 @@ async def _show_status_body(campaign_id: str = "") -> str:
 
     # ── Specific campaign view ──
     if campaign_id:
-        return await _show_campaign_detail(campaign_id)
+        body = await _show_campaign_detail(campaign_id)
+        return lapsed_notice + body
 
     # ── Overview ──
-    return await _show_overview(offline=backend_offline)
+    body = await _show_overview(offline=backend_offline or bool(lapsed))
+    return lapsed_notice + body
 
 
 def _auth_error_message() -> str:
     """Return a user-facing message when the backend JWT is expired or invalid."""
-    from ..constants import DEFAULT_BACKEND_URL, LOGIN_URL_PATH
-
-    login_url = f"{DEFAULT_BACKEND_URL}{LOGIN_URL_PATH}"
-    return (
-        "⚠️ **Authentication expired**\n\n"
-        "Your HeyLead session token has expired or is invalid.\n"
-        "Your campaigns are still safe on the server — you just need to re-authenticate.\n\n"
-        "**To fix:**\n"
-        f"1. Open: {login_url}\n"
-        "2. Sign in and copy your new token\n"
-        "3. Run: setup_profile(backend_jwt='YOUR_NEW_TOKEN')\n\n"
-        "After that, show_status() will work again."
-    )
+    from ..hosted_writes import not_signed_in_reply
+    return not_signed_in_reply("nothing can be displayed")
 
 
 async def _dashboard_freshness_lines() -> list[str]:
@@ -489,7 +488,7 @@ async def _show_overview(offline: bool = False) -> str:
     rate_data = await db.get_rate_limit_today()
     usage = await db.get_monthly_usage()
 
-    if offline and config.is_backend_mode():
+    if offline and not config.is_self_hosted():
         import time as _ts
         _last_pull = await db.get_setting("last_pull_timestamp", 0)
         if not isinstance(_last_pull, (int, float)):
@@ -687,9 +686,9 @@ async def _show_overview(offline: bool = False) -> str:
 
     # ── Campaigns ──
     if not campaigns:
-        if offline and config.is_backend_mode():
+        if offline and not config.is_self_hosted():
             output.append("⚠️ Backend unreachable — your campaigns may still exist on the server.")
-            output.append("Try again in a moment, or re-authenticate with setup_profile(backend_jwt='...').")
+            output.append(f"Try again in a moment, or {constants.WHERE_TO_COPY}")
         else:
             output.append("No campaigns yet.")
             output.append("Create one: create_campaign(\"your target description\")")
@@ -1050,7 +1049,7 @@ async def _show_overview(offline: bool = False) -> str:
     # an "undercount" — a live install read 14 recorded vs 102 counted — so the
     # check belongs only where both sides have the same origin. The hosted
     # figures are compared in _show_overview_from_backend instead.
-    if not config.is_backend_mode():
+    if config.is_self_hosted() and not config.is_backend_mode():
         try:
             output.extend(
                 _usage_drift_lines(usage, await run_db(_monthly_actual_usage))

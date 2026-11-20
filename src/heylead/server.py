@@ -47,6 +47,15 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.529 (2026-11-20)
+- Fix: restore is_backend_mode in read paths and revert unrelated edits (#5553)
+- Fix: fix undefined config in scheduler_status.py (#5553)
+- Fix: replace is_backend_mode with unified predicates (#5553)
+- Fix: fix campaign_report config access and scheduler_status imports
+- Fix linting errors and shadow variables
+- Fix campaign_report notice and resume message assertion
+- Prevent mutation tools from executing when sign-in has lapsed (#5553)
+
 ## v0.10.528 (2026-11-20)
 - Fix PR review findings for #6793: test expectation and semgrep rule parity
 - Fix: update pattern in main checkout #6793 Co-Authored-By: Claude Code <noreply@anthropic.com>

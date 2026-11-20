@@ -17,6 +17,7 @@ from ..db.queries import (
     skip_pending_outreaches,
     update_campaign,
 )
+from .. import config
 from ..db import queries
 from ..db.async_bridge import run_db
 
@@ -45,6 +46,12 @@ def _cancel_pending_jobs(campaign_id: str) -> int:
 
 async def run_emergency_stop() -> str:
     """Pause all active campaigns immediately."""
+
+    from .. import hosted_writes
+
+    signed_out = hosted_writes.refuse_if_not_signed_in("your cloud campaigns were not paused")
+    if signed_out:
+        return signed_out
 
     # ── Pre-check ──
     setup_done = await run_db(get_setting, "setup_complete", False)

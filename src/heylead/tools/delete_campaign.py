@@ -36,6 +36,12 @@ async def run_delete_campaign(campaign_id: str = "", confirm: bool = False) -> s
         confirm: Must be True to actually delete. Safety guard.
     """
 
+    from .. import hosted_writes
+
+    signed_out = hosted_writes.refuse_if_not_signed_in("the campaign was not deleted")
+    if signed_out:
+        return signed_out
+
     setup_done = await run_db(get_setting, "setup_complete", False)
     if not setup_done:
         return (
@@ -94,7 +100,7 @@ async def run_delete_campaign(campaign_id: str = "", confirm: bool = False) -> s
     # "permanently deleted" about a draft the dashboard still showed
     # (heylead-api #1415). Kept local, the campaign can still be named in a
     # retry.
-    hosted = config.is_backend_mode()
+    hosted = not config.is_self_hosted()
     if hosted:
         kind, detail = await hosted_campaign_lifecycle("delete", campaign_id)
         if kind == "failed":
