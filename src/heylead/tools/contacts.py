@@ -995,9 +995,9 @@ async def _handle_linkedin_search(query: str, limit: int) -> str:
     if skipped_profiles or skipped_posts:
         skipped_parts = []
         if skipped_profiles:
-            skipped_parts.append(f"{skipped_profiles} profile fetch(es)")
+            skipped_parts.append(count_noun(skipped_profiles, "profile fetch", "profile fetches"))
         if skipped_posts:
-            skipped_parts.append(f"{skipped_posts} posts fetch(es)")
+            skipped_parts.append(count_noun(skipped_posts, "posts fetch", "posts fetches"))
         lines.append(
             f"The {LINKEDIN_SEARCH_PACE_BUDGET_SECONDS:.0f}s pacing budget ran out, so "
             f"{' and '.join(skipped_parts)} were never made. The counts above are what "
@@ -1247,7 +1247,7 @@ async def _handle_link(campaign_id: str, match: str, dry_run: bool, limit: int) 
         )
     if plan["nameless"]:
         out.append(
-            f"{plan['nameless']} contact(s) have no name, so name matching has nothing "
+            f"{count_noun(plan['nameless'], 'contact')} {'has' if plan['nameless'] == 1 else 'have'} no name, so name matching has nothing "
             "to work with."
         )
 
@@ -1260,7 +1260,7 @@ async def _handle_link(campaign_id: str, match: str, dry_run: bool, limit: int) 
                 "dry_run=False)"
             )
             out.append(
-                f"That sets linkedin_id on the {len(links)} row(s) under WOULD LINK, "
+                f"That sets linkedin_id on the {count_noun(len(links), 'row')} under WOULD LINK, "
                 "points their global_contact_id at the matched record, fills "
                 "linkedin_url where the row has none, and stamps updated_at. Rows in "
                 "the other sections are left exactly as they are."
@@ -1269,7 +1269,7 @@ async def _handle_link(campaign_id: str, match: str, dry_run: bool, limit: int) 
         out.append("")
         if linked:
             out.append(
-                f"Wrote {len(linked)} link(s): linkedin_id, global_contact_id and "
+                f"Wrote {count_noun(len(linked), 'link')}: linkedin_id, global_contact_id and "
                 "updated_at set on those rows (plus linkedin_url where the row had "
                 "none). No other row and no other column was touched."
             )
@@ -1277,7 +1277,7 @@ async def _handle_link(campaign_id: str, match: str, dry_run: bool, limit: int) 
             out.append("Wrote 0 links — no row in this campaign changed.")
         if raced:
             out.append(
-                f"{raced} planned row(s) had picked up a LinkedIn id between the plan "
+                f"{count_noun(raced, 'planned row')} had picked up a LinkedIn id between the plan "
                 "and the write, so they were left alone."
             )
 
@@ -1652,7 +1652,7 @@ async def _handle_find_duplicates() -> str:
     if not dupes:
         return "No duplicate contacts found."
 
-    lines = [f"Found **{len(dupes)} duplicate contact pair(s)**:\n"]
+    lines = [f"Found **{count_noun(len(dupes), 'duplicate contact pair')}**:\n"]
     for d in dupes:
         lines.append(f"  - **{d['keep_name']}** (keep: `{d['keep_id'][:8]}…`)")
         lines.append(f"    ↔ **{d['merge_name']}** (merge: `{d['merge_id'][:8]}…`)")

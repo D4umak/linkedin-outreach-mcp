@@ -818,7 +818,7 @@ async def run_monitor_campaign(campaign_id: str = "") -> str:
         drafts = await run_db(list_campaigns, status=STATUS_DRAFT)
         if drafts:
             lines.append(
-                f"{len(drafts)} draft campaign(s) have sent nothing yet. "
+                f"{count_noun(len(drafts), 'draft campaign')} {'has' if len(drafts) == 1 else 'have'} sent nothing yet. "
                 "To start one, the user says: launch <its name>; "
                 "campaign(action='launch', campaign_id='...') runs it when they say so."
             )

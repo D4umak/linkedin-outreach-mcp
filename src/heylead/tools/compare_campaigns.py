@@ -51,7 +51,7 @@ async def run_compare_campaigns(campaign_ids: str = "") -> str:
     if len(campaigns) < 2:
         return (
             "Need at least 2 campaigns to compare.\n\n"
-            f"Found {len(campaigns)} campaign(s). "
+            f"Found {count_noun(len(campaigns), 'campaign')}. "
             "Create more campaigns or specify IDs:\n"
             "  compare_campaigns(campaign_ids='id1,id2')"
         )

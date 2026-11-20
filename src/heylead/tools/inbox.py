@@ -28,6 +28,7 @@ from ..linkedin.unipile import (
 )
 from ..linkedin.message_attachments import attachment_line, message_text
 from ..linkedin.message_sender import message_is_ours
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -499,7 +500,7 @@ async def _list_comment_drafts(client: Any) -> str:
     if not drafts:
         return "No comment replies waiting. Nothing has been drafted since the last check."
 
-    lines = [f"**{len(drafts)} reply draft(s) waiting**", ""]
+    lines = [f"**{count_noun(len(drafts), 'reply draft')} waiting**", ""]
     for d in drafts:
         who = d.get("author_name") or "someone"
         lines.append(f"— {who} commented:")

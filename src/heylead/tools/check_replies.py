@@ -52,6 +52,7 @@ from ..services.inbox_match import index_contacts_for_inbox
 from ..services.waiting_on_you import HOLD, Waiting, render_waiting, who_is_waiting
 from ..timeutil import to_epoch
 from ..services.campaign_naming import cut_at_word
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -1967,7 +1968,7 @@ async def run_check_replies() -> str:
             output.append(f"   ... and {len(unsolicited_inbound) - 5} more")
         if enrolled:
             names = ", ".join(ub.get("name", "?") for ub in enrolled[:5])
-            output.append(f"   Enrolled {len(enrolled)} live thread(s): {names}")
+            output.append(f"   Enrolled {count_noun(len(enrolled), 'live thread')}: {names}")
         else:
             output.append("   💡 New inbound messages detected — pipeline will classify and respond!")
 

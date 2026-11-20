@@ -36,6 +36,7 @@ from ..linkedin import (
     get_account_id,
     get_linkedin_client,
 )
+from ..services.count_words import count_noun
 from ..services.icp_search import (
     SALES_NAV_ONLY_FILTERS,
     build_segment_query,
@@ -259,8 +260,8 @@ async def _preview(icp_id: str, persona: int, limit: int) -> str:
             f"  {i}. {p.name or 'Segment'}" for i, p in enumerate(result.icps, 1)
         )
         return (
-            f"persona={persona} is out of range — this ICP has {persona_count} "
-            f"persona(s):\n{listing}\n\n"
+            f"persona={persona} is out of range — this ICP has "
+            f"{count_noun(persona_count, 'persona')}:\n{listing}\n\n"
             f"Try icp(action='preview', icp_id='{record['id'][:8]}', persona=1)."
         )
 
@@ -373,7 +374,7 @@ async def _preview(icp_id: str, persona: int, limit: int) -> str:
     capped = returned >= per_page
     lines.append("── What came back ──")
     lines.append(
-        f"LinkedIn returned {returned} profile(s) for the first page of this "
+        f"LinkedIn returned {count_noun(returned, 'profile')} for the first page of this "
         f"search (page size {per_page})."
     )
     lines.append(
@@ -543,7 +544,7 @@ def _render_filter(key: str, value: Any, code_names: dict[str, dict[str, str]]) 
         label = "code" if len(value) == 1 else "codes"
         return f"{len(value)} {label}: " + ", ".join(rendered)
     if isinstance(value, list):
-        return f"{len(value)} value(s) — " + ", ".join(str(v) for v in value)
+        return f"{count_noun(len(value), 'value')} — " + ", ".join(str(v) for v in value)
     if isinstance(value, dict):
         return ", ".join(f"{k}={v}" for k, v in value.items())
     return str(value)
@@ -712,8 +713,8 @@ def _fit_block(
     lines = ["── Fit of what came back ──"]
     lines.append(
         f"Mean per-dimension score from compute_icp_match — the scorer "
-        f"create_campaign ranks prospects with — across all {n} returned "
-        "profile(s), scored against this persona:"
+        f"create_campaign ranks prospects with — across all "
+        f"{count_noun(n, 'returned profile')}, scored against this persona:"
     )
     for key, label, weight in _DIMENSION_WEIGHTS:
         values = [b.get(key) for b in breakdowns if isinstance(b.get(key), (int, float))]

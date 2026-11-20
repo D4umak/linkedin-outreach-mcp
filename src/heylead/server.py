@@ -47,6 +47,16 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.527 (2026-11-20)
+- Fix: no replan on an acceptance whose leftover is only the first DM (heylead-api#7123)
+- Fix: review round 1 — outreaches and follow-up days counted
+- Fix: tool replies count in words, never "campaign(s)"
+- case-qa lesson from #6812 UI QA F1 (ban list, not a rule)
+- devflow stops ended with no next step (api #7015 PR 2)
+- carry the every-message copywriter rule in heylead-copywriter (#7067)
+- Fix: #6596 proof reads every SEO agent page in sitemap-pages.xml, the demo panel by its element
+- devflow stops looped instead of waiting (api #7015); park helper renamed
+
 ## v0.10.526 (2026-11-19)
 - self-hosted thread trigger cited ungated (api #6896)
 - Fix: self-hosted replies and follow-ups get the gated thread trigger, never the cached signal (api #6896)

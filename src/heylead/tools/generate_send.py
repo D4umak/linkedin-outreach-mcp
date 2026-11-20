@@ -68,6 +68,7 @@ from ..services.channel_selector import (
     _extract_email,
 )
 from ..services.provider_id_resolver import is_sendable_invite_id
+from ..services.count_words import count_noun
 from ..linkedin import (
     UnipileAuthError,
     UnipileError,
@@ -973,7 +974,7 @@ async def run_generate_and_send(
         if isinstance(_profile_for_enrichment, dict) and _profile_for_enrichment:
             shared = _profile_for_enrichment.get("shared_connections") or _profile_for_enrichment.get("mutual_connections") or 0
             if shared and int(shared) > 0:
-                mutual_info = f"You share {shared} mutual connection(s) with this prospect."
+                mutual_info = f"You share {count_noun(int(shared), 'mutual connection')} with this prospect."
                 prospect_data["mutual_connections"] = int(shared)
                 logger.info("Warm intro path: %d mutual connections with %s", shared, outreach_id[:8])
     except Exception as e:
@@ -1220,7 +1221,7 @@ async def run_generate_and_send(
             )
             return (
                 f"⏭️ Skipped {prospect.get('name', 'Unknown')} — you talked before this "
-                f"campaign ({len(prospect_msgs)} earlier message(s) from them).\n"
+                f"campaign ({count_noun(len(prospect_msgs), 'earlier message')} from them).\n"
                 f"Use send_message(action='reply') to write to them yourself."
             )
         if prospect_msgs:
@@ -1241,7 +1242,7 @@ async def run_generate_and_send(
                 await adb.update_outreach(outreach_id, status="replied")
             return (
                 f"⏭️ Skipped {prospect.get('name', 'Unknown')} — "
-                f"existing conversation detected ({len(prospect_msgs)} inbound message(s)).\n"
+                f"existing conversation detected ({count_noun(len(prospect_msgs), 'inbound message')}).\n"
                 f"   Last from them: \"{last_prospect_text}\"\n"
                 f"Use send_message(action='reply') to respond, or prospect(action='skip') to remove."
             )
@@ -1263,7 +1264,7 @@ async def run_generate_and_send(
             )
             return (
                 f"⏭️ Skipped {prospect.get('name', 'Unknown')} — "
-                f"already messaged in another thread ({len(sdr_msgs)} prior message(s))."
+                f"already messaged in another thread ({count_noun(len(sdr_msgs), 'prior message')})."
             )
 
     # ── Generate → Improve → Validate → Fix pipeline ──

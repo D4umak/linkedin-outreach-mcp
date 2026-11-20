@@ -18,6 +18,7 @@ from ..db import aio as db
 from .profile_editor import apply_profile_change
 from ..hosted_writes import laptop_writes_refused, restore_profile_refused
 from ..services.campaign_naming import cut_at_word
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +95,7 @@ async def _show_history(field: str | None, limit: int) -> str:
                     lines.append(f"    {label}: (none)")
         lines.append("")
 
-    lines.append(f"Total: {len(changes)} change(s)")
+    lines.append(f"Total: {count_noun(len(changes), 'change')}")
     if field:
         lines.append(f"Filtered by: {field}")
     lines.append("\nTo restore a change: profile(action='restore', change_id='<id>')")

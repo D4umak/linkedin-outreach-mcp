@@ -134,18 +134,34 @@ def leftover_actions(plan: dict[str, Any]) -> list[dict[str, Any]]:
     return leftover
 
 
+def first_dm_only(plan: dict[str, Any]) -> bool:
+    """The plan's leftover is exactly the first DM: an acceptance cannot change it (heylead-api#7123)."""
+    left = leftover_actions(plan)
+    return len(left) == 1 and left[0].get("action_type") == "send_dm"
+
+
 def plan_trigger(plan: dict[str, Any], outreach: dict[str, Any], signals: list[dict[str, Any]]) -> str:
+    """What since the plan was made could change it, or "".
+
+    An acceptance (``accepted_at`` or a ``connection_accepted`` signal) whose leftover
+    is only the first DM has one possible answer, keep: it is not a trigger, and the
+    reply and the other signals are still checked (heylead-api#7123).
+    """
     created = int(plan.get("created_at") or 0)
     accepted = int(outreach.get("accepted_at") or 0)
     replied = int(outreach.get("first_reply_at") or 0)
-    if accepted and accepted >= created:
+    acceptance_is_noop = first_dm_only(plan)
+    if accepted and accepted >= created and not acceptance_is_noop:
         return "acceptance"
     if replied and replied >= created:
         return "first_reply"
     for sig in signals:
         detected = int(sig.get("detected_at") or 0)
-        if detected >= created:
-            return f"signal:{sig.get('signal_type') or 'unknown'}"
+        if detected < created:
+            continue
+        if sig.get("signal_type") == "connection_accepted" and acceptance_is_noop:
+            continue
+        return f"signal:{sig.get('signal_type') or 'unknown'}"
     return ""
 
 

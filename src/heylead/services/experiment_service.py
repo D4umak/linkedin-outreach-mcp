@@ -848,7 +848,7 @@ def _build_snapshot(campaign_id: str = "") -> tuple[str, list[dict]]:
         lines.append("")  # blank line between campaigns
 
     if overflow > 0:
-        lines.append(f"(+ {overflow} more campaign(s) not shown)\n")
+        lines.append(f"(+ {count_noun(overflow, 'more campaign')} not shown)\n")
 
     # Account health
     rate = get_rate_limit_today()

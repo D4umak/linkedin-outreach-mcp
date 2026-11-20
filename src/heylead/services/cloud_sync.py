@@ -24,6 +24,7 @@ from .. import config, constants, facts
 from ..ai.copywriter.provenance import Provenance
 from ..db import queries, signal_queries
 from ..db.async_bridge import run_db
+from .count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -947,7 +948,7 @@ async def dashboard_freshness_lines() -> list[str]:
 
     if withheld:
         lines.append(
-            f"⚠️ {len(withheld)} campaign(s) withheld while the scheduler is in "
+            f"⚠️ {count_noun(len(withheld), 'campaign')} withheld while the scheduler is in "
             "observe mode — heylead.dev still shows their old figures as "
             "current. Local numbers are correct; leave observe with "
             "`scheduler(action='toggle', enabled=True)` to catch it up."
@@ -955,7 +956,7 @@ async def dashboard_freshness_lines() -> list[str]:
         lines.extend(_named(withheld))
     if stale:
         lines.append(
-            f"⚠️ {len(stale)} campaign(s) have not reached heylead.dev recently, "
+            f"⚠️ {count_noun(len(stale), 'campaign')} {'has' if len(stale) == 1 else 'have'} not reached heylead.dev recently, "
             "so it is showing figures older than the ones here."
         )
         lines.extend(_named(stale))
@@ -1014,8 +1015,8 @@ def _pull_freshness_lines() -> list[str]:
     if dropped and dropped.get("rows"):
         lines.append(
             f"⚠️ Local campaign list is incomplete: the last pull dropped "
-            f"{dropped['rows']:,} row(s) belonging to {dropped['campaigns']} "
-            "campaign(s) this machine has no record of. They are sending and "
+            f"{dropped['rows']:,} {'row' if dropped['rows'] == 1 else 'rows'} belonging to "
+            f"{count_noun(dropped['campaigns'], 'campaign')} this machine has no record of. They are sending and "
             "reporting normally in the cloud — only this DB cannot see them. "
             "Ask the backend (heylead.dev), not local tools, for a full list."
         )

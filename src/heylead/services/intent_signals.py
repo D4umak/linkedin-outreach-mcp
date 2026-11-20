@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from .count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ async def search_job_intent(
             titles_str += f" (+{len(job_titles) - 3} more)"
 
         entry["intent_signal"] = (
-            f"Hiring {entry['job_count']} role(s) matching '{keywords}': {titles_str}"
+            f"Hiring {count_noun(entry['job_count'], 'role')} matching '{keywords}': {titles_str}"
         )
         result.append(entry)
 

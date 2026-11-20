@@ -412,7 +412,7 @@ async def run_create_campaign(
         active_campaigns = [c for c in existing if c["status"] == STATUS_ACTIVE]
         if len(active_campaigns) >= FREE_MAX_CAMPAIGNS:
             return (
-                f"⚠️ Free tier limit: {FREE_MAX_CAMPAIGNS} active campaign(s).\n\n"
+                f"⚠️ Free tier limit: {count_noun(FREE_MAX_CAMPAIGNS, 'active campaign')}.\n\n"
                 "You already have an active campaign. Options:\n"
                 "├── Complete or pause your current campaign first\n"
                 f"└── {facts.PRO_UPGRADE_LINE}\n\n"

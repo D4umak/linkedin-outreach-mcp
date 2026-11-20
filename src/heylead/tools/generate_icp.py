@@ -30,6 +30,7 @@ from ..db.queries import (
 )
 from ..formatter import stars
 from ..db.async_bridge import run_db
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -278,7 +279,7 @@ async def run_generate_icp(
             icp_name=result.campaign_name or cut_at_word(target_description, 40),
         )
         if wl_ids:
-            watchlist_info = f"\n\nSignal monitoring: Created {len(wl_ids)} watchlist(s) from ICP keywords. The scheduler will monitor LinkedIn posts for these terms."
+            watchlist_info = f"\n\nSignal monitoring: Created {count_noun(len(wl_ids), 'watchlist')} from ICP keywords. The scheduler will monitor LinkedIn posts for these terms."
     except Exception as e:
         logger.debug("Auto-watchlist creation failed: %s", e)
 

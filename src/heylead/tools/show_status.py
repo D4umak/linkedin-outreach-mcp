@@ -844,7 +844,7 @@ async def _show_overview(offline: bool = False) -> str:
     if paused_campaigns:
         import json as _pj
         from ..linkedin.rate_limiter import estimate_weekly_limit_reset as _ewlr_p
-        output.append(f"⏸️ {len(paused_campaigns)} paused campaign(s):")
+        output.append(f"⏸️ {count_noun(len(paused_campaigns), 'paused campaign')}:")
         for pc in paused_campaigns[:3]:
             _pc_cfg = _pj.loads(pc.get("config_json") or "{}")
             _pr = _pc_cfg.get("pause_reason", "user")
@@ -863,7 +863,7 @@ async def _show_overview(offline: bool = False) -> str:
     # ── Archived campaigns hint ──
     completed_campaigns = [c for c in campaigns if c.get("status") == "completed"]
     if completed_campaigns:
-        output.append(f"📦 {len(completed_campaigns)} archived campaign(s)")
+        output.append(f"📦 {count_noun(len(completed_campaigns), 'archived campaign')}")
         output.append("")
 
     # ── Brand strategy progress ──

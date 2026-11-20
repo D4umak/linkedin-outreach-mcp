@@ -145,7 +145,7 @@ async def _run_backfill_cloud() -> str:
     note = ""
     if withheld:
         note = (
-            f"\n\n{withheld} active autopilot campaign(s) were held back: the "
+            f"\n\n{count_noun(withheld, 'active autopilot campaign')} {'was' if withheld == 1 else 'were'} held back: the "
             "scheduler is in observe mode, and handing the backend a live "
             "autopilot campaign is the instruction to send from it every 5 "
             "minutes. Everything else was pushed, active copilot campaigns "
@@ -153,7 +153,7 @@ async def _run_backfill_cloud() -> str:
             "after `scheduler(action='toggle', enabled=True)` to push them."
         )
     return (
-        f"Pushed {count_noun(campaigns, 'campaign')}, {outreaches} outreaches "
+        f"Pushed {count_noun(campaigns, 'campaign')}, {count_noun(outreaches, 'outreach', 'outreaches')} "
         f"to your hosted workspace — {dashboard_url()}{note}"
     )
 

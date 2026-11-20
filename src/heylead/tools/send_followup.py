@@ -38,6 +38,7 @@ from ..constants import (
 from ..db import aio as db
 from ..next_step import followup_allowed, statuses_sql as followup_statuses_sql
 from ..db.async_bridge import run_db
+from ..services.count_words import count_noun
 from ..linkedin import (
     UnipileAuthError,
     UnipileError,
@@ -374,8 +375,8 @@ async def run_send_followup(
         await client.close()
         return (
             f"Too early for follow-up #{followup_count + 1}.\n\n"
-            f"Schedule: wait {required_days} days between follow-ups.\n"
-            f"Last message was {days_since_last} day(s) ago.\n"
+            f"Schedule: wait {count_noun(required_days, 'day')} between follow-ups.\n"
+            f"Last message was {count_noun(days_since_last, 'day')} ago.\n"
             f"Next follow-up in {wait_days} day{'s' if wait_days != 1 else ''}."
         )
 
@@ -493,7 +494,7 @@ async def run_send_followup(
         )
         return (
             f"⏭️ Skipped follow-up for {candidate.get('name', 'Unknown')} — you talked "
-            f"before this campaign ({len(prospect_msgs)} earlier message(s) from them).\n"
+            f"before this campaign ({count_noun(len(prospect_msgs), 'earlier message')} from them).\n"
             f"Use send_message(action='reply') to write to them yourself."
         )
     if prospect_msgs:
@@ -514,7 +515,7 @@ async def run_send_followup(
             await db.update_outreach(outreach_id, status="replied")
         return (
             f"⏭️ Skipped follow-up for {candidate.get('name', 'Unknown')} — "
-            f"prospect has {len(prospect_msgs)} message(s) in conversation.\n"
+            f"prospect has {count_noun(len(prospect_msgs), 'message')} in conversation.\n"
             f"   Last from them: \"{last_prospect_text}\"\n"
             f"Use send_message(action='reply') to respond."
         )

@@ -21,6 +21,7 @@ from ..config import (
     set_scheduler_mode,
 )
 from ..db import aio as db
+from ..services.count_words import count_noun
 
 logger = logging.getLogger(__name__)
 
@@ -298,7 +299,7 @@ async def _cloud_sending_caveat() -> str:
         c for c in (cloud.get("campaigns") or [])
         if str(c.get("status", "")).lower() == "active"
     ]
-    count = f"{len(held)} active campaign(s)" if held else "any campaign"
+    count = count_noun(len(held), "active campaign") if held else "any campaign"
     return (
         "\n\n\u26a0\ufe0f **The cloud scheduler is still on, and observe does not "
         "reach it.** The backend already holds " + count + " and keeps sending "
@@ -478,7 +479,7 @@ async def run_toggle_scheduler(enabled: bool, cloud: bool = False) -> str:
             pushed = result.get("campaigns")
             if pushed:
                 caught_up = (
-                    f"Dashboard caught up: {pushed} campaign(s) pushed after being "
+                    f"Dashboard caught up: {count_noun(pushed, 'campaign')} pushed after being "
                     "withheld in observe.\n\n"
                 )
             elif result.get("error"):
