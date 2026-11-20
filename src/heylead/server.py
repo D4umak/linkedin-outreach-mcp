@@ -47,6 +47,9 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.531 (2026-11-20)
+- New: upgrade gemini reasoning tier default to gemini-4-argon (#7441)
+
 ## v0.10.530 (2026-11-20)
 - Fix: Luca keeps only the filters a brief asked for (client)
 

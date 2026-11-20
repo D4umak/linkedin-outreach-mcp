@@ -265,7 +265,7 @@ LLM_TIER_REASONING = "reasoning"
 
 DEFAULT_LLM_MODELS: dict[str, dict[str, str]] = {
     "gemini": {
-        LLM_TIER_REASONING: "gemini-3.1-pro-preview",
+        LLM_TIER_REASONING: "gemini-4-argon",
         LLM_TIER_QUALITY: "gemini-3.8-flash",
         LLM_TIER_FAST: "gemini-3.5-flash-lite",
     },
