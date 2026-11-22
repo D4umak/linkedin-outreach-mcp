@@ -47,6 +47,10 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.532 (2026-11-22)
+- Fix: a contract baseline stays inside the 14-day window
+- Fix: state the dated Free pace (#7449)
+
 ## v0.10.531 (2026-11-20)
 - New: upgrade gemini reasoning tier default to gemini-4-argon (#7441)
 
