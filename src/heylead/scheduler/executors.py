@@ -1007,6 +1007,16 @@ async def _execute_invite(job: dict[str, Any]) -> str:
 
     # Check if the result indicates an error (tools return error strings)
     if result and ("❌" in result or "failed" in result.lower()):
+        # Check for permanent failures (not connected, premium required, etc.)
+        # that should NOT be retried — return instead of raising to skip
+        # the engine's retry/escalation loop.
+        if categorize_error(result) == "permanent_failure":
+            logger.warning(
+                "Invite permanent failure for campaign %s (outreach=%s): %s",
+                campaign_id, outreach_id, result[:200],
+            )
+            return JobResult("permanent_failure", result)
+
         # Check for 422 sub-types that should not be retried
         status_code = _extract_status_code(result)
         if status_code == 422 or "cannot_resend_yet" in result.lower():

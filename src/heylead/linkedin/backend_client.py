@@ -477,9 +477,15 @@ def _classify_nested_response(
     elif status_code in (401, 403):
         detail = str(resp_body)[:300] if resp_body else "no body"
         # Distinguish subscription/permission errors from real auth failures
-        if "subscription_required" in resp_text or "subscription required" in resp_text:
+        if (
+            "subscription_required" in resp_text
+            or "subscription required" in resp_text
+            or "feature_not_subscribed" in resp_text
+            or "not been subscribed" in resp_text
+        ):
             result["error"] = f"LinkedIn Premium required for this action. Unipile {status_code}: {detail}"
             result["permanent"] = True
+            result["feature_not_subscribed"] = True
         elif "not connected" in resp_text or "not_connected" in resp_text:
             result["error"] = f"Cannot message — not a connection. Unipile {status_code}: {detail}"
             result["permanent"] = True

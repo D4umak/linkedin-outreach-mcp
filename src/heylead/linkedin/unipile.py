@@ -316,8 +316,8 @@ def _classify_http_auth_error(status_code: int, body_text: str) -> dict[str, Any
     unreachable = unreachable_chat_reason(status_code, body_text)
     if unreachable:
         return _unreachable_result(unreachable)
-    if "subscription_required" in lower or "subscription required" in lower:
-        return {"error": "LinkedIn Premium required for this action.", "permanent": True}
+    if "subscription_required" in lower or "subscription required" in lower or "feature_not_subscribed" in lower or "not been subscribed" in lower:
+        return {"error": "LinkedIn Premium required for this action.", "permanent": True, "feature_not_subscribed": True}
     if "not connected" in lower or "not_connected" in lower:
         return {"error": "Cannot message — not a connection.", "permanent": True}
     if status_code == 401:

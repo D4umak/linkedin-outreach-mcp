@@ -305,16 +305,25 @@ def _format_filters(record: dict[str, Any]) -> str:
     titles = persona.job_titles
     locations = persona.locations
     industries = persona.industries
-    return (
-        f"titles include: {', '.join(titles.include or [])}\n"
-        f"titles exclude: {', '.join(titles.exclude or [])}\n"
-        f"locations include: {', '.join(locations.include or [])}\n"
-        f"locations exclude: {', '.join(locations.exclude or [])}\n"
-        f"industries include: {', '.join(industries.include or [])}\n"
-        f"industries exclude: {', '.join(industries.exclude or [])}\n"
-        f"keywords: {keywords or classic_kw or '(none)'}\n"
-        f"classic drops: {', '.join(dropped) or '(none)'}"
-    )
+    unsent: list[str] = []
+    if industries.include and "industry_codes" not in filters:
+        unsent.append("no industry filter (industries only become search keywords when persona 1 has no keywords)")
+    if titles.exclude or locations.exclude or industries.exclude:
+        unsent.append("exclusions only steer the send check")
+
+    parts = [
+        f"titles include: {', '.join(titles.include or [])}",
+        f"titles exclude: {', '.join(titles.exclude or [])}",
+        f"locations include: {', '.join(locations.include or [])}",
+        f"locations exclude: {', '.join(locations.exclude or [])}",
+        f"industries include: {', '.join(industries.include or [])}",
+        f"industries exclude: {', '.join(industries.exclude or [])}",
+        f"keywords: {keywords or classic_kw or '(none)'}",
+        f"classic drops: {', '.join(dropped) or '(none)'}",
+    ]
+    if unsent:
+        parts.append(f"not sent to LinkedIn search: {'; '.join(unsent)}")
+    return "\n".join(parts)
 
 
 async def _default_preview(icp_id: str, run: dict[str, Any] | None = None) -> str:

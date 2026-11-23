@@ -4834,7 +4834,7 @@ def get_engagement_candidates(
     now = int(time.time())
     db = get_db()
     rows = db.execute(
-        """SELECT o.id as outreach_id, o.campaign_id, o.contact_id, o.status,
+        f"""SELECT o.id as outreach_id, o.campaign_id, o.contact_id, o.status,
                   o.followup_count, o.updated_at as outreach_updated_at,
                   o.next_action,
                   c.name, c.title, c.company, c.linkedin_url, c.linkedin_id,
@@ -4853,7 +4853,10 @@ def get_engagement_candidates(
                OR json_extract(o.next_action, '$.skip_engagement_until') IS NULL
                OR json_extract(o.next_action, '$.skip_engagement_until') < ?
              )
-           ORDER BY COALESCE(
+           ORDER BY
+             CASE WHEN o.status = 'pending' THEN 0 ELSE 1 END ASC,
+             CASE WHEN o.status = 'pending' THEN ({accept_signal.RANK_SQL}) ELSE 0.0 END DESC,
+             COALESCE(
                (SELECT MAX(e.created_at) FROM engagements e
                  WHERE e.outreach_id = o.id),
                o.invited_at, o.created_at
@@ -4875,7 +4878,7 @@ def get_follow_candidates(campaign_id: str) -> list[dict]:
     now = int(time.time())
     db = get_db()
     rows = db.execute(
-        """SELECT o.id as outreach_id, o.campaign_id, o.contact_id, o.status,
+        f"""SELECT o.id as outreach_id, o.campaign_id, o.contact_id, o.status,
                   o.followup_count, o.updated_at as outreach_updated_at,
                   c.name, c.title, c.company, c.linkedin_url, c.linkedin_id,
                   c.profile_json, c.fit_score
@@ -4895,7 +4898,7 @@ def get_follow_candidates(campaign_id: str) -> list[dict]:
                  SELECT 1 FROM engagements e
                  WHERE e.outreach_id = o.id AND e.action_type = 'follow'
              )
-           ORDER BY c.fit_score DESC""",
+           ORDER BY {accept_signal.INVITE_ORDER_SQL}""",
         (campaign_id, now),
     ).fetchall()
     db.close()
@@ -4913,7 +4916,7 @@ def get_profile_view_candidates(campaign_id: str) -> list[dict]:
     now = int(time.time())
     db = get_db()
     rows = db.execute(
-        """SELECT o.id as outreach_id, o.campaign_id, o.contact_id, o.status,
+        f"""SELECT o.id as outreach_id, o.campaign_id, o.contact_id, o.status,
                   o.followup_count, o.updated_at as outreach_updated_at,
                   c.name, c.title, c.company, c.linkedin_url, c.linkedin_id,
                   c.profile_json, c.fit_score
@@ -4933,7 +4936,7 @@ def get_profile_view_candidates(campaign_id: str) -> list[dict]:
                  SELECT 1 FROM engagements e
                  WHERE e.outreach_id = o.id AND e.action_type = 'profile_view'
              )
-           ORDER BY c.fit_score DESC""",
+           ORDER BY {accept_signal.INVITE_ORDER_SQL}""",
         (campaign_id, now),
     ).fetchall()
     db.close()

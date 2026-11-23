@@ -1862,9 +1862,9 @@ async def run_generate_and_send(
                     "🔑 LinkedIn account disconnected.\n\n"
                     "Run setup_profile() again to reconnect your LinkedIn account."
                 )
-            elif result.get("rate_limited_422"):
-                # 422 temporary_provider_limit — LinkedIn restricts personalized
-                # invites (weekly limit or non-Sales Navigator). Retry without message.
+            elif result.get("rate_limited_422") or result.get("feature_not_subscribed"):
+                # 422 temporary_provider_limit or 403 feature_not_subscribed — LinkedIn restricts
+                # personalized invites (weekly limit or non-Sales Navigator). Retry without message.
                 if message:
                     await adb.log_action("invitation_retry_no_message", outreach_id=outreach_id,
                                result="retrying", details={"error": error})
@@ -1896,7 +1896,7 @@ async def run_generate_and_send(
                         retry="invitation_retry_no_message",
                         error_type=(result2.get("error") or "")[:80] or None,
                     )
-                    if result2["success"]:
+                    if result2.get("success"):
                         applied = await adb.update_outreach(
                             outreach_id, status="invited", channel=CHANNEL_LINKEDIN,
                             last_attempt_error=None, expected_status="sending",
@@ -1906,24 +1906,26 @@ async def run_generate_and_send(
                                 "Outreach %s left sending before invite-retry success write; leaving current status",
                                 outreach_id,
                             )
+                        # Persist a placeholder message so we know we sent a blank one
                         await adb.save_message(outreach_id, role="sdr", text="", format="invite_note")
                         await adb.increment_usage("invitations_sent")
                         await adb.log_action("invitation_sent", outreach_id=outreach_id, result="success",
                                    details={"prospect": prospect_name, "message_length": 0,
-                                            "note": "retried without message (422 rate limit)"})
+                                            "note": "retried without message (feature_not_subscribed or 422)"})
                         return (
                             f"✅ Sent to {prospect_name} (without personalized message)\n"
                             f"   LinkedIn restricted personalized invites — sent blank invite.\n\n"
                             f"📊 Daily limit: {new_limit}/day"
                         )
-                    # Retry also failed — treat as rate limit block
-                    error = result2.get("error", error)
+                    # Retry also failed
+                    error = result2.get("error", "Unknown error during blank retry")
+
                 # No message or retry also failed: keep as pending, don't skip
                 await adb.update_outreach(outreach_id, status="pending", last_attempt_error=error[:500])
                 await adb.log_action("invitation_blocked", outreach_id=outreach_id, result="blocked",
-                           details={"error": error, "note": "422 weekly/personalized limit"})
+                           details={"error": error, "note": "invitation limit or entitlement missing"})
                 return (
-                    f"⚠️ LinkedIn invitation limit (422): {error}\n\n"
+                    f"⚠️ LinkedIn invitation limit or 403: {error}\n\n"
                     f"Daily limit reduced to {new_limit}. Will retry later."
                 )
             elif result.get("blocked"):

@@ -47,6 +47,15 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.533 (2026-11-22)
+- Fix test_format_filters_discloses_unsent_industries_and_exclusions by removing incomplete comments
+- Fix: a contract baseline stays inside the 14-day window
+- Fix: state the dated Free pace (#7449)
+- Fix: keep flat merge_queue import and look-ahead admission order (#5686)
+- Fix: print when the first invitation goes out (#7551)
+- Fix: companion change for #7216
+- Fix: retry a time-limit kill once before it fails the check (#5686)
+
 ## v0.10.532 (2026-11-22)
 - Fix: a contract baseline stays inside the 14-day window
 - Fix: state the dated Free pace (#7449)
