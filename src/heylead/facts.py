@@ -126,47 +126,85 @@ INCOMPLETE_GOALS_SENTENCE = (
 )
 
 
-# The pace, as what HeyLead does. Built from the ceilings the hosted scheduler
-# enforces (constants.HOSTED_*_INVITE_CAP*) and the default sending window
-# (heylead-api working_hours.DEFAULT_SENDING_WINDOW: Mon-Fri 08:00-22:00 in
-# the owner's zone). On 24 Sep 2026 a new user's first chat session, with no
-# HeyLead sentence about pace to repeat, warned him off LinkedIn automation
-# and told him to hold back to a small daily volume behind a review step. This
-# sentence is what every surface says instead. Since api #6254 (S6, words
-# approved by Denys on 12 Nov 2026, issue comment 6831064432) it states the
-# HeyLead plan pace: Free 2 a day / 10 a week, Pro at the LinkedIn ceilings.
-# heylead-api app/facts.py and
-# heylead-dashboard src/marketing/facts.ts carry it verbatim, and
+# The pace, as what HeyLead does. On 24 Sep 2026 a new user's first chat
+# session, with no HeyLead sentence about pace to repeat, warned him off
+# LinkedIn automation and told him to hold back to a small daily volume behind a
+# review step. This sentence is what every surface says instead, and
 # tests/test_onboarding_never_warns.py fails any surface that warns.
+#
+# Built at call time (heylead-api #7686, words approved by Denys on 23 Nov 2026,
+# issue comment 7100616867, key pace_sentence_en): the old PACE_SENTENCE
+# constants were built at import, and told every reader that a paid account
+# grows two-fold weekly up to its limit, while the scheduler holds HeyLead Free at
+# 8/40 and Pro with Premium or Sales Navigator at 320 a week, 168 at most in one
+# day, after weekly steps. heylead-api app/facts.py pace_sentence() writes the
+# same words from plan_pace.invite_limits_matrix(); this one reads the client's
+# copy of those caps (constants.PLAN_FREE_* and HOSTED_*, held to the backend by
+# tests/test_plan_pace_facts_6254.py and test_invite_caps_agree_with_the_backend.py).
 SENDING_WINDOW = "Monday to Friday 08:00 to 22:00 in your time zone"
 
-TODAY_PACE_SENTENCE = (
-    "HeyLead sends from your own LinkedIn account at a human pace: at most "
-    f"{_c.HOSTED_DAILY_INVITE_CAP_FREE} invitations a day and "
-    f"{_c.HOSTED_WEEKLY_INVITE_CAP} a week on a free LinkedIn account (more on "
-    "Premium or Sales Navigator: a newly connected paid account starts at "
-    f"{_c.HOSTED_DAILY_INVITE_CAP_FREE} a day and doubles each week up to its limit), "
-    f"{SENDING_WINDOW}, minutes apart. It backs "
-    "off when LinkedIn pushes back and resumes on its own. You can pause any "
-    "campaign at any time."
+_PACE_TAIL = (
+    f"{SENDING_WINDOW}, minutes apart. "
+    "It backs off when LinkedIn pushes back, even below a ceiling, and resumes on its own; "
+    "a step up then waits. You can pause any campaign at any time."
 )
 
-# The approved plan sentence (string 9), stated only once the plan pace is dated.
-PLAN_PACE_SENTENCE = (
-    "HeyLead sends from your own LinkedIn account at a human pace. On HeyLead "
-    f"Free: at most {_c.PLAN_FREE_DAILY_INVITES} invitations a day and "
-    f"{_c.PLAN_FREE_WEEKLY_INVITES} a week. On Pro: at most "
-    f"{_c.HOSTED_DAILY_INVITE_CAP_FREE} invitations a day and "
-    f"{_c.HOSTED_WEEKLY_INVITE_CAP} a week on a free LinkedIn account (more on "
-    "Premium or Sales Navigator: an account new to Pro starts at "
-    f"{_c.HOSTED_DAILY_INVITE_CAP_FREE} a day and doubles each week up to its limit). "
-    f"{SENDING_WINDOW}, minutes apart. It backs "
-    "off when LinkedIn pushes back and resumes on its own. You can pause any "
-    "campaign at any time."
-)
 
-# The sentence in force: today's pace until the api's plan pace is dated.
-PACE_SENTENCE = PLAN_PACE_SENTENCE if _c.PLAN_PACE_DATED else TODAY_PACE_SENTENCE
+def invite_limits_matrix() -> dict:
+    """The invitation ceilings by HeyLead plan and LinkedIn account, the shape of the api's
+    ``plan_pace.invite_limits_matrix()`` (``GET /api/v1/public/invite-limits``), from the
+    client's copy of the backend defaults. Read at call time, never at import."""
+    from heylead.services.invite_pace import RAMP_DAILY_STEPS
+
+    def tier(daily: int, weekly: int) -> dict:
+        steps = []
+        for step in range(1, len(RAMP_DAILY_STEPS) + 2):
+            d = daily if step > len(RAMP_DAILY_STEPS) else min(daily, RAMP_DAILY_STEPS[step - 1])
+            w = weekly if step > len(RAMP_DAILY_STEPS) else min(weekly, d * 5)
+            steps.append({"daily": d, "weekly": w})
+        return {"daily": daily, "weekly": weekly, "steps": steps}
+
+    free = {"daily": _c.PLAN_FREE_DAILY_INVITES, "weekly": _c.PLAN_FREE_WEEKLY_INVITES}
+    paid = (_c.HOSTED_DAILY_INVITE_CAP_PAID, _c.HOSTED_WEEKLY_INVITE_CAP_PAID)
+    return {
+        "free": {t: dict(free) for t in ("free", "premium", "sales_nav")},
+        "pro": {
+            "free": tier(_c.HOSTED_DAILY_INVITE_CAP_FREE, _c.HOSTED_WEEKLY_INVITE_CAP),
+            "premium": tier(*paid),
+            "sales_nav": tier(*paid),
+        },
+    }
+
+
+_TIER_NAMES = {"premium": "Premium", "sales_nav": "Sales Navigator"}
+
+
+def pace_sentence(matrix: dict | None = None) -> str:
+    """The approved pace sentence (api #7686, key pace_sentence_en), figures from ``matrix``
+    (default: ``invite_limits_matrix()``). The twin of heylead-api ``facts._pace_sentence_en``:
+    every ceiling pair goes through ``invite_pace.public_pace_clause`` and the ramp through
+    ``public_ramp_clause``, so a paid week is stated first and its day only as a ceiling."""
+    from heylead.services import invite_pace as ip
+
+    m = matrix or invite_limits_matrix()
+    free, pro = m["free"]["free"], m["pro"]
+    parts = [
+        "HeyLead sends from your own LinkedIn account at a human pace.",
+        f"On HeyLead Free: {ip.public_pace_clause(free['daily'], free['weekly'])}, on any LinkedIn account.",
+        f"On Pro: {ip.public_pace_clause(pro['free']['daily'], pro['free']['weekly'])} on a free LinkedIn account.",
+    ]
+    paid = ["premium", "sales_nav"]
+    groups = [paid] if pro["premium"] == pro["sales_nav"] else [[t] for t in paid]
+    for tiers in groups:
+        tier = pro[tiers[0]]
+        names = " or ".join(_TIER_NAMES[t] for t in tiers)
+        parts.append(f"On Pro with {names}: {ip.public_pace_clause(tier['daily'], tier['weekly'])}.")
+        ramp = ip.public_ramp_clause([s["daily"] for s in tier["steps"]])
+        if ramp and int(tier["daily"]) > int(tier["steps"][0]["daily"]):
+            parts.append(f"Such an account {ramp}, counting from its first invitation or its move to Pro.")
+    parts.append(_PACE_TAIL)
+    return " ".join(parts)
+
 
 # What a tool says about cloud sending. The cloud keeps working when the
 # laptop is closed, but it sends only inside the window above: on 30 Sep 2026

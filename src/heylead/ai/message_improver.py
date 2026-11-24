@@ -14,6 +14,7 @@ import logging
 from typing import Any
 
 from .length_fixer import shorten_to_limit
+from .offer_rule import polish_rule
 from .llm import LLMClient
 from ..services.language import keep_draft_language_instruction, with_language_rule
 from .prompt_loader import get_prompt_temperature, has_prompt, render_prompt
@@ -188,7 +189,9 @@ async def improve_message(
         # A rewrite never translates the draft (heylead-api#2560).
         improved = await client.generate(
             prompt,
-            system=with_language_rule(IMPROVE_SYSTEM, keep_draft_language_instruction()),
+            system=with_language_rule(
+                IMPROVE_SYSTEM + polish_rule(message_type), keep_draft_language_instruction(),
+            ),
             temperature=temperature,
         )
 

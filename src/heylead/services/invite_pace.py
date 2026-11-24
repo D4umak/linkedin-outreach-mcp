@@ -85,3 +85,37 @@ def pace_clause(
                  if ramping and int(ramp.get("next_step_at") or 0) else "")
         clause += f" (never more than {int(daily)} in one day{until})"
     return clause
+
+
+def public_pace_clause(daily: int, weekly: int) -> str:
+    """A ceiling pair as the public pace sentence states it (api #7686, approved words 7100616867).
+
+    When a week of the daily figure fits in the weekly one, both are a plannable pace: "at most 20
+    invitations a day and 100 a week". Otherwise the week is the pace and the day only a ceiling:
+    "at most 320 invitations a week, never more than 168 in one day" (#1782: 168 a day spends 320
+    by day two)."""
+    d, w = int(daily), int(weekly)
+    if w >= d * 5:
+        return f"at most {d} invitations a day and {w} a week"
+    return f"at most {w} invitations a week, never more than {d} in one day"
+
+
+def public_ramp_clause(step_dailies: list[int] | tuple[int, ...]) -> str:
+    """"starts at 20 a day and steps up once a week, to at most 40, 80 and then 168 in one day".
+
+    ``step_dailies`` are the daily caps of the ramp's steps, first to last (the public matrix's
+    ``steps``). Repeated figures are said once; "" when the account never steps up."""
+    dailies = [int(d) for d in step_dailies]
+    if not dailies:
+        return ""
+    start, ups = dailies[0], []
+    for d in dailies[1:]:
+        if d > (ups[-1] if ups else start):
+            ups.append(d)
+    if not ups:
+        return ""
+    if len(ups) == 1:
+        to = str(ups[0])
+    else:
+        to = ", ".join(str(d) for d in ups[:-2]) + (", " if len(ups) > 2 else "") + f"{ups[-2]} and then {ups[-1]}"
+    return f"starts at {start} a day and steps up once a week, to at most {to} in one day"

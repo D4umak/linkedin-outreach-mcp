@@ -2090,6 +2090,15 @@ def get_auto_reply_candidates(campaign_id: str | None = None, min_age_seconds: i
                    AND mx.role = 'sdr'
                    AND mx.timestamp >= m.timestamp
              )
+             -- The reply agent decided this message needs no answer: decided
+             -- once, until they write again (heylead-api#7094).
+             AND NOT EXISTS (
+                 SELECT 1 FROM actions_log ask
+                 WHERE ask.outreach_id = o.id
+                   AND ask.action_type = 'reply_agent_skipped'
+                   AND json_valid(ask.details_json)
+                   AND CAST(json_extract(ask.details_json, '$.message_ts') AS INTEGER) >= m.timestamp
+             )
            ORDER BY
              CASE m.sentiment
                WHEN 'positive' THEN 1

@@ -14,6 +14,7 @@ from ..textutil import contains_term
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from .inbound_icp_render import personas, render_inbound_icp_section, vendor_engage_carve_out
 from .llm import LLMClient
 from .voice_block import voice_prompt_block
 
@@ -373,12 +374,9 @@ def _best_icp_overlap(
     best_overlap = 0.0
     best_icp_id: str | None = None
     for icp in active_icps or []:
-        icp_json_str = icp.get("icp_json", "{}")
-        try:
-            parsed = json.loads(icp_json_str) if isinstance(icp_json_str, str) else icp_json_str
-        except (json.JSONDecodeError, TypeError):
-            continue
-        for single_icp in (parsed.get("icps", [parsed]) if parsed else []):
+        # One reader of both persona shapes (icps / segments), shared with the
+        # prompt renderer, so a keywords string is never iterated as characters.
+        for single_icp in personas(icp.get("icp_json", "{}"), campaign_name=icp.get("name") or ""):
             overlap = _compute_keyword_overlap(profile, single_icp)
             if overlap > best_overlap:
                 best_overlap = overlap
@@ -416,15 +414,29 @@ def finalize_inbound_qualification(
     )
 
 
+def _vendor_carve_out(qual: InboundQualification, headline: str, content: str) -> InboundQualification:
+    """pm-3-vendor-engage (heylead-api#2682): a vendor headline with no buying ask is not engaged at once."""
+    action = vendor_engage_carve_out(headline, content, qual.recommended_action)
+    if action == qual.recommended_action:
+        return qual
+    return InboundQualification(
+        intent=qual.intent,
+        matched_icp_id=qual.matched_icp_id,
+        confidence=qual.confidence,
+        recommended_action=action,
+        reasoning=qual.reasoning,
+    )
+
+
 # ──────────────────────────────────────────────
 # LLM qualification
 # ──────────────────────────────────────────────
 
-_QUALIFY_SYSTEM = """You are an expert B2B sales analyst. Given an inbound LinkedIn signal (connection request, DM, or post comment), determine if the sender could be a potential customer/lead.
+_QUALIFY_SYSTEM = """You are an expert B2B analyst. Given an inbound LinkedIn signal (connection request, DM, or post comment), determine whether the sender fits one of the owner's campaigns: a customer for a sell campaign, a partner or investor for a partner campaign. Each campaign states its goal.
 
 You must output a valid JSON object with these exact fields:
 - "intent": one of "buying_signal", "networking", "job_seeking", "spam", "vendor_pitch", "partnership", "unknown"
-- "matched_icp_id": the ID of the best-matching ICP, or null if no match
+- "matched_icp_id": the id of the best-matching campaign (the id= shown after the campaign's name), or null if no match
 - "confidence": float between 0.0 and 1.0
 - "recommended_action": one of "engage_immediately", "ask_purpose", "accept_and_monitor", "ignore"
 - "reasoning": brief explanation (1-2 sentences)
@@ -442,8 +454,7 @@ Recommended action logic:
 - engage_immediately: High-confidence buying signal (confidence >= 0.7)
 - ask_purpose: Looks promising but unclear intent (confidence 0.4-0.7)
 - accept_and_monitor: Low confidence match, worth keeping in network
-- ignore: Spam, recruiters, vendor pitches, partnership recruiting, or clearly irrelevant
-- vendor_pitch or partnership with no matching ICP MUST be recommended_action "ignore"
+- ignore: Spam, recruiters, vendor pitches, or clearly irrelevant
 
 CRITICAL: If our last outbound message asked a discovery or pain question
 (e.g. "what's your biggest challenge?", "where is it still manual?") and
@@ -491,40 +502,6 @@ def _fence_safe(value: Any, limit: int, multiline: bool = False) -> str:
     if not multiline:
         text = " ".join(text.split())
     return text[:limit]
-
-
-def _build_icp_section(icps: list[dict[str, Any]]) -> str:
-    """Build a concise ICP summary for the LLM prompt."""
-    if not icps:
-        return "No active ICPs defined. Qualify based on general B2B sales signals."
-
-    sections = []
-    for icp_data in icps:
-        icp_json_str = icp_data.get("icp_json", "{}")
-        try:
-            parsed = json.loads(icp_json_str) if isinstance(icp_json_str, str) else icp_json_str
-        except (json.JSONDecodeError, TypeError):
-            parsed = {}
-
-        # Extract individual ICPs from the result
-        icps_list = parsed.get("icps", [parsed]) if parsed else [{}]
-        for single_icp in icps_list[:2]:  # Max 2 per result to keep prompt short
-            icp_id = icp_data.get("id", "")
-            name = single_icp.get("name", icp_data.get("name", "Unknown"))
-            desc = single_icp.get("description", "")[:150]
-            pain_points = ", ".join((single_icp.get("pain_points") or [])[:3])
-            keywords = ", ".join((single_icp.get("keywords") or [])[:5])
-
-            section = f"  ICP '{name}' (id={icp_id}):"
-            if desc:
-                section += f"\n    Description: {desc}"
-            if pain_points:
-                section += f"\n    Pain points: {pain_points}"
-            if keywords:
-                section += f"\n    Keywords: {keywords}"
-            sections.append(section)
-
-    return "\n".join(sections) if sections else "No ICP details available."
 
 
 UNREADABLE_REASON = "Could not parse qualification response"
@@ -655,7 +632,7 @@ async def qualify_inbound(
         from ..linkedin import get_linkedin_client
         backend_client = get_linkedin_client()
         try:
-            return finalize_inbound_qualification(
+            backend_qual = finalize_inbound_qualification(
                 await backend_client.qualify_inbound(
                     profile=profile,
                     content=content_str,
@@ -673,6 +650,7 @@ async def qualify_inbound(
                 profile,
                 active_icps,
             )
+            return _vendor_carve_out(backend_qual, headline, content_str)
         except Exception as e:
             logger.warning("Backend qualify_inbound failed: %s, using keyword match", e)
             # Fall through to keyword-only result
@@ -684,7 +662,7 @@ async def qualify_inbound(
         client = LLMClient()
         safe_content = _fence_safe(content_str, 500, multiline=True)
         content_section = f'Message/Comment: "{safe_content}"' if content_str else "No message content (silent connection request)."
-        icp_section = _build_icp_section(active_icps)
+        icp_section = render_inbound_icp_section(active_icps)
 
         our_last_section = ""
         if (our_last_message or "").strip():
@@ -709,7 +687,8 @@ async def qualify_inbound(
         if parsed.reasoning == UNREADABLE_REASON:
             from ..services.model_failure import UNPARSEABLE, record_skip
             await record_skip(actor="inbound", failure=UNPARSEABLE, detail=ref)
-        result = finalize_inbound_qualification(parsed, profile, active_icps)
+        result = _vendor_carve_out(
+            finalize_inbound_qualification(parsed, profile, active_icps), headline, content_str)
         logger.info("Inbound qualified (LLM): %s → %s (%.0f%%)", ref, result.intent, result.confidence * 100)
         return result
 

@@ -47,6 +47,13 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.534 (2026-11-23)
+- New: the pace sentence states each HeyLead plan and LinkedIn account, built at call time (heylead-api#7686)
+- Fix: record the stored row's timestamp for a decided skip (heylead-api#7094)
+- incident note for the reply-agent skip loop (heylead-api#7094)
+- Fix: a decided reply-agent skip is remembered per message (heylead-api#7094)
+- Fix: follow-up writer and polish offer only the card's ask (client mirror)
+
 ## v0.10.533 (2026-11-22)
 - Fix test_format_filters_discloses_unsent_industries_and_exclusions by removing incomplete comments
 - Fix: a contract baseline stays inside the 14-day window
@@ -2786,7 +2793,7 @@ mcp = FastMCP(
         "Workflow: setup_profile → generate_icp(goal=...) → create_campaign(goal=...) → automated outreach.\n"
         "Sending: create_campaign saves a draft and sends nothing. Outreach starts only "
         "with campaign(action='launch'), and only when the user asks. "
-        f"{facts.PACE_SENTENCE} campaign(action='emergency_stop') pauses everything. "
+        f"{facts.pace_sentence()} campaign(action='emergency_stop') pauses everything. "
         # api #5340: never-chose hosted workspaces send without review (T-agents);
         # api #6254 S1: the same on every plan (the Free trial of #5341 is retired).
         "A hosted workspace that has not chosen otherwise sends opening DMs, follow-ups "

@@ -11,7 +11,7 @@ Read tools if you need context, then decide.
 
 Decisions:
 - hold: a human must see this (ambiguous intent, legal/compliance, possible wrong person, sensitive, or you are unsure)
-- skip: do not reply on this job only (wait; do not close the outreach)
+- skip: no answer to this message is needed; wait for their next message (do not close the outreach)
 - reply: a clear, safe conversational reply is appropriate
 - book: they clearly want a meeting and a calendar or booking link is in context
 - none: you cannot decide

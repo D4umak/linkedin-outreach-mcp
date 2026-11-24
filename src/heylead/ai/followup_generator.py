@@ -36,6 +36,7 @@ from .memory_extractor import extract_memory_from_reasoning
 from .memory_formatter import format_memory_for_prompt
 from .news_service import get_prospect_news
 from ..services.language import language_rule_for, with_language_rule
+from .offer_rule import offer_rule
 from .copywriter.greetings import strip_greeting_opener, strip_sign_off
 from .prompt_loader import (
     build_context_block,
@@ -144,7 +145,7 @@ Relevance: {relevance_hook}
 
 ## EXAMPLES
 BAD: "Hi Sarah, just wanted to follow up. Our AI-powered platform could really streamline your workflow."
-GOOD: "If things went quiet, all good — retail shifts often push the creative load up. If video work is taking more time than you'd like, we've been building something that takes the heavy parts off your plate. Happy to share whenever it's useful."
+GOOD: "If things went quiet, all good — retail shifts often push the creative load up. If video work is taking more time than you'd like, we've been building something that takes the heavy parts off your plate."
 
 ## OUTPUT
 Return ONLY valid JSON (no markdown):
@@ -152,7 +153,7 @@ Return ONLY valid JSON (no markdown):
     "reasoning": {{
         "hook": "brief description of the fresh angle",
         "pain_point": "which pain point or interest this addresses",
-        "cta_choice": "question|resource_offer|meeting_soft|value_share"
+        "cta_choice": "question|meeting_soft|value_share"
     }},
     "message": "the actual follow-up message text"
 }}"""
@@ -390,8 +391,10 @@ async def _generate_v63(
         campaign_context, campaign_ctx, prospect, conversation_history,
     )
     ctx["language_rule"] = lang_rule
+    # What the sender may offer (#7086): the card's ask only; the card lives in campaign_ctx.
     system_prompt = with_language_rule(
-        render_prompt(select_prompt("outreach_system", intent), ctx), lang_rule,
+        render_prompt(select_prompt("outreach_system", intent), ctx) + offer_rule(campaign_ctx),
+        lang_rule,
     )
     reasoning_name = select_prompt("followup_reasoning", intent)
     reasoning_prompt = render_prompt(reasoning_name, ctx)
@@ -588,7 +591,8 @@ async def _generate_legacy(
     result = await llm_client.generate_json(
         prompt, schemas.MESSAGE,
         system=with_language_rule(
-            FOLLOWUP_SYSTEM_LEGACY,
+            # No campaign_ctx on this path, so no card: nothing may be offered (#7086).
+            FOLLOWUP_SYSTEM_LEGACY + offer_rule(campaign_context),
             language_rule_for(campaign_context, None, prospect, conversation_history),
         ),
         temperature=0.7,

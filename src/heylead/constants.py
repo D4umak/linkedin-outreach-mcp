@@ -94,8 +94,8 @@ PRO_FOLLOWUP_SCHEDULE_DAYS = [1, 3, 7, 14]
 # Values are set ~10% below known LinkedIn safe thresholds.
 # Total daily budget: ~180 visible actions (was uncapped → ~350/day → ban).
 
-# The invitation ceiling belongs to the LinkedIn ACCOUNT, and for a hosted
-# account the BACKEND owns the number. It measures it (heylead-api #682, 16 Sep
+# The invitation ceiling is set per LinkedIn ACCOUNT (and, hosted, per HeyLead
+# plan), and for a hosted account the BACKEND owns the number. It measures it (heylead-api #682, 16 Sep
 # 2026: a Sales Navigator seat refused by LinkedIn at 177 a day and 337 a week,
 # a Premium seat never refused at 160/321), it enforces it, and it publishes it
 # per seat as `weekly_cap` and `daily_invite_cap` on every payload. A hosted
@@ -125,13 +125,13 @@ HOSTED_DAILY_INVITE_CAP_PAID = 168
 # 3. The HeyLead PLAN pace (api #6254, slice S3, heylead-api
 #    app/services/plan_pace.py FREE_DAILY / FREE_WEEKLY): a seat on HeyLead
 #    Free sends at most 8 invitations a UTC day and 40 in any 7 days; Pro keeps
-#    the LinkedIn ceilings above. facts.PACE_SENTENCE states both, and
+#    the LinkedIn ceilings above. facts.pace_sentence() states both, and
 #    tests/test_plan_pace_facts_6254.py reads the backend's numbers to hold
 #    these two there.
 PLAN_FREE_DAILY_INVITES = 8
 PLAN_FREE_WEEKLY_INVITES = 40
 # Whether the api's plan pace is dated (plan_pace.PLAN_PACE_SINCE set). Until
-# it is, every surface states today's pace (facts.TODAY_PACE_SENTENCE): the
+# it is, every surface stated today's pace (the retired facts.TODAY_PACE_SENTENCE): the
 # plan sentence goes live with the date, never before it (#6254 case-pm round
 # 5, comment 6848482024). The date PR flips this, with the figures above set to
 # the approved ones; the drift test reads the api's date to hold the two together.

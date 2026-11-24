@@ -749,6 +749,18 @@ async def run_reply_to_prospect(
         )
         if agent_outcome.kind in ("hold", "skip"):
             await client.close()
+            from ..services.model_failure import MODEL_UNAVAILABLE
+            if agent_outcome.kind == "skip" and agent_outcome.reason != MODEL_UNAVAILABLE:
+                # The agent decided this message needs no answer. Remember it per
+                # message, or get_auto_reply_candidates offers it again on every
+                # pass and the model is asked again (heylead-api#7094). A model
+                # outage decided nothing, so that skip is retried.
+                await run_db(
+                    log_action, "reply_agent_skipped", outreach_id=outreach_id, result="skipped",
+                    # The stored row's own time: get_auto_reply_candidates compares it
+                    # with messages.timestamp, and an enriched thread may carry LinkedIn's.
+                    details={"message_ts": int(_last_prospect_ts or last_ts), "reason": agent_outcome.reason},
+                )
             return agent_outcome.message
         wants_meeting = agent_outcome.kind == "book" or sentiment == "calendar"
         if wants_meeting:
