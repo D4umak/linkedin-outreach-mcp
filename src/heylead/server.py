@@ -47,6 +47,14 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.537 (2026-11-24)
+- New: HeyLead Bar inbox with sidebar in Liquid Glass (#7747)
+- Fix: floating panel presses a button on the first click and activates the app (heylead #1908)
+- Fix: floating panel shows its HeyLead heading once (#7747)
+- Fix: HeyLead Bar opens with Ctrl+Opt+H when the menu bar hides its icon (#7747)
+- Fix: the report reply states the pace the backend keeps (api #7804)
+- Fix: keep the first card in the paste's language and price
+
 ## v0.10.536 (2026-11-24)
 - move the oldest case-designer line (#4315) to the archive, section back to 15
 - Fix: drop unused is_callout from the client floor (#7762)
@@ -4491,7 +4499,7 @@ async def _scheduler_impl(
             it then sends and reads nothing. On a hosted install the toggle
             always switches the workspace, cloud or not.
         hours: Lookback window in hours for 'logs' and 'activity' (default 24).
-            For 'report': report interval in hours (1, 2, 4, 8, or 24).
+            For 'report': report interval in hours (2, 4, 8, or 24).
             Omitted, 'report' leaves the stored interval unchanged.
         event_type: Filter events by type for 'logs'.
             For 'report': recipient email (empty = use login email).

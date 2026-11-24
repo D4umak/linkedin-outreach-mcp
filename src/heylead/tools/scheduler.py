@@ -52,7 +52,7 @@ async def run_scheduler(
             it then sends and reads nothing. On a hosted install the toggle
             always switches the workspace, cloud or not.
         hours: Lookback window in hours for 'logs' (default 24).
-            For 'report': report interval in hours (1, 2, 4, 8, or 24).
+            For 'report': report interval in hours (2, 4, 8, or 24).
             Omitted, 'report' leaves the stored interval alone.
         event_type: Filter events by type for 'logs'.
             For 'report': recipient email (empty = use login email).
@@ -158,6 +158,15 @@ async def _run_backfill_cloud() -> str:
     )
 
 
+def _report_interval(value: object) -> int:
+    """The interval the backend keeps: 2, 4, 8 or 24 hours.
+
+    "1 hour" is no longer offered and a stored 1 is read as once a day
+    (heylead-api #7804); a backend older than that, or an answer with no
+    interval, reads the same way here."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and value in (2, 4, 8) else 24
+
+
 async def _run_report_settings(
     enabled: bool = True,
     interval_hours: int | None = None,
@@ -183,7 +192,8 @@ async def _run_report_settings(
     # `if interval_hours != 24`, borrowing the 'hours' lookback default as a
     # sentinel — but 24 is itself a legal interval (the endpoint takes
     # 1, 2, 4, 8 or 24), so asking for a daily report was the one request the
-    # tool silently dropped while printing the unchanged interval back.
+    # tool silently dropped while printing the unchanged interval back. A 1 is
+    # still sent as asked: the backend accepts it and reads it as once a day.
     if interval_hours is not None:
         body["report_interval_hours"] = interval_hours
     if report_email:
@@ -204,22 +214,33 @@ async def _run_report_settings(
             return f"Failed to reach backend: {e}"
 
     status = "enabled" if data.get("report_enabled") else "disabled"
-    interval = data.get("report_interval_hours", 1)
+    interval = _report_interval(data.get("report_interval_hours"))
     email = data.get("report_email", "") or "(login email)"
+    pace = "once a day" if interval == 24 else f"every {interval} hours"
 
     lines = [
         f"# Email Report {status.upper()}",
         "",
         f"- Status: **{status}**",
-        f"- Interval: every **{interval}h**",
+        f"- How often: **at most {pace}**",
         f"- Recipient: **{email}**",
         "",
     ]
 
     if data.get("report_enabled"):
+        # The backend skips a scheduled report when nothing happened, keeps one
+        # daily check while a campaign runs and holds reports through the night
+        # pause (heylead-api #7804): the reply says so instead of promising one
+        # on the clock.
+        rule = (
+            "and with no campaign running only when something happened."
+            if interval == 24
+            else "only when something happened, or once on a quiet day while a campaign runs."
+        )
         lines.append(
-            "The next report will be sent on the next scheduler tick "
-            "(within ~5 minutes)."
+            "If reports were off, one goes out within about 5 minutes. "
+            f"Scheduled reports come at most {pace}, {rule} "
+            "Your night pause holds them while it is on."
         )
         lines.append("")
         lines.append("The report includes:")

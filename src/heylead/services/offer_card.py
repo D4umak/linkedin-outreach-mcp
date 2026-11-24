@@ -207,8 +207,10 @@ def card_is_stale(card: OfferCard | None, context: dict[str, Any] | None) -> boo
 
 DISTIL_SYSTEM = (
     "You turn a seller's own description of what they offer into five short lines "
-    "a buyer would say. Plain words. No product nouns (" + ", ".join(PRODUCT_NOUNS) + "). "
-    "Never invent a fact, a number or a name. Return ONLY JSON."
+    "in the language of that description. Do not translate. Plain words. "
+    "No product nouns (" + ", ".join(PRODUCT_NOUNS) + "). "
+    "Never invent a fact, a number or a name. A price written in the description "
+    "stays in how or proof. Return ONLY JSON."
 )
 
 DISTIL_PROMPT = """From the seller's paste below, write the Offer card.
@@ -219,12 +221,14 @@ DISTIL_PROMPT = """From the seller's paste below, write the Offer card.
 ## THE SELLER'S PASTE
 {paste}
 
+Write every line in the language of the seller's paste. Do not translate it.
+
 ## WRITE
 - "for": who it is for, one phrase (from the paste; empty if the paste does not say).
-- "outcome": what changes for that person, in their words, at most {outcome_max} words. Not what the seller builds. Not a sentence starting with I or We.
+- "outcome": what changes for that person, using a change the paste states, at most {outcome_max} words. Not a sentence starting with I or We.
 - "how": what the seller does, at most {how_max} words. May name the craft. Never who it is for.
-- "proof": one fact from the paste, at most {proof_max} words, or empty. Never invented.
-- "ask": one question, at most {ask_max} words, ending in ?, that this person can answer about their own week with yes, no or a number.
+- "proof": one fact from the paste, at most {proof_max} words, or empty. A price in the paste is kept here or in how. Never invented.
+- "ask": the question the paste tells you to ask, at most {ask_max} words, ending in ?. When the paste does not say what to ask, one question this person can answer about their own week with yes, no or a number.
 {defects_section}
 Return ONLY a JSON object with keys for, outcome, how, proof, ask."""
 
@@ -262,6 +266,55 @@ def card_from_model(data: dict[str, Any], context: dict[str, Any], *, now: int) 
     )
 
 
+
+# A price the paste states. Years and counts (2024, 1M+) are not a price:
+# a card may leave those out of how and proof.
+_PRICE_RE = re.compile(
+    r"(?:[$€£]\s*\d|\b\d[\d.,]*\s*(?:euro|euros|dollar|dollars|pound|pounds|excl)\b)",
+    re.IGNORECASE,
+)
+# English composed lines over a paste that is not English. The gap, not a
+# detected code: a Dutch paste scores as Spanish ("de" and "en" are Spanish
+# stopwords), so the card follows the paste instead of detect_language.
+_ENGLISH_PASTE_MAX = 0.10
+_ENGLISH_COMPOSED_MIN = 0.15
+_ENGLISH_GAP = 0.12
+
+
+def _english_share(text: str) -> float:
+    from .language import latin_scores
+
+    return float(latin_scores(text).get("en") or 0.0)
+
+
+def binding_defects(card: OfferCard, context: dict[str, Any] | None) -> list[str]:
+    """Shape-clean cards that still do not follow the paste.
+
+    The length, question-mark and product-noun checks accept an English
+    abstraction of a paste in another language, and a card that drops a
+    price the paste states. Those are the lines an owner rewrites. The
+    sentences join the retry list, the same channel as offer_card_defects.
+    """
+    paste = paste_text(context)
+    if not paste:
+        return []
+    found: list[str] = []
+    composed = " ".join(
+        _clean(part) for part in (card.outcome, card.how, card.proof, card.ask) if _clean(part)
+    )
+    paste_en = _english_share(paste)
+    composed_en = _english_share(composed) if composed else 0.0
+    if composed and paste_en < _ENGLISH_PASTE_MAX and composed_en >= _ENGLISH_COMPOSED_MIN and (
+        composed_en - paste_en >= _ENGLISH_GAP
+    ):
+        found.append(
+            "outcome, how, proof and ask must be in the language of the paste, not English"
+        )
+    if _PRICE_RE.search(paste) and not re.search(r"\d", f"{card.how} {card.proof}"):
+        found.append("how or proof must keep the price written in the paste")
+    return found
+
+
 async def distil_offer(context: dict[str, Any] | None, *, goal: str = "sell", now: int | None = None) -> OfferCard | None:
     """One model call, one retry with the defects listed, then needs_review.
 
@@ -290,7 +343,7 @@ async def distil_offer(context: dict[str, Any] | None, *, goal: str = "sell", no
         )
         raw = await call_llm(prompt, system=DISTIL_SYSTEM, temperature=0.2, max_tokens=600, json_mode=True)
         card = card_from_model(loads_json_object(raw, {}), ctx, now=stamp)
-        defects = offer_card_defects(card)
+        defects = offer_card_defects(card) + binding_defects(card, ctx)
         if not defects:
             return card
     assert card is not None
