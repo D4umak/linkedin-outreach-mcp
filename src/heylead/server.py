@@ -47,6 +47,15 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.536 (2026-11-24)
+- move the oldest case-designer line (#4315) to the archive, section back to 15
+- Fix: drop unused is_callout from the client floor (#7762)
+- Fix: the reply tool defers a call-out with an explicit stop to the decline path
+- Fix: a prospect who calls our messages AI is held for you, not answered (#7762)
+- Fix: draft orphaned slot PRs the night fixer left or that conflict; its commits are not movement (#5618)
+- #6740 F1 line says what the review did write
+- #6740 F1, an idea row with no action showed the editor's hint
+
 ## v0.10.535 (2026-11-24)
 - Fix: a sign-in-path change gets a guardrail, a page-job check and a QA case (api #7748)
 - post intent rows from a phrase anywhere in a post (heylead-api#7217)

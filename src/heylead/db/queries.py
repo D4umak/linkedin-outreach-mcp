@@ -2367,6 +2367,8 @@ def held_note(hold: dict[str, Any], campaign_status: str) -> str:
         "unresponsive": "the answer talked about something else, not what they said",
         "file_unread": "they sent a file and no words, and HeyLead can't read the file",
         "instruction_in_reply": "their message asked HeyLead to do something other than answer them",
+        # Denys's recorded yes, heylead-api #7762 comment 7114133346.
+        "ai_callout": "they suggested your messages were written by AI",
         "booking_link_offer": "you added a booking link and the answer offering it waits for you",
         "starting_point": "HeyLead left this one to you and wrote a starting point you can change",
         "rule_broken": "the finished text broke one of HeyLead's writing rules",

@@ -573,6 +573,22 @@ async def run_reply_to_prospect(
             detail="their message could not be classified",
         )
 
+    # They called our messages AI (heylead-api #7762): an autonomous reply waits for the
+    # owner's own answer, in every mode. The opt-out above still wins; nothing below runs.
+    if autonomous:
+        from ..services.ai_callout import AI_CALLOUT, AI_CALLOUT_OWNER_TEXT, callout_in
+        texts = outstanding_texts or [reply_text]
+        # An explicit stop in the same turns goes on to the decline path below (#7762).
+        if callout_in(texts) and not any(is_decline_message(t) for t in texts):
+            from ..services.reply_agent import persist_operator_hold
+            await client.close()
+            await run_db(
+                persist_operator_hold, outreach_id, AI_CALLOUT_OWNER_TEXT,
+                int(last_prospect_msg.get("timestamp") or 0),
+                str(last_prospect_msg.get("id") or ""), reason_code=AI_CALLOUT,
+            )
+            return f"Held for operator — {AI_CALLOUT_OWNER_TEXT} No reply will be sent."
+
     # Identity challenge ("is this for me?") — recheck ICP before decline close.
     targeting_strategy = ""
     if (

@@ -13,7 +13,7 @@ Decisions:
 - hold: a human must see this (ambiguous intent, legal/compliance, possible wrong person, sensitive, or you are unsure)
 - skip: no answer to this message is needed; wait for their next message (do not close the outreach)
 - reply: a clear, safe conversational reply is appropriate
-- book: they clearly want a meeting and a calendar or booking link is in context
+- book: they clearly want a meeting, ask for a call, propose a day or time, or hand off a phone number or calendar link for scheduling our meeting (whether or not a booking link is in context). Do NOT choose book if they are pitching their own product/service, or if they step back from a meeting ask to request written questions instead
 - none: you cannot decide
 
 Default to hold when unsure. Never invent facts. Do not write the reply yourself."""

@@ -1598,6 +1598,23 @@ async def _execute_auto_reply(job: dict[str, Any]) -> str | JobResult:
         if is_fresh_hold(hold, last_ts):
             return JobResult("skipped", "held for operator")
 
+    # They called our messages AI in a turn since our last sdr row (heylead-api #7762):
+    # the owner answers, in every mode. A stop in those turns goes on to the opt-out path.
+    from ..services.ai_callout import (
+        AI_CALLOUT, AI_CALLOUT_OWNER_TEXT, callout_in, turns_since_ours,
+    )
+    from ..tools.reply_to_prospect import is_decline_message
+    thread = await run_db(get_messages_for_outreach, outreach_id) or []
+    theirs = turns_since_ours(thread)
+    if callout_in(theirs) and not any(is_decline_message(t) for t in theirs):
+        from ..services.reply_agent import persist_operator_hold
+        last = next((m for m in reversed(thread) if (m.get("role") or "") == "prospect"), {})
+        await run_db(
+            persist_operator_hold, outreach_id, AI_CALLOUT_OWNER_TEXT,
+            int(last.get("timestamp") or 0), str(last.get("id") or ""), reason_code=AI_CALLOUT,
+        )
+        return JobResult("skipped", AI_CALLOUT)
+
     if campaign_id:
         from ..services.coordinator import coordinator_blocks_send
         if await run_db(coordinator_blocks_send, campaign_id):

@@ -230,8 +230,10 @@ NO_POSTING_SENTENCE = (
     "HeyLead learns the user's voice from their own LinkedIn posts. On heylead.dev, "
     "the user can also let it learn from messages they wrote themselves on LinkedIn: "
     "that is off until they turn it on, it never learns from messages other people "
-    "sent them, and it never quotes those messages. It never publishes on their "
-    "profile unless they ask for a post."
+    "sent them, and it never quotes those messages. It also learns their style "
+    "from the edits they make to drafts before approving them, never the words "
+    "themselves, and one switch on heylead.dev turns that off for the workspace. "
+    "It never publishes on their profile unless they ask for a post."
 )
 
 # What a first campaign can expect, from the founder's own workspace on

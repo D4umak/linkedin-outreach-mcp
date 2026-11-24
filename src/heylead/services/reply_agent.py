@@ -96,6 +96,7 @@ def persist_operator_hold(
     message_id: str = "",
     extra: dict[str, Any] | None = None,
     decision_id: str = "",
+    reason_code: str = "",
 ) -> dict[str, Any]:
     """Park the thread for a person. ``decision_id`` names the agent decision
     that parked it (heylead-api#1209); a hold from anything else clears it."""
@@ -108,6 +109,9 @@ def persist_operator_hold(
         "message_ts": int(message_ts or 0),
         "message_id": message_id or "",
     }
+    if reason_code:
+        # Which hold it is, so the drawer shows its fixed owner words (held_note, #7762).
+        payload["reason_code"] = reason_code
     if extra:
         for key in ("prospect_calendar_url", "calendar_url"):
             if extra.get(key):

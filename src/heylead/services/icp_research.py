@@ -16,6 +16,7 @@ from ..ai.icp_schemas import IcpResult, icp_result_from_dict, icp_result_to_json
 from ..ai.schemas import ICP_AGENT_STEP
 from .agent_commons import async_commons_tools
 from .coordinator import after_sibling_loop
+from .icp_persona_titles import drop_other_persona_titles, personas_line
 from ..constants import (
     ICP_RESEARCH_MAX_STEPS,
     ICP_RESEARCH_MAX_TOKENS,
@@ -176,9 +177,11 @@ async def maybe_run_icp_research(
         if not record:
             return IcpResearchOutcome(decision="keep", reason="icp missing", summary="keep — ICP not found")
 
+        data = _icp_data(record)
         context = build_icp_research_context(
             target_description=target_description or record.get("target_desc") or "",
             icp_name=record.get("name") or "",
+            data=data,
         )
         run: dict[str, Any] = {}
         tools = _build_tools(icp_id, record, preview_fn, run)
@@ -214,6 +217,8 @@ async def maybe_run_icp_research(
             )
             return IcpResearchOutcome(decision=model_failure.NOT_FINISHED, reason=PREVIEW_DID_NOT_RUN,
                                       summary="not finished — the people search did not run; ICP unchanged")
+        # Before anything reads the decision (heylead-api#7290): titles another persona already carries.
+        result, persona_info = drop_other_persona_titles(data, result)
         await after_sibling_loop(
             agent="icp_research",
             campaign_id="",
@@ -223,6 +228,7 @@ async def maybe_run_icp_research(
         )
         return await _apply_decision(
             icp_id, result, mode=mode, enrich_fn=enrich_fn,
+            persona_info=persona_info,
         )
     except Exception as e:
         logger.warning("ICP research agent failed: %s", e)
@@ -278,10 +284,29 @@ def _build_tools(
     }
 
 
+def _icp_data(record: dict[str, Any]) -> dict[str, Any]:
+    try:
+        data = json.loads(record.get("icp_json") or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _format_saved_icp(record: dict[str, Any]) -> str:
-    blob = (record.get("icp_json") or "")[:1800]
+    """Every persona's titles first (heylead-api#7290), then the target and name, then as much JSON as fits.
+
+    The loop cuts a tool result at ICP_RESEARCH_RESULT_CHARS; the JSON is cut (saying so) to what is left, so that
+    cut never falls and the Personas line is never the part dropped.
+    """
     target = record.get("target_desc") or ""
-    return f"target: {target}\nname: {record.get('name') or ''}\nicp: {blob or '(none)'}"
+    head = f"{personas_line(_icp_data(record))}\ntarget: {target}\nname: {record.get('name') or ''}\nicp: "
+    blob = record.get("icp_json") or ""
+    if not blob:
+        return head + "(none)"
+    from .result_cut import cut
+
+    # Cut through result_cut, so a cut JSON says so (heylead-api #1630).
+    return head + cut(blob, max(ICP_RESEARCH_RESULT_CHARS - len(head), 0))
 
 
 def _format_filters(record: dict[str, Any]) -> str:
@@ -411,6 +436,7 @@ async def _apply_decision(
     *,
     mode: str,
     enrich_fn: EnrichFn | None,
+    persona_info: dict[str, Any] | None = None,
 ) -> IcpResearchOutcome:
     decision = result.decision if result.decision in {"keep", "revise", "hold"} else "keep"
     reason = result.reason or ("research could not decide" if result.decision == "none" else "")
@@ -431,6 +457,8 @@ async def _apply_decision(
             "mode": mode,
             "exhausted": result.exhausted,
             "patch": result.extras,
+            # What the model asked beside what is applied, and every persona's titles (heylead-api#7290).
+            **(persona_info or {}),
         },
     )
 
