@@ -61,6 +61,11 @@ class SignalClassification:
     keywords_matched: list[str]
     engagement_hook: str  # Suggested angle for outreach referencing this signal
     reasoning: str
+    # Who made the reading (heylead-api#7217): "llm" only when the backend or
+    # the local model answered; "rule" for the fast rules and the keyword
+    # overlap; "fallback" when nothing could read it. Post intent rows are
+    # derived only from an "llm" reading.
+    classifier_source: str = "rule"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -70,6 +75,7 @@ class SignalClassification:
             "keywords_matched": self.keywords_matched,
             "engagement_hook": self.engagement_hook,
             "reasoning": self.reasoning,
+            "classifier_source": self.classifier_source,
         }
 
 
@@ -484,6 +490,7 @@ def _fallback_classification(reason: str) -> SignalClassification:
         keywords_matched=[],
         engagement_hook="",
         reasoning=reason,
+        classifier_source="fallback",
     )
 
 
@@ -584,6 +591,8 @@ async def classify_signal(
                     for icp in icps
                 ],
             )
+            if getattr(result, "classifier_source", "") != "fallback":
+                result.classifier_source = "llm"
             logger.info(
                 "Signal classified (backend): %s → %s (%.0f%%)",
                 message_hash(content), result.intent, result.confidence * 100,
@@ -612,6 +621,9 @@ async def classify_signal(
         raw = await client.generate(prompt, system=_CLASSIFY_SYSTEM, temperature=0.2, max_tokens=500,
                               tier=LLM_TIER_FAST)
         result = _parse_classification_response(raw)
+        # A reply that could not be parsed stays "fallback".
+        if result.classifier_source != "fallback":
+            result.classifier_source = "llm"
         logger.info(
             "Signal classified (LLM): %s → %s (%.0f%%)",
             message_hash(content), result.intent, result.confidence * 100,
@@ -1192,7 +1204,7 @@ async def classify_pending_signals() -> str:
             reused_meta = {**metadata}
             for key in (
                 "pain_points_detected", "keywords_matched",
-                "engagement_hook", "mention_context",
+                "engagement_hook", "mention_context", "classifier_source",
             ):
                 if key in cached_meta:
                     reused_meta[key] = cached_meta[key]
@@ -1300,6 +1312,7 @@ async def classify_pending_signals() -> str:
                 "pain_points_detected": result.pain_points_detected,
                 "keywords_matched": result.keywords_matched,
                 "engagement_hook": result.engagement_hook,
+                "classifier_source": result.classifier_source,
             }
             if pattern_note:
                 classification_meta["author_pattern"] = pattern_note.strip(" []")

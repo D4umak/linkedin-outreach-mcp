@@ -47,6 +47,11 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.535 (2026-11-24)
+- Fix: a sign-in-path change gets a guardrail, a page-job check and a QA case (api #7748)
+- post intent rows from a phrase anywhere in a post (heylead-api#7217)
+- Fix: derive a post intent row only from the post's LLM reading (heylead-api#7217)
+
 ## v0.10.534 (2026-11-23)
 - New: the pace sentence states each HeyLead plan and LinkedIn account, built at call time (heylead-api#7686)
 - Fix: record the stored row's timestamp for a decided skip (heylead-api#7094)
