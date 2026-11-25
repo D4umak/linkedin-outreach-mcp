@@ -147,6 +147,8 @@ class SingleIcp:
 
     # LinkedIn enrichment (populated in Phase 6)
     linkedin_enriched_params: EnrichedIcpParams | None = None
+    # Set when grounded_confidence scored this persona (api #7211).
+    confidence_version: int = 0
 
 
 @dataclass

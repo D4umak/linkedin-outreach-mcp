@@ -47,6 +47,14 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.538 (2026-11-25)
+- Fix: drop unused client persona_priors after merge
+- Fix: name the company in Spanish, French, German and Portuguese (#7082)
+- Fix: close the extract schema and call the filter (#7082)
+- Fix: persona confidence follows the brief
+- Fix: write the filtered list back to the ICP; one word-list file in both repos (#7082)
+- Fix: Kira stores cited brands, never buyers or dictionary words (D4umak/heylead-api#7082)
+
 ## v0.10.537 (2026-11-24)
 - New: HeyLead Bar inbox with sidebar in Liquid Glass (#7747)
 - Fix: floating panel presses a button on the first click and activates the app (heylead #1908)

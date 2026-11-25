@@ -123,6 +123,7 @@ def build_campaign_config(
     goal: str = "",
     message_language: str = "",
     icp_id: str = "",
+    competitor_source: str = "",
 ) -> dict:
     """The config_json a new campaign starts with.
 
@@ -184,6 +185,9 @@ def build_campaign_config(
         # until research or the operator names the companies.
         "exclude_competitors": True,
         **initial_competitor_config(competitor_companies),
+        # Where a list came from when research wrote it, so a reading can tell
+        # it from one a person typed (D4umak/heylead-api#7082).
+        **({"competitor_research_source": competitor_source} if competitor_source else {}),
         # The goal, and the two keys every older reader understands:
         # campaign_type (prompt family: outbound or job_search) and
         # campaign_intent (sell, buy, partner, recruit, research). #1153.
@@ -555,9 +559,13 @@ async def run_create_campaign(
         format_competitor_companies,
         parse_competitor_names,
     )
-    competitor_names = parse_competitor_names(
-        icp.get("competitors"),
-        judged_icp.get("competitors"),
+    from ..services.competitor_research import filter_names
+    # A saved ICP carries the names its own research stored, maybe before
+    # D4umak/heylead-api#7082: the name-only rules run on the copy too.
+    competitor_names = filter_names(
+        parse_competitor_names(icp.get("competitors"), judged_icp.get("competitors")),
+        snippets=None,
+        target_description=target_description,
     )
     if not competitor_names:
         try:
@@ -570,9 +578,11 @@ async def run_create_campaign(
         except Exception:
             logger.info("Competitor research failed; campaign will start with an empty list")
             competitor_names = []
-    if competitor_names:
-        icp["competitors"] = competitor_names
-        judged_icp["competitors"] = competitor_names
+    # Always, even empty: an empty config list falls back to the ICP's names,
+    # so a filtered-out saved list must not stay there.
+    for doc in (icp, judged_icp):
+        if competitor_names or doc.get("competitors"):
+            doc["competitors"] = competitor_names
 
     # ── Step 4: Sales Navigator status (resolved in Step 2b) ──
     if use_sales_nav:
@@ -1158,6 +1168,7 @@ async def run_create_campaign(
         goal=wanted_goal,
         search_account_id=search_acct_id if search_acct_id != account_id else "",
         competitor_companies=format_competitor_companies(competitor_names),
+        competitor_source="icp" if competitor_names else "",
         message_language=message_language,
         # The saved ICP's full id (a prefix may have been passed), only when
         # the campaign really runs on it (heylead-api#5380).

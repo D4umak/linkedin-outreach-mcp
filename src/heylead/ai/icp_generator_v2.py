@@ -320,11 +320,20 @@ async def generate_icp_v2(
             goal=goal_key,
         )
         result.processing_time = time.time() - start_time
+        from .icp_grounding import CONFIDENCE_VERSION, priors_from_icps, score_icps
+
+        priors = priors_from_icps(result.icps)
         apply_seniority_policy(result, decision_makers_only=floor, keep=keep)
         # An investor ICP carries investor vocabulary (D4umak/heylead-api#2156).
         # The api merges it too; the client must not depend on the backend's
         # version, and enriching twice adds nothing.
         enrich_investor_result(result, goal_key, target_description)
+        # A current API already stored the brief-based score. An older API did not.
+        if any(icp.confidence_version < CONFIDENCE_VERSION for icp in result.icps):
+            score_icps(
+                result.icps, target_description=target_description, company_context=company_context,
+                user_context=user_profile, kb_evidence=None, priors=priors, goal=goal_key,
+            )
         # Enrich with LinkedIn codes
         await _enrich_result(result)
         return result
@@ -375,24 +384,26 @@ async def generate_icp_v2(
     result = await _parse_icp_response(raw, target_description, goal=goal_key)
     result.processing_time = time.time() - start_time
 
-    # Filter below-threshold ICPs
-    if confidence_threshold > 0:
-        result.icps = [
-            icp for icp in result.icps
-            if icp.overall_confidence >= confidence_threshold
-        ]
+    from .icp_grounding import priors_from_icps, score_icps
 
-    # Ensure at least 1 ICP survives filtering
-    if not result.icps:
-        logger.warning("All ICPs below confidence threshold, keeping best one")
-        all_icps = (await _parse_icp_response(raw, target_description, goal=goal_key)).icps
-        if all_icps:
-            best = max(all_icps, key=lambda x: x.overall_confidence)
-            result.icps = [best]
-
+    # The model's own confidence is one number for almost every brief (api #7211).
+    # Score after the seniority policy, so a rewrite is part of the number, then
+    # keep personas that clear the threshold.
+    priors = priors_from_icps(result.icps)
     apply_seniority_policy(result, decision_makers_only=floor, keep=keep)
     # An investor ICP carries investor vocabulary (D4umak/heylead-api#2156).
     enrich_investor_result(result, goal_key, target_description)
+    score_icps(
+        result.icps, target_description=target_description, company_context=company_context,
+        user_context=user_profile, kb_evidence=kb_evidence, priors=priors, goal=goal_key,
+    )
+    if confidence_threshold > 0:
+        kept = [icp for icp in result.icps if icp.overall_confidence >= confidence_threshold]
+        if kept:
+            result.icps = kept
+        elif result.icps:
+            logger.warning("All ICPs below confidence threshold, keeping best one")
+            result.icps = [max(result.icps, key=lambda icp: icp.overall_confidence)]
 
     # Enrich with LinkedIn codes
     await _enrich_result(result)
@@ -736,6 +747,7 @@ def _dict_to_icp_result(
             overall_confidence=_safe_float(icp_data.get("overall_confidence"), 0.5),
             data_completeness=_safe_float(icp_data.get("data_completeness"), 0.5),
             evidence_strength=_safe_float(icp_data.get("evidence_strength"), 0.5),
+            confidence_version=int(icp_data.get("confidence_version") or 0),
         )
         icps.append(icp)
 

@@ -121,59 +121,28 @@ def compute_confidence_scores(
     field_evidence: list[FieldEvidence],
     client_chunk_count: int = 0,
     kb_chunk_count: int = 0,
+    target_description: str = "",
 ) -> tuple[float, float, float]:
-    """Compute overall, completeness, and evidence_strength scores.
+    """Overall, completeness and evidence from the brief, not from filled fields.
 
-    Args:
-        icp: The ICP to score.
-        field_evidence: Evidence for each field.
-        client_chunk_count: Number of client data chunks available.
-        kb_chunk_count: Number of KB chunks available.
-
-    Returns:
-        Tuple of (overall_confidence, data_completeness, evidence_strength).
+    Field-fill times citation confidence was one number for almost every
+    persona (api #7211). A persona the generator already scored
+    (confidence_version) is left as it is.
     """
-    # Data completeness: what % of key fields are meaningfully populated
-    key_fields = [
-        bool(icp.industries.include),
-        bool(icp.job_titles.include),
-        bool(icp.locations.include),
-        bool(icp.pain_points),
-        bool(icp.seniority.include),
-        bool(icp.company_headcount.min or icp.company_headcount.max),
-        bool(icp.keywords),
-        bool(icp.description),
-    ]
-    data_completeness = sum(key_fields) / len(key_fields)
+    from .icp_grounding import grounded_confidence
 
-    # Evidence strength: average confidence of cited fields
-    if field_evidence:
-        cited = [fe for fe in field_evidence if fe.citations]
-        if cited:
-            evidence_strength = sum(fe.confidence for fe in cited) / len(cited)
-        else:
-            evidence_strength = 0.2  # No evidence found
-    else:
-        evidence_strength = 0.2  # No evidence processing
-
-    # Boost evidence_strength slightly if we have more data
-    if client_chunk_count > 20:
-        evidence_strength = min(evidence_strength + 0.05, 0.95)
-    if kb_chunk_count > 0:
-        evidence_strength = min(evidence_strength + 0.05, 0.95)
-
-    # Overall confidence: weighted blend
-    overall_confidence = (
-        data_completeness * 0.4
-        + evidence_strength * 0.6
+    persona = {
+        "job_titles": {"include": list(icp.job_titles.include or [])},
+        "seniority": {"include": list(icp.seniority.include or [])},
+        "name": icp.name,
+        "description": icp.description,
+        "keywords": list(icp.keywords or []),
+    }
+    kb = ["cited"] if field_evidence or kb_chunk_count or client_chunk_count > 20 else None
+    return grounded_confidence(
+        persona, company_context="", user_context=None, kb_evidence=kb,
+        target_description=target_description,
     )
-
-    # Clamp
-    overall_confidence = max(0.1, min(0.95, overall_confidence))
-    data_completeness = max(0.1, min(1.0, data_completeness))
-    evidence_strength = max(0.1, min(0.95, evidence_strength))
-
-    return overall_confidence, data_completeness, evidence_strength
 
 
 def apply_evidence_to_icp(
@@ -182,6 +151,7 @@ def apply_evidence_to_icp(
     kb_results: list[SearchResult] | None = None,
     client_chunk_count: int = 0,
     kb_chunk_count: int = 0,
+    target_description: str = "",
 ) -> SingleIcp:
     """Apply evidence citations and confidence scores to an ICP.
 
@@ -190,14 +160,18 @@ def apply_evidence_to_icp(
     field_evidence = generate_field_citations(icp, evidence_snippets, kb_results)
     icp.field_evidence = field_evidence
 
+    if icp.confidence_version >= 2:
+        return icp
     overall, completeness, strength = compute_confidence_scores(
         icp, field_evidence, client_chunk_count, kb_chunk_count,
+        target_description=target_description,
     )
     icp.overall_confidence = overall
     icp.data_completeness = completeness
     icp.evidence_strength = strength
 
     return icp
+
 
 
 # ──────────────────────────────────────────────
