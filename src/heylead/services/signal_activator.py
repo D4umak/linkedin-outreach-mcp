@@ -945,8 +945,11 @@ async def activate_pending_signals() -> str:
                             "title": sig.get("prospect_title") or "",
                             "company": _extract_company(sig),
                             "linkedin_id": linkedin_id,
+                            "content": sig.get("content") or "",
                         },
                         matched_camp.get("icp_json"),
+                        prefetch=True,
+                        intent=str(sig.get("intent") or ""),
                     )
                     icp_score = icp_result["icp_match_score"]
                     if icp_score < SIGNAL_ICP_MATCH_THRESHOLD:
@@ -1054,8 +1057,11 @@ async def activate_pending_signals() -> str:
                         "title": sig.get("prospect_title") or "",
                         "company": _extract_company(sig),
                         "linkedin_id": linkedin_id,
+                        "content": sig.get("content") or "",
                     },
                     matched_camp.get("icp_json"),
+                    prefetch=True,
+                    intent=str(sig.get("intent") or ""),
                 )
                 icp_score = icp_result["icp_match_score"]
 
@@ -1162,8 +1168,11 @@ async def activate_pending_signals() -> str:
                             "title": sig.get("prospect_title") or "",
                             "company": _extract_company(sig),
                             "linkedin_id": linkedin_id,
+                            "content": sig.get("content") or "",
                         },
                         matched_camp.get("icp_json"),
+                        prefetch=True,
+                        intent=str(sig.get("intent") or ""),
                     )
                     icp_score = icp_result["icp_match_score"]
                     if icp_score < SIGNAL_ICP_MATCH_THRESHOLD:

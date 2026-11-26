@@ -47,6 +47,19 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.539 (2026-11-26)
+- Fix: score every segment when icps[] is a sparse shell (#8027)
+- Fix: wait while a required check is still queued (#8020)
+- Fix: mark the channel with a tiny icon (#7747)
+- New: show a channel tag on each card (#7747)
+- Fix: leave an unfinished draft alone when judging it ready (#8005)
+- New: keep the merge queue moving through the day (#8005)
+- New: label a Telegram card and name a Telegram refusal (#7747)
+- Fix: keep a long quote from covering the message (#7747)
+- Fix: close the window from the panel and name Tweak (#7747)
+- Fix: keep the message when a tweak writes nothing (#7747)
+- New: deterministic pre-gate condition (#7122)
+
 ## v0.10.538 (2026-11-25)
 - Fix: drop unused client persona_priors after merge
 - Fix: name the company in Spanish, French, German and Portuguese (#7082)

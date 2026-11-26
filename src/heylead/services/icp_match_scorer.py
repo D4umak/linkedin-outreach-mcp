@@ -53,6 +53,15 @@ ICP_WEIGHT_KEYWORDS = 0.10
 UNKNOWN_SCORE = 0.3
 LOCATION_UNKNOWN_SCORE = 0.5
 
+# Same three names as the hosted pre-fetch deferral (heylead-api#8027).
+# A headline-only seniority miss or title-only cap on these intents waits
+# for a profile; the sparse signal row is not that profile.
+PREFETCH_DEFER_INTENTS = frozenset({
+    "buying_signal", "pain_point", "competitor_eval",
+})
+_PREFETCH_KEYWORD_LIST = 12
+_PREFETCH_KEYWORD_SATURATION = 3
+
 # An industry the ICP asks for and the contact does not show. The same value
 # as a stated industry that misses: not knowing is not "partly matches".
 # 5 Oct 2026: unknown scored UNKNOWN_SCORE, and that 0.06 was part of what
@@ -125,17 +134,34 @@ REVENUE_NORM_CAP = 100_000
 def compute_icp_match(
     contact: dict[str, Any],
     campaign_icp_json: str | dict | None = None,
+    *,
+    prefetch: bool = False,
+    intent: str | None = None,
+    _icp: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Score a contact against the campaign ICP (0.0-1.0).
 
     Args:
         contact: Contact dict with title, company, location, profile_json, analysis_json.
         campaign_icp_json: Campaign ICP as JSON string or parsed dict.
+        prefetch: Sparse signal row, before a LinkedIn profile exists.
+        intent: Classifier intent. Verified buying intents defer a
+            headline-only seniority miss and the title-only cap.
 
     Returns:
         {"icp_match_score": float, "breakdown": {dimension: score}}.
     """
-    icp = _parse_first_icp(campaign_icp_json)
+    candidates = _scoring_icps(campaign_icp_json) if _icp is None else [_icp]
+    if _icp is None and len(candidates) > 1:
+        scored = [
+            compute_icp_match(
+                contact, campaign_icp_json,
+                prefetch=prefetch, intent=intent, _icp=one,
+            )
+            for one in candidates
+        ]
+        return max(scored, key=lambda row: float(row["icp_match_score"]))
+    icp = candidates[0] if candidates else None
     if not icp:
         # No ICP data — return neutral score
         return {"icp_match_score": UNKNOWN_SCORE, "breakdown": {}}
@@ -145,7 +171,7 @@ def compute_icp_match(
     seniority_score = _score_seniority_match(contact.get("title", ""), icp)
     size_score = _score_company_size(contact, icp, campaign_icp_json)
     location_score = _score_location_match(contact, icp)
-    keyword_score = _score_keyword_overlap(contact, icp)
+    keyword_score = _score_keyword_overlap(contact, icp, prefetch=prefetch)
 
     breakdown = {
         "title": title_score,
@@ -163,19 +189,31 @@ def compute_icp_match(
     # gate on title and keyword overlap while the ICP named only CXOs
     # (9 Sep 2026). `_score_seniority_match` returns 0.0 only when the
     # title *states* a level: unknown titles score UNKNOWN_SCORE and pass.
+    defer_headline = prefetch and str(intent or "") in PREFETCH_DEFER_INTENTS
     seniority_miss = (
         seniority_score == 0.0
         and _states_seniority(contact.get("title", "") or "")
+        and not defer_headline
     )
-
-    raw = (
-        ICP_WEIGHT_TITLE * title_score
-        + ICP_WEIGHT_INDUSTRY * industry_score
-        + ICP_WEIGHT_SENIORITY * seniority_score
-        + ICP_WEIGHT_COMPANY_SIZE * size_score
-        + ICP_WEIGHT_LOCATION * location_score
-        + ICP_WEIGHT_KEYWORDS * keyword_score
-    )
+    omit_location = prefetch and not _stated_location(contact)
+    weights = {
+        "title": ICP_WEIGHT_TITLE,
+        "industry": ICP_WEIGHT_INDUSTRY,
+        "seniority": ICP_WEIGHT_SENIORITY,
+        "company_size": ICP_WEIGHT_COMPANY_SIZE,
+        "location": ICP_WEIGHT_LOCATION,
+        "keywords": ICP_WEIGHT_KEYWORDS,
+    }
+    if omit_location:
+        weights.pop("location")
+        breakdown.pop("location", None)
+    if defer_headline and seniority_score == 0.0 and _states_seniority(contact.get("title", "") or ""):
+        # The level is not judged from the headline. Leave it out of the
+        # pre-fetch denominator; the profile check still applies it.
+        weights.pop("seniority")
+        breakdown.pop("seniority", None)
+    total = sum(weights.values())
+    raw = sum(weights[name] * breakdown[name] for name in weights) / total
 
     icp_match = round(max(0.0, min(1.0, raw)), 4)
     vetoed = _product_keyword_veto_applies(contact, icp)
@@ -186,14 +224,17 @@ def compute_icp_match(
     # and none of them anywhere about the person, the title's 0.30 plus the
     # unknown-data defaults cleared the hosted floor (0.6193 for a law firm's
     # Managing Partner against a deep-tech VC persona, 5 Oct 2026).
-    icp_match, title_only = apply_title_only_cap(
-        icp_match,
-        _fit_evidence_text(contact),
-        industries=_get_include_exclude(icp, "industries")[0],
-        keywords=[str(k) for k in (icp.get("keywords") or []) if k]
-        if isinstance(icp.get("keywords"), list) else [],
-        titles=_get_include_exclude(icp, "job_titles")[0],
-    )
+    if defer_headline:
+        title_only = False
+    else:
+        icp_match, title_only = apply_title_only_cap(
+            icp_match,
+            _fit_evidence_text(contact),
+            industries=_get_include_exclude(icp, "industries")[0],
+            keywords=[str(k) for k in (icp.get("keywords") or []) if k]
+            if isinstance(icp.get("keywords"), list) else [],
+            titles=_get_include_exclude(icp, "job_titles")[0],
+        )
     if seniority_miss:
         # `weighted_score` is the six-dimension average; `icp_match_score` is
         # the intake answer. Callers that decide whether to *enrol* read the
@@ -282,6 +323,77 @@ def compute_composite_lead_score(
 # ICP Match — Dimension Scorers
 # ──────────────────────────────────────────────
 
+def _stated_location(contact: dict[str, Any]) -> str:
+    """A place the row itself carries. Empty on a signal before profile fetch."""
+    location = str(contact.get("location") or "").strip()
+    if location:
+        return location
+    profile = parse_json_field(contact.get("profile_json"))
+    if isinstance(profile, dict):
+        return str(profile.get("location") or "").strip()
+    return ""
+
+
+def _shell_omits_targeting(icp: dict[str, Any]) -> bool:
+    """True when this persona has no titles and no locations of its own."""
+    titles, _ = _get_include_exclude(icp, "job_titles")
+    locations, _ = _get_include_exclude(icp, "locations")
+    return not titles and not locations
+
+
+def _load_icp_data(campaign_icp_json: str | dict | None) -> dict[str, Any] | None:
+    if not campaign_icp_json:
+        return None
+    if isinstance(campaign_icp_json, str):
+        try:
+            data = json.loads(campaign_icp_json)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    else:
+        data = campaign_icp_json
+    return data if isinstance(data, dict) else None
+
+
+def _with_shell_keywords(icp: dict[str, Any], shell: dict[str, Any] | None) -> dict[str, Any]:
+    """Keep a sparse shell's root keywords when the segment is the targeting."""
+    if not shell or not isinstance(shell.get("keywords"), list):
+        return icp
+    extra = [k for k in shell["keywords"] if k]
+    if not extra:
+        return icp
+    merged = dict(icp)
+    keywords = list(merged.get("keywords") or [])
+    for keyword in extra:
+        if keyword not in keywords:
+            keywords.append(keyword)
+    merged["keywords"] = keywords
+    return merged
+
+
+def _scoring_icps(campaign_icp_json: str | dict | None) -> list[dict[str, Any]]:
+    """Every persona or segment this score should consider. Best score wins.
+
+    A dual ``icps[]`` + ``segments[]`` campaign used to return ``icps[0]``
+    and drop ``segments[]``. The shell omits titles and locations; the
+    segments hold them (#8027). A segments-only campaign is scored across
+    every segment, not ``segments[0]`` alone.
+    """
+    data = _load_icp_data(campaign_icp_json)
+    if not data:
+        return []
+    segments = [s for s in (data.get("segments") or []) if isinstance(s, dict)]
+    icps = data.get("icps") or []
+    shell = icps[0] if isinstance(icps, list) and icps and isinstance(icps[0], dict) else None
+    segment_icps = [_with_shell_keywords(_segment_to_icp(seg), shell) for seg in segments]
+    if shell is not None and segment_icps and _shell_omits_targeting(shell):
+        return segment_icps
+    if shell is not None and segment_icps:
+        return [shell, *segment_icps]
+    if shell is not None:
+        return [shell]
+    return segment_icps
+
+
 def _parse_first_icp(campaign_icp_json: str | dict | None) -> dict[str, Any] | None:
     """Parse the first ICP from campaign ICP JSON.
 
@@ -305,7 +417,12 @@ def _parse_first_icp(campaign_icp_json: str | dict | None) -> dict[str, Any] | N
         icps = data.get("icps", [])
         if isinstance(icps, list) and icps:
             first = icps[0]
-            return first if isinstance(first, dict) else None
+            if not isinstance(first, dict):
+                return None
+            segments = [s for s in (data.get("segments") or []) if isinstance(s, dict)]
+            if segments and _shell_omits_targeting(first):
+                return _fill_omitted_segment_criteria(first, segments)
+            return first
 
         # Legacy format: segments[] — convert to ICP dict
         segments = data.get("segments", [])
@@ -315,6 +432,48 @@ def _parse_first_icp(campaign_icp_json: str | dict | None) -> dict[str, Any] | N
                 return _segment_to_icp(seg)
 
     return None
+
+
+def _fill_omitted_segment_criteria(
+    shell: dict[str, Any], segments: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Copy segment titles and locations onto a shell that omitted them.
+
+    Keywords from the segments are unioned in as well: the shell's short
+    root list is not the search list (#8027). Seniority stays per segment
+    inside ``compute_icp_match`` so one segment's exclude cannot zero another.
+    """
+    merged = dict(shell)
+    converted = [_segment_to_icp(seg) for seg in segments]
+
+    def _union(field: str) -> list[str]:
+        values: list[str] = []
+        for icp in converted:
+            include, _exclude = _get_include_exclude(icp, field)
+            for value in include:
+                if value not in values:
+                    values.append(value)
+        return values
+
+    titles = _union("job_titles")
+    if titles:
+        merged["job_titles"] = {"include": titles, "exclude": []}
+    locations = _union("locations")
+    if locations:
+        merged["locations"] = {"include": locations, "exclude": []}
+    industries, _ = _get_include_exclude(merged, "industries")
+    if not industries:
+        found = _union("industries")
+        if found:
+            merged["industries"] = {"include": found, "exclude": []}
+    keywords = list(merged.get("keywords") or []) if isinstance(merged.get("keywords"), list) else []
+    for icp in converted:
+        for keyword in icp.get("keywords") or []:
+            if keyword and keyword not in keywords:
+                keywords.append(keyword)
+    if keywords:
+        merged["keywords"] = keywords
+    return merged
 
 
 def _segment_to_icp(seg: dict[str, Any]) -> dict[str, Any]:
@@ -691,6 +850,7 @@ def _contact_keyword_text(contact: dict[str, Any]) -> str:
         contact.get("title", ""),
         contact.get("company", ""),
         contact.get("headline", ""),
+        contact.get("content", ""),
         contact.get("research_summary", ""),
     ]
     profile = parse_json_field(contact.get("profile_json"))
@@ -783,7 +943,9 @@ def prospect_mentions_precision_stems(
     return any(stem in haystack for stem in stems)
 
 
-def _score_keyword_overlap(contact: dict[str, Any], icp: dict) -> float:
+def _score_keyword_overlap(
+    contact: dict[str, Any], icp: dict, *, prefetch: bool = False,
+) -> float:
     """Score keyword overlap between contact text and ICP keywords (0.0-1.0)."""
     keywords = icp.get("keywords", [])
     if not keywords or not isinstance(keywords, list):
@@ -798,7 +960,8 @@ def _score_keyword_overlap(contact: dict[str, Any], icp: dict) -> float:
     matches = sum(1 for kw in keywords if contains_term(text, kw.lower()))
     if not matches:
         return 0.0
-
+    if prefetch and len(keywords) > _PREFETCH_KEYWORD_LIST:
+        return min(1.0, matches / _PREFETCH_KEYWORD_SATURATION)
     return min(1.0, matches / max(len(keywords), 1))
 
 
