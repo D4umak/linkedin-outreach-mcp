@@ -584,7 +584,7 @@ async def activate_pending_signals() -> str:
         SIGNAL_STATUS_DISMISSED,
         SIGNAL_WARM_THRESHOLD,
     )
-    from ..services.icp_match_scorer import compute_icp_match
+    from ..services.icp_match_scorer import signal_icp_scores
     from ..db.queries import (
         list_campaigns,
         update_contact,
@@ -940,7 +940,7 @@ async def activate_pending_signals() -> str:
                 )
                 icp_score = 0.3  # Neutral default when no campaign ICP
                 if matched_camp:
-                    icp_result = compute_icp_match(
+                    gate, icp_score = signal_icp_scores(
                         {
                             "title": sig.get("prospect_title") or "",
                             "company": _extract_company(sig),
@@ -948,11 +948,9 @@ async def activate_pending_signals() -> str:
                             "content": sig.get("content") or "",
                         },
                         matched_camp.get("icp_json"),
-                        prefetch=True,
                         intent=str(sig.get("intent") or ""),
                     )
-                    icp_score = icp_result["icp_match_score"]
-                    if icp_score < SIGNAL_ICP_MATCH_THRESHOLD:
+                    if gate < SIGNAL_ICP_MATCH_THRESHOLD:
                         await _mark_signal_parked(
                             sig, "icp_mismatch", now,
                             score=composite_score, campaign_id=campaign_id,
@@ -1050,9 +1048,10 @@ async def activate_pending_signals() -> str:
             matched_camp = next(
                 (c for c in active_campaigns if c["id"] == campaign_id), None
             )
+            gate = 0.0
             icp_score = 0.0
             if matched_camp:
-                icp_result = compute_icp_match(
+                gate, icp_score = signal_icp_scores(
                     {
                         "title": sig.get("prospect_title") or "",
                         "company": _extract_company(sig),
@@ -1060,12 +1059,10 @@ async def activate_pending_signals() -> str:
                         "content": sig.get("content") or "",
                     },
                     matched_camp.get("icp_json"),
-                    prefetch=True,
                     intent=str(sig.get("intent") or ""),
                 )
-                icp_score = icp_result["icp_match_score"]
 
-            if icp_score < SIGNAL_BEHAVIORAL_ICP_THRESHOLD:
+            if gate < SIGNAL_BEHAVIORAL_ICP_THRESHOLD:
                 await _mark_signal_parked(
                     sig, "behavioral_icp_mismatch", now,
                     score=composite_score, campaign_id=campaign_id,
@@ -1163,7 +1160,7 @@ async def activate_pending_signals() -> str:
                 )
                 icp_score = 0.3  # Neutral default when no campaign ICP
                 if matched_camp:
-                    icp_result = compute_icp_match(
+                    gate, icp_score = signal_icp_scores(
                         {
                             "title": sig.get("prospect_title") or "",
                             "company": _extract_company(sig),
@@ -1171,11 +1168,9 @@ async def activate_pending_signals() -> str:
                             "content": sig.get("content") or "",
                         },
                         matched_camp.get("icp_json"),
-                        prefetch=True,
                         intent=str(sig.get("intent") or ""),
                     )
-                    icp_score = icp_result["icp_match_score"]
-                    if icp_score < SIGNAL_ICP_MATCH_THRESHOLD:
+                    if gate < SIGNAL_ICP_MATCH_THRESHOLD:
                         await _mark_signal_parked(
                             sig, "icp_mismatch", now,
                             score=composite_score, campaign_id=campaign_id,

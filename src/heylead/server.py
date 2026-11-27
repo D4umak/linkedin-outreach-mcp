@@ -47,6 +47,18 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.540 (2026-11-27)
+- Fix: keep the chrome helper in the process group that gets killed (#8027)
+- Fix: evict cancelled queued jobs from PriorityPool immediately (#8064)
+- Fix: enrol desktop signals on the strict ICP score (#8027)
+- Standardize first-name extraction across repositories
+- Port audience size guard to client icp_research (api #7644)
+- Fix record_icp_hold mock in ICP research tests (api #7644)
+- Reconcile audience_size logic and action logging with API implementation
+- Port audience size guard to client (#7644)
+- Fix shepherd isolation and case discovery (api #7366)
+- Fix shepherd live comment target and proven.py CASE discovery (api #7366)
+
 ## v0.10.539 (2026-11-26)
 - Fix: score every segment when icps[] is a sparse shell (#8027)
 - Fix: wait while a required check is still queued (#8020)

@@ -9,54 +9,105 @@ DEFAULT_GREETING = "there"
 # Not whitespace to str.strip() or str.split(), so a name made only of these
 # stays truthy and survives every guard shaped like `if name:`. They arrive
 # inside real LinkedIn names — see first_name() for where from.
-_ZERO_WIDTH = ("\u200b", "﻿")
+_ZERO_WIDTH = ("\u200b", "\ufeff")
 
 
-def _visible_words(name: str | None) -> list[str]:
-    """The words of *name* that would actually be seen if we printed it."""
-    if not name:
-        return []
-    cleaned = str(name)
+# Emoji, flags and pictographs a LinkedIn display name carries (8 Oct 2026).
+_PICTO = ("\U0001F000-\U0001FAFF☀-➿⬀-⯿⌀-⏿"
+          "■-◿〰〽㊗㊙")
+_WITH = "‍︀-️\U0001F3FB-\U0001F3FF\U000E0020-\U000E007F"
+_PICTOGRAPHS = re.compile(rf"(?:[0-9#*]️?⃣|[{_PICTO}](?:[{_WITH}]|[{_PICTO}])*)+")
+
+
+# A display name's tail after a spaced separator is a headline, not the name:
+# "Sam | Founder", "Ana · Head of Growth".
+_NAME_TAIL = re.compile(r"\s[|•·—–]\s")
+
+
+# What a source writes when it has no name (api #5650).
+_PLACEHOLDERS = frozenset({"unknown", "linkedin member", "unnamed lead", "someone"})
+
+
+# A word that marks an account named after a company, not a person (api #5650).
+_COMPANY_WORDS = frozenset({
+    "ltd", "ltd.", "llc", "inc", "inc.", "gmbh", "corp", "corp.", "plc", "llp", "pvt", "limited",
+    "solutions", "technologies", "technology", "consulting", "agency", "labs", "group", "studio", "ventures",
+})
+
+
+# Leading honorifics to strip from a name (api #5650).
+_HONORIFICS = frozenset({
+    "dr", "mr", "mrs", "ms", "miss", "mx", "prof", "sir", "dame", "lord", "lady",
+    "rev", "fr", "herr", "frau", "mme", "mlle",
+})
+
+
+def _clean_name(name: str | None) -> str:
+    """Pictographs and zero-width characters taken out, spaces closed up (api #5650)."""
+    text = str(name or "")
     for char in _ZERO_WIDTH:
-        cleaned = cleaned.replace(char, " ")
-    return cleaned.split()
+        text = text.replace(char, "")
+    return " ".join(_PICTOGRAPHS.sub(" ", text).split())
 
 
 def first_name(name: str | None, fallback: str = DEFAULT_GREETING) -> str:
-    """The first word of a name, or *fallback* when there isn't one.
+    """The greeting's name, or *fallback* when there is none (api #5650).
 
-    Eight call sites carried this idiom::
-
-        prospect.get("name", "").split()[0] if prospect.get("name") else "there"
-
-    which raises IndexError on a name that is only whitespace: the string is
-    truthy so the guard passes, then ``"   ".split()`` is ``[]`` and ``[0]``
-    blows up — from inside message, follow-up and reply generation, prospect
-    analysis and the inbound qualifier.
-
-    Such names do arrive. connection_sync builds one by joining first and last,
-    so a profile carrying only a separator character yields a non-empty string
-    with no words; the same shape reached global_contacts as HTML-titled rows
-    earlier this month. Zero-width characters (U+200B and friends) are not
-    whitespace to ``str.split``, so they are stripped explicitly — otherwise
-    the "first name" is an invisible character and the greeting reads as
-    "Hi ,".
+    Enforces the shared 12-step extraction rule: strips titles, company words,
+    pictographs and separators, and refuses acronyms, placeholders, or strings
+    shaped like surnames or email addresses.
     """
-    words = _visible_words(name)
-    return words[0] if words else fallback
+    cleaned = _clean_name(name)
+    if not cleaned or cleaned.lower() in _PLACEHOLDERS:
+        return fallback
+
+    said = _NAME_TAIL.split(cleaned, 1)[0].strip(" |•·-–—,;:")
+    if not said:
+        return fallback
+
+    words = said.split()
+    if not words:
+        return fallback
+
+    # Step 4: Refuse company names across ALL words.
+    if any(w.lower().strip(".,;:()") in _COMPANY_WORDS for w in words):
+        return fallback
+
+    # Step 5: Comma-first or credential string ("Doe, Jane", "Jane, PhD").
+    if words[0].endswith(","):
+        return fallback
+
+    # Step 6: Strip leading honorifics.
+    stripped = False
+    while words and words[0].lower().rstrip(".") in _HONORIFICS:
+        words.pop(0)
+        stripped = True
+
+    # Step 7 & 8: Surname-only guard and comma-terminated first tokens.
+    if not words or (stripped and len(words) < 2):
+        return fallback
+    if words[0].endswith(","):
+        return fallback
+
+    # Step 9 & 10: Clean trailing punctuation and refuse bad characters.
+    first = words[0].rstrip(",.")
+    if not first or "@" in first or "_" in first or any(ch.isdigit() for ch in first):
+        return fallback
+
+    # Step 11: Refuse if < 2 alpha or all-caps (acronyms or surname-first).
+    if sum(ch.isalpha() for ch in first) < 2 or first.isupper():
+        return fallback
+
+    return first
 
 
 def full_name(name: str | None, fallback: str = DEFAULT_GREETING) -> str:
     """The whole name, spacing normalised, or *fallback* when nothing shows.
 
-    The sibling of first_name(), for the copy that prints a person's full name
-    rather than greeting them by their first. A caller that guards with
-    ``.strip()`` is safe from the whitespace-only case but not from the
-    zero-width one, which strips to something truthy and prints as nothing —
-    so "<invisible> asked me to reach you" goes out to a real person.
+    Strips pictographs and zero-width characters (api #5650).
     """
-    words = _visible_words(name)
-    return " ".join(words) if words else fallback
+    text = _clean_name(name)
+    return text if text and text.lower() not in _PLACEHOLDERS else fallback
 
 
 # ── Job-title term matching ──

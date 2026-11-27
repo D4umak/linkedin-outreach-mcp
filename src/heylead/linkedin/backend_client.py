@@ -1361,6 +1361,9 @@ class BackendClient:
         if search_account_id:
             payload["search_account_id"] = search_account_id
 
+        self.last_total_count = None
+        self.last_search_paging = {}
+
         try:
             try:
                 resp = await self._post(url, json=payload, headers=self._headers())
@@ -1378,6 +1381,13 @@ class BackendClient:
                     detail = resp.text[:200]
                 raise UnipileError(f"Backend search failed ({resp.status_code}): {detail}")
             data = resp.json()
+
+            if isinstance(data, dict):
+                paging = data.get("paging") if isinstance(data.get("paging"), dict) else {}
+                self.last_search_paging = dict(paging)
+                total = paging.get("total_count")
+                if isinstance(total, (int, float)) and not isinstance(total, bool):
+                    self.last_total_count = max(int(total), 0)
 
             if isinstance(data, list):
                 items = data

@@ -258,6 +258,27 @@ def compute_icp_match(
     return result
 
 
+def signal_icp_scores(
+    contact: dict[str, Any],
+    campaign_icp_json: str | dict | None,
+    *,
+    intent: str | None = None,
+) -> tuple[float, float]:
+    """(gate, enrolment) for one signal.
+
+    The gate may defer a headline seniority miss so a profile can be read.
+    Enrolment is the strict score: a deferred pre-fetch number is not a fit
+    (heylead-api#8027).
+    """
+    gate = compute_icp_match(
+        contact, campaign_icp_json, prefetch=True, intent=intent,
+    )
+    enrolled = compute_icp_match(
+        contact, campaign_icp_json, prefetch=False, intent=intent,
+    )
+    return float(gate["icp_match_score"]), float(enrolled["icp_match_score"])
+
+
 # ──────────────────────────────────────────────
 # Composite Lead Score
 # ──────────────────────────────────────────────

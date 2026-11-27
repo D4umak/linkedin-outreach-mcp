@@ -92,7 +92,7 @@ def _current_hash(icp_id: str) -> str | None:
     return persona_lists_hash(record.get("icp_json"))
 
 
-def _store_hold(icp_id: str, *, reason: str, mode: str, at: int, pending_post: bool) -> dict:
+def _store_hold(icp_id: str, *, reason: str, mode: str, at: int, pending_post: bool, kind: str = "") -> dict:
     hold = {
         "icp_id": icp_id,
         "reason": reason,
@@ -102,13 +102,14 @@ def _store_hold(icp_id: str, *, reason: str, mode: str, at: int, pending_post: b
         "answered_at": None,
         "lists_hash": _current_hash(icp_id) or "",
         "pending_post": pending_post,
+        **({"kind": str(kind)} if kind else {}),
     }
     _put(icp_id, hold)
     return hold
 
 
 async def record_icp_hold(
-    icp_id: str, *, reason: str, mode: str, decided_at: int | None = None,
+    icp_id: str, *, reason: str, mode: str, decided_at: int | None = None, kind: str = "",
 ) -> str:
     """Record the research agent's hold. Returns what happened to it.
 
@@ -120,7 +121,7 @@ async def record_icp_hold(
         return "observe"
     at = int(decided_at or time.time())
     hosted = config.is_backend_mode()
-    await run_db(_store_hold, icp_id, reason=reason, mode=mode, at=at, pending_post=hosted)
+    await run_db(_store_hold, icp_id, reason=reason, mode=mode, at=at, pending_post=hosted, kind=kind)
     if not hosted:
         return "local"
     return "hosted" if await post_icp_hold(icp_id) else "pending"
@@ -139,7 +140,8 @@ async def post_icp_hold(icp_id: str) -> bool:
     from .cloud_sync import _base_url, _headers
 
     body = {"reason": hold.get("reason") or "", "mode": hold.get("mode") or "act",
-            "decided_at": int(hold.get("at") or 0)}
+            "decided_at": int(hold.get("at") or 0),
+            **({"kind": str(hold["kind"])} if hold.get("kind") else {})}
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(

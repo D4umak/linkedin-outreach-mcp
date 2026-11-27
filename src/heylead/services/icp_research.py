@@ -31,6 +31,95 @@ from ..flags import flag_enabled
 
 logger = logging.getLogger(__name__)
 
+SELL_AUDIENCE_FLOOR = 500
+OTHER_AUDIENCE_FLOOR = 100
+
+
+def _normalize_goal(goal: str | None) -> str:
+    g = str(goal or "").strip().lower()
+    return g if g in ("sell", "hire", "job_search", "research") else "sell"
+
+
+def audience_size(raw: dict[str, Any] | None, *, goal: str = "sell", keywords_sent: bool = False) -> dict[str, Any]:
+    """(count, basis, too_small, floor) for the search results (api #7218 / #7644)."""
+    floor = SELL_AUDIENCE_FLOOR if _normalize_goal(goal) == "sell" else OTHER_AUDIENCE_FLOOR
+    raw = raw or {}
+    paging = raw.get("paging") or {}
+    total = paging.get("total_count")
+    if total is None:
+        total = raw.get("total_count")  # Support direct injection in tests
+
+    items = raw.get("items") or []
+    n = len(items)
+    has_cursor = bool(raw.get("cursor") or raw.get("next_cursor") or paging.get("cursor") or paging.get("next_cursor"))
+
+    if total is not None:
+        count = int(total)
+        if count == 0 and keywords_sent:
+            return {"audience_size": 0, "audience_basis": "total", "too_small": None, "floor": floor}
+        return {"audience_size": count, "audience_basis": "total", "too_small": count < floor, "floor": floor}
+
+    if has_cursor or n >= 10:
+        return {"audience_size": None, "audience_basis": "at_least", "too_small": False, "floor": floor}
+
+    # Whole audience is on the first page and < 10
+    if n == 0 and keywords_sent:
+        return {"audience_size": 0, "audience_basis": "whole_page", "too_small": None, "floor": floor}
+    return {"audience_size": n, "audience_basis": "whole_page", "too_small": n < floor, "floor": floor}
+
+
+def _audience_size_line(size: dict[str, Any]) -> str:
+    n, basis, too_small, floor = size.get("audience_size"), size.get("audience_basis"), size.get("too_small"), size.get("floor", 500)
+    noun = "person" if n == 1 else "people"
+    if too_small is True:
+        return f"First audience group: {n} {noun} on LinkedIn — TOO SMALL (minimum is {floor}; broaden titles, industries, or locations, or hold)."
+    if basis == "at_least":
+        return "First audience group: at least 1 full page on LinkedIn (exact total not returned)."
+    if n is not None:
+        return f"First audience group: {n} {noun} on LinkedIn (meets the {floor} minimum)."
+    return ""
+
+
+def _norm_set(val: Any) -> set[str]:
+    if isinstance(val, str):
+        from .job_titles import split_list_text
+        val = split_list_text(val)
+    return {str(v).strip().lower() for v in (val or []) if str(v or "").strip()}
+
+
+def _is_broadening(record: dict[str, Any], patch: dict[str, Any]) -> bool:
+    """True when the patch only adds to include lists and does not add to exclude lists (api #7218 / #7644)."""
+    try:
+        data = json.loads(record.get("icp_json") or "{}")
+    except Exception:
+        data = {}
+    icps = data.get("icps") or []
+    current_p1 = icps[0] if icps and isinstance(icps[0], dict) else {}
+
+    # Check exclusions first: any new exclusion is narrowing.
+    for key in ("titles_exclude", "locations_exclude", "industries_exclude"):
+        if key in patch:
+            field, _side = _PATCH_MAP[key]
+            new_vals = _norm_set(patch[key])
+            old_vals = _norm_set((current_p1.get(field) or {}).get("exclude"))
+            if new_vals - old_vals:
+                return False
+
+    # Check inclusions: must not drop any and must add at least one.
+    has_added = False
+    for key in ("titles_include", "locations_include", "industries_include"):
+        if key in patch:
+            field, _side = _PATCH_MAP[key]
+            new_vals = _norm_set(patch[key])
+            old_vals = _norm_set((current_p1.get(field) or {}).get("include"))
+            if old_vals - new_vals:
+                return False
+            if new_vals - old_vals:
+                has_added = True
+
+    return has_added
+
+
 PreviewFn = Callable[[], str | Awaitable[str]]
 EnrichFn = Callable[[IcpResult], Any]
 
@@ -51,6 +140,7 @@ class IcpResearchOutcome:
     applied: bool = False
     summary: str = ""
     result: IcpResult | None = None
+    hold_kind: str = ""
 
 
 def icp_research_mode(config: dict[str, Any] | None) -> Literal["off", "observe", "act"]:
@@ -160,6 +250,7 @@ def apply_persona_patch(data: dict[str, Any], patch: dict[str, Any]) -> dict[str
 async def maybe_run_icp_research(
     icp_id: str,
     target_description: str = "",
+    goal: str = "sell",
     *,
     config: dict[str, Any] | None = None,
     call_llm_fn: Any = None,
@@ -178,13 +269,18 @@ async def maybe_run_icp_research(
             return IcpResearchOutcome(decision="keep", reason="icp missing", summary="keep — ICP not found")
 
         data = _icp_data(record)
+        # heylead-api #7218: goal and target from the saved ICP when the caller did not pass them.
+        if not target_description:
+            target_description = str(data.get("summary") or "")
+        if goal == "sell":
+            goal = str(data.get("campaign_goal") or "sell")
         context = build_icp_research_context(
             target_description=target_description or record.get("target_desc") or "",
             icp_name=record.get("name") or "",
             data=data,
         )
         run: dict[str, Any] = {}
-        tools = _build_tools(icp_id, record, preview_fn, run)
+        tools = _build_tools(icp_id, record, preview_fn, run, goal=goal)
         tools.update(async_commons_tools(agent="icp_research", campaign_id=""))
         budget = AgentBudget(
             max_steps=ICP_RESEARCH_MAX_STEPS,
@@ -213,23 +309,30 @@ async def maybe_run_icp_research(
             await run_db(
                 log_action, "icp_research_decision",
                 result=model_failure.NOT_FINISHED,
-                details={"icp_id": icp_id, "mode": mode, "preview": "unfinished", "reason": PREVIEW_DID_NOT_RUN},
+                details={
+                    "icp_id": icp_id,
+                    "decision": model_failure.NOT_FINISHED,
+                    "mode": mode,
+                    "preview": "unfinished",
+                    "reason": PREVIEW_DID_NOT_RUN,
+                },
             )
             return IcpResearchOutcome(decision=model_failure.NOT_FINISHED, reason=PREVIEW_DID_NOT_RUN,
                                       summary="not finished — the people search did not run; ICP unchanged")
         # Before anything reads the decision (heylead-api#7290): titles another persona already carries.
         result, persona_info = drop_other_persona_titles(data, result)
+        outcome = await _apply_decision(
+            icp_id, result, mode=mode, enrich_fn=enrich_fn, run=run, goal=goal,
+            persona_info=persona_info,
+        )
         await after_sibling_loop(
             agent="icp_research",
             campaign_id="",
-            decision=result.decision,
-            reason=result.reason,
+            decision=outcome.decision,
+            reason=outcome.reason,
             config=cfg,
         )
-        return await _apply_decision(
-            icp_id, result, mode=mode, enrich_fn=enrich_fn,
-            persona_info=persona_info,
-        )
+        return outcome
     except Exception as e:
         logger.warning("ICP research agent failed: %s", e)
         await model_failure.loop_failed(actor="icp_research", failure=model_failure.EXCEPTION, detail=str(e))
@@ -256,6 +359,7 @@ def _build_tools(
     record: dict[str, Any],
     preview_fn: PreviewFn | None,
     run: dict[str, Any] | None = None,
+    goal: str = "sell",
 ) -> dict[str, Callable[..., Any]]:
     """The run's tools. ``run`` is told when the preview's search raised (``search_did_not_run``)."""
     used = {"preview": False}
@@ -275,7 +379,7 @@ def _build_tools(
             if inspect.isawaitable(raw):
                 raw = await raw
             return str(raw)
-        return await _default_preview(icp_id, run)
+        return await _default_preview(icp_id, run=run, goal=goal)
 
     return {
         "read_icp": read_icp,
@@ -351,7 +455,7 @@ def _format_filters(record: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
-async def _default_preview(icp_id: str, run: dict[str, Any] | None = None) -> str:
+async def _default_preview(icp_id: str, *, run: dict[str, Any] | None = None, goal: str = "sell") -> str:
     """One page of persona-1 matches. Never creates campaign/contact/outreach rows.
 
     A search that raised (no client, or LinkedIn refused or timed out) marks ``run``: the
@@ -363,26 +467,37 @@ async def _default_preview(icp_id: str, run: dict[str, Any] | None = None) -> st
 
     record = await run_db(resolve_icp_record, icp_id)
     if not record:
+        if run is not None:
+            run["record"] = {"status": "not_found"}
         return "preview failed: ICP not found"
     try:
         result = icp_result_from_dict(json.loads(record["icp_json"]))
     except Exception as e:
+        if run is not None:
+            run["record"] = {"status": "unreadable"}
         return f"preview failed: {e}"
     if not result.icps:
+        if run is not None:
+            run["record"] = {"status": "no_personas"}
         return "preview failed: no personas"
     target = record.get("target_desc") or result.summary or ""
     legacy = _icp_result_to_legacy(result, target)
     segments = legacy.get("segments") or []
     if not segments:
+        if run is not None:
+            run["record"] = {"status": "no_segment"}
         return "preview failed: no search segment"
     account_id = await run_db(get_account_id)
     if not account_id:
+        if run is not None:
+            run["record"] = {"status": "no_seat"}
         return "preview failed: no LinkedIn account"
     try:
         client = get_linkedin_client()
     except UnipileError as e:
         if run is not None:
             run["search_did_not_run"] = True
+            run["record"] = {"status": "client_failed"}
         return f"preview failed: {e}"
 
     search_acct_id = account_id
@@ -397,10 +512,12 @@ async def _default_preview(icp_id: str, run: dict[str, Any] | None = None) -> st
 
     keywords, filters = build_segment_query(segments[0], use_sales_nav)
     if not keywords and not filters:
+        if run is not None:
+            run["record"] = {"status": "nothing_to_search"}
         return "preview failed: empty query"
     override = search_acct_id if search_acct_id != account_id else None
     try:
-        profiles, _cursor = await client.search_people(
+        profiles_list, next_cursor = await client.search_people(
             account_id=search_acct_id,
             keywords=keywords,
             count=page_size(use_sales_nav),
@@ -409,13 +526,40 @@ async def _default_preview(icp_id: str, run: dict[str, Any] | None = None) -> st
             raise_on_error=True,
             **filters,
         )
+        profiles = list(profiles_list)
+        if run is not None:
+            run["client"] = client
+            run["profiles_count"] = len(profiles)
+            run["keywords"] = keywords
+            raw_meta = {
+                "items": profiles,
+                "paging": getattr(client, "last_search_paging", {}),
+                "cursor": next_cursor,
+            }
+            # Support test injection of total_count on the raw dict
+            if getattr(client, "last_total_count", None) is not None:
+                raw_meta["total_count"] = client.last_total_count
+
+            keywords_sent = bool(str(keywords or "").strip())
+            size = audience_size(raw_meta, goal=goal, keywords_sent=keywords_sent)
+            run["record"] = {
+                "status": "ok",
+                "results": len(profiles),
+                "people": size.get("audience_size"),
+                "audience_basis": size.get("audience_basis"),
+                "audience_people": size.get("audience_size"),
+                "too_small": size.get("too_small"),
+                "threshold": size.get("floor"),
+            }
+            size_line = _audience_size_line(size)
     except Exception as e:
         if run is not None:
             run["search_did_not_run"] = True
+            run["record"] = {"status": "search_failed"}
         return f"preview failed: {e}"
 
     lines = []
-    for i, profile in enumerate(list(profiles)[:ICP_RESEARCH_PREVIEW_LIMIT], 1):
+    for i, profile in enumerate(profiles[:ICP_RESEARCH_PREVIEW_LIMIT], 1):
         name = profile.get("name") or "Unknown"
         title = profile.get("title") or profile.get("headline") or ""
         company = profile.get("company") or ""
@@ -425,9 +569,11 @@ async def _default_preview(icp_id: str, run: dict[str, Any] | None = None) -> st
             lines.append(f"{i}. {name} — {title}")
         else:
             lines.append(f"{i}. {name}")
-    if not lines:
-        return "preview: 0 profiles on the first page"
-    return "\n".join(lines)
+
+    output = "\n".join(lines) if lines else "0 profiles matched persona 1 filters."
+    if run is not None and "size_line" in locals():
+        output = f"{size_line}\n{output}"
+    return output
 
 
 async def _apply_decision(
@@ -436,10 +582,39 @@ async def _apply_decision(
     *,
     mode: str,
     enrich_fn: EnrichFn | None,
+    run: dict[str, Any] | None = None,
+    goal: str = "sell",
     persona_info: dict[str, Any] | None = None,
 ) -> IcpResearchOutcome:
     decision = result.decision if result.decision in {"keep", "revise", "hold"} else "keep"
     reason = result.reason or ("research could not decide" if result.decision == "none" else "")
+    model_decision = decision
+
+    # heylead-api #7218 / #7644: size guard
+    hold_kind = ""
+    preview = (run or {}).get("record")
+    too_small = bool(preview and preview.get("too_small") is True)
+    if too_small and mode == "act":
+        narrowing = decision == "revise" and not _is_broadening(await run_db(get_icp, icp_id), result.extras)
+        if decision == "keep" or narrowing:
+            decision = "hold"
+            hold_kind = "too_small"
+            floor = preview.get("threshold") or (SELL_AUDIENCE_FLOOR if _normalize_goal(goal) == "sell" else OTHER_AUDIENCE_FLOOR)
+            size_n = preview.get("audience_people")
+            goal_label = _normalize_goal(goal)
+            noun = "person" if size_n == 1 else "people"
+
+            if isinstance(size_n, int):
+                found = "the search found nobody" if size_n == 0 else f"{size_n:,} {noun} in all"
+                # Deterministic copy from plan.md Step 5
+                reason = f"This first audience group is too small ({found} on LinkedIn; minimum is {floor} for a {goal_label} campaign). Broaden the titles, industries, or locations before launching, or confirm you want to run on this small group."
+            else:
+                reason = f"This first audience group is below the {floor}-person minimum for a {goal_label} campaign. Broaden the titles, industries, or locations before launching."
+
+            if narrowing:
+                # not_broadening was used in previous versions but review says always set too_small
+                # and just update the reason.
+                reason = f"The audience is too small, and the proposed change narrows it further. {reason}"
 
     for step in result.steps:
         await run_db(
@@ -453,10 +628,14 @@ async def _apply_decision(
         details={
             # Keyed by ICP so the hold can be found again (heylead-api#5380).
             "icp_id": icp_id,
+            "decision": decision,
             "reason": reason,
             "mode": mode,
             "exhausted": result.exhausted,
             "patch": result.extras,
+            "model_decision": model_decision,
+            "hold_kind": hold_kind,
+            "preview": preview,
             # What the model asked beside what is applied, and every persona's titles (heylead-api#7290).
             **(persona_info or {}),
         },
@@ -475,7 +654,7 @@ async def _apply_decision(
         # line (heylead-api#5380): until the owner answers, nothing starts.
         from .icp_hold import held_reply_summary, record_icp_hold
 
-        await record_icp_hold(icp_id, reason=reason, mode=mode)
+        await record_icp_hold(icp_id, reason=reason, mode=mode, **({"kind": hold_kind} if hold_kind else {}))
         if mode == "act":
             summary = held_reply_summary(reason)
         else:
@@ -489,6 +668,7 @@ async def _apply_decision(
         applied=applied,
         summary=summary,
         result=updated,
+        hold_kind=hold_kind,
     )
 
 

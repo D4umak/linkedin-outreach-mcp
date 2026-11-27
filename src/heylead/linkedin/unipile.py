@@ -615,6 +615,8 @@ class UnipileClient:
         # is the only place a collector can learn whether its search budget
         # bought a request or an outage. See linkedin/search_traffic.py.
         self.search_traffic = SearchTraffic()
+        self.last_total_count: int | None = None
+        self.last_search_paging: dict[str, Any] = {}
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -1180,6 +1182,9 @@ class UnipileClient:
         if network_distance:
             payload["network_distance"] = network_distance
 
+        self.last_total_count = None
+        self.last_search_paging = {}
+
         try:
             resp = await self._client.post(url, json=payload, headers=self._headers())
             if resp.status_code in (401, 403):
@@ -1189,6 +1194,13 @@ class UnipileClient:
                 logger.warning("search_people: status=%d body=%s", resp.status_code, resp.text[:500])
                 resp.raise_for_status()
             data = resp.json()
+
+            if isinstance(data, dict):
+                paging = data.get("paging") if isinstance(data.get("paging"), dict) else {}
+                self.last_search_paging = dict(paging)
+                total = paging.get("total_count")
+                if isinstance(total, (int, float)) and not isinstance(total, bool):
+                    self.last_total_count = max(int(total), 0)
 
             items = _extract_items(data, "items", "results", "data")
 

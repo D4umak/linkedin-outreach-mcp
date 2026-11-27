@@ -491,7 +491,8 @@ def _render(text: str, author_name: str) -> str:
     it carries their first name because "Thanks, Yana Pampukha!" reads like a
     form letter.
     """
-    first = (author_name or "").strip().split(" ")[0]
+    from ..textutil import first_name
+    first = first_name(author_name, fallback="")
     return (text or "").replace("{{0}}", first or "there")
 
 

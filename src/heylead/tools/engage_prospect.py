@@ -1448,9 +1448,14 @@ async def _handle_reply_comment(
         # Under OUR top-level comment, with the prospect mentioned: LinkedIn
         # nests one level, so the reply they wrote has no thread of its own.
         # The mention leads, as LinkedIn's own reply box writes it.
-        first = (latest_reply.get("author_name") or prospect_name).split(" ")[0]
-        body = reply_content if "{{0}}" in reply_content else "{{0}} " + reply_content
-        mentions = [{"name": first, "profile_id": latest_reply.get("author_id", "")}]
+        from ..textutil import first_name
+        first = first_name(latest_reply.get("author_name") or prospect_name, fallback="")
+        body = reply_content
+        mentions = None
+        if first:
+            body = reply_content if "{{0}}" in reply_content else "{{0}} " + reply_content
+            mentions = [{"name": first, "profile_id": latest_reply.get("author_id", "")}]
+
         try:
             ensure_laptop_may_write("reply_to_comment")
             result = await client.reply_to_comment(

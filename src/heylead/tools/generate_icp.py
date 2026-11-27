@@ -290,7 +290,7 @@ async def run_generate_icp(
     research_note = ""
     try:
         from ..services.icp_research import maybe_run_icp_research
-        outcome = await maybe_run_icp_research(icp_id, target_description)
+        outcome = await maybe_run_icp_research(icp_id, target_description, goal=goal_key)
         if outcome.applied and outcome.result is not None:
             result = outcome.result
         research_note = outcome.summary
