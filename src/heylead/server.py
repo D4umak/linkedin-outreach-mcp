@@ -47,6 +47,25 @@ def _err_text(exc: BaseException) -> str:
 _CHANGELOG = """\
 # HeyLead Changelog
 
+## v0.10.541 (2026-11-28)
+- Keep provider_id_repair.py unchanged from main (api #7677)
+- Address review findings for post intent derivation and multi-persona ICP scoring (api #7677)
+- Night fixer: finish the fix
+- Expand buying signal derivation and include content in ICP evidence (api #7677)
+- Fix: two release requests in one millisecond are two files (api #8192)
+- wip(ci): no workflow stays on GitHub Actions: publish.yml is disabled there (api #8192)
+- wip(ci): three texts said a second upload fails; it passes over what PyPI has (api #8192)
+- wip(ci): a release missing from PyPI after 2 hours is said once; a low budget names the waiting tag (api #8192)
+- not-yet line in the owed-proofs form (api #7015)
+- wip(ci): a request file ci cannot remove never stops the poll; no alert while a re-run is scheduled (api #8192)
+- wip(ci): test helper (api #8192)
+- wip(ci): review fixes: repeatable upload, cut-off releases retried (api #8192)
+- wip(ci): alert on a failed publish run, docs (api #8192)
+- wip(ci): heylead-ci publishes a client release itself (api #8192)
+- Fix: a timed-out session no longer holds the queue
+- Fix: do not skip an unread check that is already next
+- Fix: keep a seat for a proof that has never run
+
 ## v0.10.540 (2026-11-27)
 - Fix: keep the chrome helper in the process group that gets killed (#8027)
 - Fix: evict cancelled queued jobs from PriorityPool immediately (#8064)

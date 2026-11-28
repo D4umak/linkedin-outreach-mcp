@@ -603,6 +603,7 @@ BRAND_DEFAULT_DAILY_COMMENTS = 5
 
 # Signal types
 SIGNAL_KEYWORD_MENTION = "keyword_mention"
+SIGNAL_NETWORK_POST = "network_post"
 SIGNAL_PROSPECT_POST = "prospect_post"
 SIGNAL_JOB_CHANGE = "job_change"
 SIGNAL_COMPETITOR_MENTION = "competitor_mention"
@@ -1247,6 +1248,9 @@ POST_INTENT_KEYWORDS: dict[str, list[str]] = {
         "what tool do you use", "which platform", "looking for a tool",
         "looking for a solution", "who's the best", "suggestions for",
         "what are people using", "what do you use for",
+        "looking for lead generation", "looking for a lead gen",
+        "looking for an agency", "looking for a partner",
+        "need help with", "who do you use for",
     ],
     "budget_signal": [
         "budget for", "investing in", "allocated budget",

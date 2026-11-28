@@ -38,7 +38,7 @@ def _derived_intent(
 ) -> str | None:
     """The one category to derive from a post, or None (heylead-api#7217).
 
-    Only from a linked prospect_post the model read (classifier_source=llm):
+    Only from a linked post signal the model read (classifier_source=llm):
     the first category, in keyword order, whose intent is the source's intent
     and whose phrase is in the text. One row per post, not one per category.
     """
@@ -59,7 +59,7 @@ async def classify_post_intents() -> str:
     """Classify unclassified prospect posts for granular buyer intent signals.
 
     Flow:
-    1. Get recent prospect_post signals that haven't been sub-classified yet
+    1. Get recent prospect_post / keyword_mention / network_post signals that haven't been sub-classified yet
     2. For each, run keyword-based intent detection
     3. Create additional granular signals (post_pain_point, post_tech_evaluation, etc.)
     4. Also check reposts for competitor/our-content sharing
@@ -76,6 +76,8 @@ async def classify_post_intents() -> str:
         SIGNAL_INTENT_BUYING,
         SIGNAL_INTENT_COMPETITOR_EVAL,
         SIGNAL_INTENT_PAIN_POINT,
+        SIGNAL_KEYWORD_MENTION,
+        SIGNAL_NETWORK_POST,
         SIGNAL_POST_BUDGET_SIGNAL,
         SIGNAL_POST_NEGATIVE_EXPERIENCE,
         SIGNAL_POST_PAIN_POINT,
@@ -114,6 +116,11 @@ async def classify_post_intents() -> str:
         SIGNAL_POST_SEEKING_RECS,
         SIGNAL_POST_NEGATIVE_EXPERIENCE,
     )
+    source_signal_types = (
+        SIGNAL_PROSPECT_POST,
+        SIGNAL_KEYWORD_MENTION,
+        SIGNAL_NETWORK_POST,
+    )
     category_intent = {
         "seeking_recommendations": SIGNAL_INTENT_BUYING,
         "budget_signal": SIGNAL_INTENT_BUYING,
@@ -146,9 +153,6 @@ async def classify_post_intents() -> str:
             seen_post_ids.add(pid)
             recent_posts.append(post)
 
-    if not recent_posts:
-        return "No recent prospect posts to classify."
-
     # Filter to posts within window that haven't been intent-classified
     posts_to_classify = []
     for post in recent_posts:
@@ -170,7 +174,43 @@ async def classify_post_intents() -> str:
         posts_to_classify.append(post)
 
     posts_to_classify = posts_to_classify[:POST_INTENT_BATCH_SIZE]
-    if not posts_to_classify:
+    handled_post_ids = {p.get("post_id", "") for p in posts_to_classify if p.get("post_id")}
+
+    # Also collect recent classified keyword_mention / network_post signals from the last 7 days
+    # that are not in posts_to_classify (heylead-api#7677).
+    extra_signals: list[dict] = []
+    for extra_type in (SIGNAL_KEYWORD_MENTION, SIGNAL_NETWORK_POST):
+        for sig in await run_db(
+            list_signals,
+            signal_type=extra_type,
+            status=SIGNAL_STATUS_CLASSIFIED,
+            limit=POST_INTENT_BATCH_SIZE * 3,
+        ):
+            if (sig.get("detected_at") or 0) < cutoff:
+                continue
+            pid = (sig.get("post_id") or "").strip() or f"sig:{sig.get('id')}"
+            if pid in handled_post_ids:
+                continue
+            already = False
+            for hook_type in hook_types:
+                if await run_db(signal_exists, hook_type, post_id=pid):
+                    already = True
+                    break
+                if await run_db(
+                    signal_exists, hook_type, post_id=f"pi:{pid}:{hook_type}",
+                ):
+                    already = True
+                    break
+            if already:
+                continue
+            handled_post_ids.add(pid)
+            extra_signals.append(sig)
+
+    extra_signals = extra_signals[:POST_INTENT_BATCH_SIZE]
+
+    if not recent_posts and not extra_signals:
+        return "No recent prospect posts to classify."
+    if not posts_to_classify and not extra_signals:
         return "No unclassified prospect posts found."
 
     # Load company watchlist names for repost detection
@@ -196,24 +236,29 @@ async def classify_post_intents() -> str:
         # it was written; activation reads this instead.
         published_at = post_id_published_at(post_id, now)
 
-        # ── Intent from the post's own LLM reading (heylead-api#7217) ──
-        # A phrase alone made these rows until #7217, whatever the post had
-        # been read as. Now the linked prospect_post must have been read by
-        # the model (classifier_source=llm) and its intent must allow the
-        # type; the row copies that reading. A post with no linked
-        # prospect_post (a network_scan post), or one not yet read, makes
-        # nothing and is not marked, so the run after it is read derives it.
-        prospect_signals = await run_db(
-            list_signals,
-            signal_type=SIGNAL_PROSPECT_POST, post_id=post_id, limit=1,
-        )
-        source = prospect_signals[0] if prospect_signals else None
+        # ── Intent from the post's own LLM reading (heylead-api#7217, #7677) ──
+        source = None
+        for src_type in source_signal_types:
+            found = await run_db(
+                list_signals,
+                signal_type=src_type, post_id=post_id, limit=5,
+            )
+            if not found:
+                continue
+            llm_match = next(
+                (s for s in found if _metadata_of(s).get("classifier_source") == "llm"),
+                None,
+            )
+            source = llm_match or found[0]
+            if llm_match is not None:
+                break
+
         derived = _derived_intent(source, text, POST_INTENT_KEYWORDS, category_intent)
-        if derived is not None:
+        if derived is not None and source is not None:
             category = derived
             signal_type, ttl = category_type[category]
             source_meta = _metadata_of(source)
-            metadata = {
+            metadata: dict[str, Any] = {
                 "published_at": post_published_at(source, now) or published_at,
                 "intent_category": category,
                 "post_text_preview": text[:200],
@@ -222,15 +267,17 @@ async def classify_post_intents() -> str:
                 "classifier_source": "llm",
                 "reading_from": source.get("id"),
             }
-            if source_meta.get("icp_scope"):
-                metadata["icp_scope"] = source_meta["icp_scope"]
+            for key in ("icp_scope", "author_url", "share_url"):
+                if source_meta.get(key):
+                    metadata[key] = source_meta[key]
             sid = await run_db(
                 save_signal,
                 signal_type=signal_type,
                 source="post_intent_scan",
                 prospect_id=source.get("prospect_id"),
-                prospect_name=author_name or None,
-                linkedin_id=author_id or None,
+                prospect_name=(author_name or source.get("prospect_name")) or None,
+                prospect_title=source.get("prospect_title") or None,
+                linkedin_id=(author_id or source.get("linkedin_id")) or None,
                 campaign_id=source.get("campaign_id"),
                 content=text[:1000],
                 post_id=f"pi:{post_id}:{signal_type}",
@@ -247,11 +294,13 @@ async def classify_post_intents() -> str:
                     reasoning=source.get("reasoning") or "",
                     classified_at=now,
                 )
-                if author_id:
+                eff_author_id = author_id or source.get("linkedin_id") or ""
+                eff_author_name = author_name or source.get("prospect_name") or ""
+                if eff_author_id:
                     await run_db(
                         upsert_signal_account,
-                        linkedin_id=author_id,
-                        prospect_name=author_name or None,
+                        linkedin_id=eff_author_id,
+                        prospect_name=eff_author_name or None,
                     )
                 total_signals += 1
 
@@ -314,6 +363,65 @@ async def classify_post_intents() -> str:
                             )
                         total_signals += 1
                     break
+
+    for source in extra_signals:
+        post_id = (source.get("post_id") or "").strip() or f"sig:{source.get('id')}"
+        text = (source.get("content") or "").lower()
+        if not text:
+            continue
+        classified += 1
+        derived = _derived_intent(source, text, POST_INTENT_KEYWORDS, category_intent)
+        if derived is None:
+            continue
+        category = derived
+        signal_type, ttl = category_type[category]
+        source_meta = _metadata_of(source)
+        published_at = post_published_at(source, now) or post_id_published_at(post_id, now)
+        metadata = {
+            "published_at": published_at,
+            "intent_category": category,
+            "post_text_preview": text[:200],
+            "impressions_count": source_meta.get("impressions_count", 0),
+            "media_type": source_meta.get("media_type", "text"),
+            "classifier_source": "llm",
+            "reading_from": source.get("id"),
+        }
+        for key in ("icp_scope", "author_url", "share_url"):
+            if source_meta.get(key):
+                metadata[key] = source_meta[key]
+        author_id = source.get("linkedin_id") or ""
+        author_name = source.get("prospect_name") or ""
+        sid = await run_db(
+            save_signal,
+            signal_type=signal_type,
+            source="post_intent_scan",
+            prospect_id=source.get("prospect_id"),
+            prospect_name=author_name or None,
+            prospect_title=source.get("prospect_title") or None,
+            linkedin_id=author_id or None,
+            campaign_id=source.get("campaign_id"),
+            content=text[:1000],
+            post_id=f"pi:{post_id}:{signal_type}",
+            metadata_json=json.dumps(metadata),
+            expires_at=now + ttl,
+            confidence=float(source.get("confidence") or 0),
+        )
+        if sid:
+            await run_db(
+                update_signal,
+                sid,
+                status=SIGNAL_STATUS_CLASSIFIED,
+                intent=source.get("intent"),
+                reasoning=source.get("reasoning") or "",
+                classified_at=now,
+            )
+            if author_id:
+                await run_db(
+                    upsert_signal_account,
+                    linkedin_id=author_id,
+                    prospect_name=author_name or None,
+                )
+            total_signals += 1
 
     # ── Company post topic classification ──
     company_signals = await run_db(_classify_company_posts, now)

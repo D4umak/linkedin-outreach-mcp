@@ -404,14 +404,14 @@ def _scoring_icps(campaign_icp_json: str | dict | None) -> list[dict[str, Any]]:
         return []
     segments = [s for s in (data.get("segments") or []) if isinstance(s, dict)]
     icps = data.get("icps") or []
-    shell = icps[0] if isinstance(icps, list) and icps and isinstance(icps[0], dict) else None
+    dict_icps = [p for p in icps if isinstance(p, dict)] if isinstance(icps, list) else []
+    shell = dict_icps[0] if dict_icps else None
     segment_icps = [_with_shell_keywords(_segment_to_icp(seg), shell) for seg in segments]
-    if shell is not None and segment_icps and _shell_omits_targeting(shell):
-        return segment_icps
-    if shell is not None and segment_icps:
-        return [shell, *segment_icps]
-    if shell is not None:
-        return [shell]
+    if segment_icps:
+        non_sparse = [p for p in dict_icps if not _shell_omits_targeting(p)]
+        return [*non_sparse, *segment_icps]
+    if dict_icps:
+        return dict_icps
     return segment_icps
 
 
@@ -564,7 +564,7 @@ def _expand_product_leader_terms(include: list[str]) -> list[str]:
     return include
 
 
-_EVIDENCE_KEYS = ("title", "headline", "company", "industry", "summary", "about")
+_EVIDENCE_KEYS = ("title", "headline", "company", "industry", "summary", "about", "content")
 
 
 def _evidence_text(contact: dict[str, Any] | None) -> str:
